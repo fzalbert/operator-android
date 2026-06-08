@@ -9,7 +9,7 @@ plugins {
 
 android {
     namespace = "ru.profikrol.operator"
-    compileSdk = 34
+    compileSdk = 35
 
     defaultConfig {
         applicationId = "ru.profikrol.operator"
