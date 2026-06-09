@@ -1,29 +1,24 @@
-<?xml version="1.0" encoding="utf-8"?>
-<vector xmlns:android="http://schemas.android.com/apk/res/android"
-    android:width="48dp"
-    android:height="48dp"
+<vector xmlns:android="http://schemas.android.com/apk/res/android" xmlns:aapt="http://schemas.android.com/aapt"
     android:viewportWidth="48"
-    android:viewportHeight="48">
-
+    android:viewportHeight="48"
+    android:width="48dp"
+    android:height="48dp">
     <path
-        android:fillColor="#000000"
+        android:pathData="M42 15.9998C41.9993 15.2984 41.8141 14.6094 41.4631 14.0021C41.112 13.3948 40.6075 12.8905 40 12.5398L26 4.5398C25.3919 4.18873 24.7021 4.00391 24 4.00391C23.2979 4.00391 22.6081 4.18873 22 4.5398L8 12.5398C7.39253 12.8905 6.88796 13.3948 6.53692 14.0021C6.18589 14.6094 6.00072 15.2984 6 15.9998V31.9998C6.00072 32.7013 6.18589 33.3902 6.53692 33.9975C6.88796 34.6048 7.39253 35.1091 8 35.4598L22 43.4598C22.6081 43.8109 23.2979 43.9957 24 43.9957C24.7021 43.9957 25.3919 43.8109 26 43.4598L40 35.4598C40.6075 35.1091 41.112 34.6048 41.4631 33.9975C41.8141 33.3902 41.9993 32.7013 42 31.9998V15.9998Z"
         android:strokeColor="#99A1AF"
         android:strokeWidth="4"
-        android:strokeLineJoin="round"
         android:strokeLineCap="round"
-        android:pathData="M42 15.9998C41.9993 15.2984 41.8141 14.6094 41.4631 14.0021C41.112 13.3948 40.6075 12.8905 40 12.5398L26 4.5398C25.3919 4.18873 24.7021 4.00391 24 4.00391C23.2979 4.00391 22.6081 4.18873 22 4.5398L8 12.5398C7.39253 12.8905 6.88796 13.3948 6.53692 14.0021C6.18589 14.6094 6.00072 15.2984 6 15.9998V31.9998C6.00072 32.7013 6.18589 33.3902 6.53692 33.9975C6.88796 34.6048 7.39253 35.1091 8 35.4598L22 43.4598C22.6081 43.8109 23.2979 43.9957 24 43.9957C24.7021 43.9957 25.3919 43.8109 26 43.4598L40 35.4598C40.6075 35.1091 41.112 34.6048 41.4631 33.9975C41.8141 33.3902 41.9993 32.7013 42 31.9998V15.9998Z" />
+        android:strokeLineJoin="round" />
     <path
-        android:fillColor="#000000"
+        android:pathData="M6.60156 14L24.0016 24L41.4016 14"
         android:strokeColor="#99A1AF"
         android:strokeWidth="4"
-        android:strokeLineJoin="round"
         android:strokeLineCap="round"
-        android:pathData="M6.60156 14L24.0016 24L41.4016 14" />
+        android:strokeLineJoin="round" />
     <path
-        android:fillColor="#000000"
+        android:pathData="M24 44V24"
         android:strokeColor="#99A1AF"
         android:strokeWidth="4"
-        android:strokeLineJoin="round"
         android:strokeLineCap="round"
-        android:pathData="M24 44V24" />
+        android:strokeLineJoin="round" />
 </vector>

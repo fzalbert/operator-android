@@ -1,22 +1,18 @@
-<?xml version="1.0" encoding="utf-8"?>
-<vector xmlns:android="http://schemas.android.com/apk/res/android"
-    android:width="48dp"
-    android:height="48dp"
+<vector xmlns:android="http://schemas.android.com/apk/res/android" xmlns:aapt="http://schemas.android.com/aapt"
     android:viewportWidth="48"
-    android:viewportHeight="48">
-
+    android:viewportHeight="48"
+    android:width="48dp"
+    android:height="48dp">
     <path
-        android:fillColor="#000000"
+        android:pathData="M14 32.5996C18.4 32.5996 22 28.9396 22 24.4996C22 22.1796 20.86 19.9796 18.58 18.1196C16.3 16.2596 14.58 13.4996 14 10.5996C13.42 13.4996 11.72 16.2796 9.42 18.1196C7.12 19.9596 6 22.1996 6 24.4996C6 28.9396 9.6 32.5996 14 32.5996Z"
         android:strokeColor="#364153"
         android:strokeWidth="4"
-        android:strokeLineJoin="round"
         android:strokeLineCap="round"
-        android:pathData="M14 32.5996C18.4 32.5996 22 28.9396 22 24.4996C22 22.1796 20.86 19.9796 18.58 18.1196C16.3 16.2596 14.58 13.4996 14 10.5996C13.42 13.4996 11.72 16.2796 9.42 18.1196C7.12 19.9596 6 22.1996 6 24.4996C6 28.9396 9.6 32.5996 14 32.5996Z" />
+        android:strokeLineJoin="round" />
     <path
-        android:fillColor="#000000"
+        android:pathData="M25.1197 13.1991C26.4952 11.0013 27.4703 8.57715 27.9997 6.03906C28.9997 11.0391 31.9997 15.8391 35.9997 19.0391C39.9997 22.2391 41.9997 26.0391 41.9997 30.0391C42.0111 32.8036 41.2014 35.5094 39.6733 37.8132C38.1451 40.1171 35.9673 41.9154 33.416 42.98C30.8646 44.0447 28.0545 44.3279 25.342 43.7936C22.6295 43.2594 20.1368 41.9317 18.1797 39.9791"
         android:strokeColor="#364153"
         android:strokeWidth="4"
-        android:strokeLineJoin="round"
         android:strokeLineCap="round"
-        android:pathData="M25.1197 13.1991C26.4952 11.0013 27.4703 8.57715 27.9997 6.03906C28.9997 11.0391 31.9997 15.8391 35.9997 19.0391C39.9997 22.2391 41.9997 26.0391 41.9997 30.0391C42.0111 32.8036 41.2014 35.5094 39.6733 37.8132C38.1451 40.1171 35.9673 41.9154 33.416 42.98C30.8646 44.0447 28.0545 44.3279 25.342 43.7936C22.6295 43.2594 20.1368 41.9317 18.1797 39.9791" />
+        android:strokeLineJoin="round" />
 </vector>
