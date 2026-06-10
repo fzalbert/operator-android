@@ -10,24 +10,26 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import ru.profikrol.operator.domain.repository.AuthRepository
 import javax.inject.Inject
 
 @HiltViewModel
-class AuthViewModel @Inject constructor() : ViewModel() {
+class AuthViewModel @Inject constructor(
+    private val authRepository: AuthRepository,
+) : ViewModel() {
 
     private val _uiState = MutableStateFlow(AuthUiState())
     val uiState: StateFlow<AuthUiState> = _uiState.asStateFlow()
 
-    /** Однократные события (навигация, снэкбары). */
     private val _events = Channel<AuthEvent>(Channel.BUFFERED)
     val events = _events.receiveAsFlow()
 
     fun onLoginChange(value: String) {
-        _uiState.update { it.copy(login = value, error = null) }
+        _uiState.update { it.copy(login = value, errorText = null) }
     }
 
     fun onPasswordChange(value: String) {
-        _uiState.update { it.copy(password = value, error = null) }
+        _uiState.update { it.copy(password = value, errorText = null) }
     }
 
     fun onSubmit() {
@@ -35,11 +37,17 @@ class AuthViewModel @Inject constructor() : ViewModel() {
         if (!state.canSubmit) return
 
         viewModelScope.launch {
-            _uiState.update { it.copy(isLoading = true, error = null) }
-            // TODO: настоящий вызов в репозиторий авторизации.
-            // Пока — заглушка: считаем что любой непустой логин/пароль подходит.
-            _uiState.update { it.copy(isLoading = false) }
-            _events.send(AuthEvent.LoggedIn)
+            _uiState.update { it.copy(isLoading = true, errorText = null) }
+
+            authRepository.login(state.login, state.password)
+                .onSuccess {
+                    _uiState.update { it.copy(isLoading = false) }
+                    _events.send(AuthEvent.LoggedIn)
+                }
+                .onFailure { throwable ->
+                    val errorRes = "Неверный логин или пароль"
+                    _uiState.update { it.copy(isLoading = false, errorText = errorRes) }
+                }
         }
     }
 }

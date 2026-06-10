@@ -9,9 +9,11 @@ import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import ru.profikrol.operator.R
 import ru.profikrol.operator.uikit.components.MainTopBar
 import ru.profikrol.operator.uikit.components.PrimaryButton
@@ -27,14 +29,17 @@ fun HomeScreen(
     onOpenRfidInstallation: () -> Unit = {},
     onOpenRabbitCulling: () -> Unit = {},
     lastRfidCode: String? = null,
-    @Suppress("UNUSED_PARAMETER") viewModel: HomeViewModel = hiltViewModel(),
+    viewModel: HomeViewModel = hiltViewModel(),
 ) {
+    val state by viewModel.uiState.collectAsStateWithLifecycle()
+
     Scaffold(
         topBar = {
             MainTopBar(
                 title = stringResource(R.string.home_title),
                 onNotificationsClick = onOpenNotifications,
                 onSettingsClick = onOpenSettings,
+                hasUnreadNotifications = state.hasUnreadNotifications,
             )
         },
     ) { innerPadding ->

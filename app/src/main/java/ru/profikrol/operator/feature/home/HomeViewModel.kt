@@ -10,6 +10,9 @@ import javax.inject.Inject
 @HiltViewModel
 class HomeViewModel @Inject constructor() : ViewModel() {
 
-    private val _uiState = MutableStateFlow(HomeUiState())
+    // TODO: заменить хардкод на NotificationsRepository.unreadCount: Flow<Int>
+    private val _uiState = MutableStateFlow(
+        HomeUiState(unreadNotificationsCount = 3),
+    )
     val uiState: StateFlow<HomeUiState> = _uiState.asStateFlow()
 }

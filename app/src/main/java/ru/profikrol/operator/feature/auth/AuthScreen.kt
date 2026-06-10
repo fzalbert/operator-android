@@ -87,27 +87,30 @@ fun AuthScreen(
             label = { Text(stringResource(R.string.auth_login_label)) },
             singleLine = true,
             enabled = !state.isLoading,
+            isError = state.isError,
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Text),
             modifier = Modifier.fillMaxWidth(),
         )
 
         Spacer(Modifier.height(Spacing.md))
 
+        //TODO: password add show button
         OutlinedTextField(
             value = state.password,
             onValueChange = viewModel::onPasswordChange,
             label = { Text(stringResource(R.string.auth_password_label)) },
             singleLine = true,
             enabled = !state.isLoading,
+            isError = state.isError,
             visualTransformation = PasswordVisualTransformation(),
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
             modifier = Modifier.fillMaxWidth(),
         )
 
-        if (state.error != null) {
+        if (state.errorText != null) {
             Spacer(Modifier.height(Spacing.sm))
             Text(
-                text = state.error!!,
+                text = state.errorText!!,
                 color = MaterialTheme.colorScheme.error,
             )
         }

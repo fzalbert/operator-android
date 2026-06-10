@@ -13,6 +13,9 @@
     <string name="auth_password_label">Пароль</string>
     <string name="auth_submit">Авторизоваться</string>
     <string name="auth_submit_loading">…</string>
+    <string name="auth_error_invalid_credentials">Неверный логин или пароль</string>
+    <string name="auth_error_network">Нет связи с сервером</string>
+    <string name="auth_error_unknown">Что-то пошло не так</string>
 
     <!-- Home -->
     <string name="home_title">Профикрол</string>

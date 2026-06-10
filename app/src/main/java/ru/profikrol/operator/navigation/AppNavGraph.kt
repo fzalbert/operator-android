@@ -34,6 +34,7 @@ fun AppNavGraph() {
                 },
             )
         }
+
         composable<Route.Home> { backStackEntry ->
             // Слушаем результат сканирования RFID, возвращённый через savedStateHandle.
             val lastRfidCode by backStackEntry.savedStateHandle
