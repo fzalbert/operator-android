@@ -1,4 +1,5 @@
 package ru.profikrol.operator.feature.notifications
+
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -21,12 +22,11 @@ private val VibrantBlue = Color(0xFF2B7FFF)
 @Composable
 fun NotificationItem(
     notification: NotificationUi,
-    isSelected: Boolean,
     onClick: () -> Unit,
 ) {
 
-    val background = if (isSelected) {
-        VibrantBlue.copy(alpha = 0.12f)
+    val background = if (notification.isUnread) {
+        VibrantBlue.copy(alpha = 0.08f)
     } else {
         Color.Transparent
     }
@@ -34,8 +34,8 @@ fun NotificationItem(
     Row(
         modifier = Modifier
             .fillMaxWidth()
-            .clickable { onClick() }
             .background(background)
+            .clickable { onClick() }
             .padding(horizontal = 16.dp, vertical = 14.dp),
         verticalAlignment = Alignment.Top,
     ) {
@@ -51,7 +51,11 @@ fun NotificationItem(
             Text(
                 text = notification.title,
                 style = MaterialTheme.typography.titleMedium,
-                color = if (isSelected) VibrantBlue else Color.Unspecified,
+                color = if (notification.isUnread) {
+                    VibrantBlue
+                } else {
+                    Color.Unspecified
+                },
             )
 
             Spacer(modifier = Modifier.height(4.dp))
@@ -101,10 +105,10 @@ private fun NotificationIcon(
 
     Box(
         modifier = Modifier
-            .size(65.dp)
+            .size(56.dp)
             .background(
                 color = backgroundColor,
-                shape = RoundedCornerShape(24.dp),
+                shape = RoundedCornerShape(20.dp),
             ),
         contentAlignment = Alignment.Center,
     ) {
@@ -112,7 +116,7 @@ private fun NotificationIcon(
             painter = painterResource(id = R.drawable.ic_notification),
             contentDescription = null,
             tint = Color.Unspecified,
-            modifier = Modifier.size(25.dp),
+            modifier = Modifier.size(22.dp),
         )
     }
 }
