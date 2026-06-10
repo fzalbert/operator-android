@@ -20,8 +20,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
+import androidx.hilt.navigation.compose.hiltViewModel
 import kotlinx.coroutines.delay
 import ru.profikrol.operator.uikit.components.AppTopBar
 
@@ -31,6 +31,8 @@ import ru.profikrol.operator.uikit.components.AppTopBar
 @Composable
 fun NotificationsScreen(
     onBack: () -> Unit,
+    @Suppress("UNUSED_PARAMETER")
+    viewModel: NotificationsViewModel = hiltViewModel(),
 ) {
 
     //TODO: вынести во ViewModel
@@ -129,6 +131,7 @@ fun NotificationsScreen(
         }
     }
 }
+
 @Composable
 private fun NotificationsHeader(
     unreadCount: Int,
@@ -145,7 +148,6 @@ private fun NotificationsHeader(
         Text(
             text = "Непрочитанных: $unreadCount",
             style = MaterialTheme.typography.bodySmall,
-            color = Color.Gray,
         )
 
         TextButton(

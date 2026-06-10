@@ -1,3 +1,55 @@
 <resources>
-    <string name="app_name">operator-android</string>
+    <string name="app_name">Профикрол</string>
+
+    <!-- Common -->
+    <string name="cd_back">Назад</string>
+
+    <!-- Auth -->
+    <string name="auth_logo">🐰</string>
+    <string name="auth_brand_title">РаббитФарм</string>
+    <string name="auth_brand_subtitle">Система управления кролиководческой фермой</string>
+    <string name="auth_title">Вход</string>
+    <string name="auth_login_label">Логин</string>
+    <string name="auth_password_label">Пароль</string>
+    <string name="auth_submit">Авторизоваться</string>
+    <string name="auth_submit_loading">…</string>
+
+    <!-- Home -->
+    <string name="home_title">Профикрол</string>
+    <string name="home_cd_notifications">Уведомления</string>
+    <string name="home_cd_settings">Настройки</string>
+    <string name="home_action_scan_rfid">Сканировать RFID-метку</string>
+    <string name="home_action_nest_preparation">Подготовка гнёзд</string>
+    <string name="home_action_nest_alignment">Выравнивание гнёзд</string>
+    <string name="home_action_rfid_installation">Установка RFID</string>
+    <string name="home_action_rabbit_culling">Выбраковка кроликов</string>
+    <string name="home_last_rfid">Последний код: %1$s</string>
+
+    <!-- Nest Preparation -->
+    <string name="nest_preparation_title">Подготовка гнёзд</string>
+
+    <!-- Nest Alignment -->
+    <string name="nest_alignment_title">Выравнивание гнёзд</string>
+
+    <!-- RFID Installation -->
+    <string name="rfid_installation_title">Установка RFID</string>
+
+    <!-- Rabbit Culling -->
+    <string name="rabbit_culling_title">Выбраковка кроликов</string>
+
+    <!-- RFID Scan -->
+    <string name="rfid_scan_title">Сканирование RFID</string>
+    <string name="rfid_scan_demo_button">Демо: Сканировать</string>
+    <string name="rfid_scan_hint">Поднесите метку к считывателю</string>
+
+    <!-- Generic placeholder -->
+    <string name="placeholder_screen">Экран в разработке</string>
+
+    <!-- Notifications -->
+    <string name="notifications_title">Уведомления</string>
+    <string name="notifications_empty">Пока пусто</string>
+
+    <!-- Settings -->
+    <string name="settings_title">Настройки</string>
+    <string name="settings_placeholder">Здесь будут настройки</string>
 </resources>
