@@ -28,34 +28,32 @@ import ru.profikrol.operator.R
 import ru.profikrol.operator.uikit.theme.actionButtonDisabledLight
 import ru.profikrol.operator.uikit.theme.actionButtonMutedSuccessLight
 import ru.profikrol.operator.uikit.theme.actionButtonPrimaryLight
+import ru.profikrol.operator.uikit.theme.actionButtonSecondaryLight
 import ru.profikrol.operator.uikit.theme.actionButtonSuccessLight
 import ru.profikrol.operator.uikit.theme.actionButtonWarningLight
 import ru.profikrol.operator.uikit.theme.onActionButtonDisabledLight
 import ru.profikrol.operator.uikit.theme.onActionButtonMutedSuccessLight
 import ru.profikrol.operator.uikit.theme.onActionButtonPrimaryLight
+import ru.profikrol.operator.uikit.theme.onActionButtonSecondaryLight
 import ru.profikrol.operator.uikit.theme.onActionButtonSuccessLight
 import ru.profikrol.operator.uikit.theme.onActionButtonWarningLight
 import ru.profikrol.operator.uikit.tokens.Radii
 import ru.profikrol.operator.uikit.tokens.Spacing
 import ru.profikrol.operator.uikit.tokens.actionButtonCompactTextStyle
-import ru.profikrol.operator.uikit.tokens.actionButtonLargeTextStyle
 import ru.profikrol.operator.uikit.tokens.defaultPrimaryButtonHeight
 
 private val ActionButtonCompactIconSize = 20.dp
-private val ActionButtonLargeIconSize = 48.dp
 private val ActionButtonHorizontalPadding = Spacing.xs
 
 enum class ActionButtonVariant {
     Primary,
+    Secondary,
     Success,
-    MutedSuccess,
     Warning,
-    Disabled,
 }
 
 enum class ActionButtonSize {
     Compact,
-    Large,
 }
 
 enum class ActionButtonIcon(@DrawableRes val resId: Int) {
@@ -74,15 +72,15 @@ fun ActionButton(
     variant: ActionButtonVariant = ActionButtonVariant.Primary,
     size: ActionButtonSize = ActionButtonSize.Compact,
     icon: ActionButtonIcon? = null,
-    enabled: Boolean = variant != ActionButtonVariant.Disabled,
+    enabled: Boolean = true,
 ) {
     val colors = variant.colors()
     val metrics = size.metrics()
-    val isEnabled = enabled && variant != ActionButtonVariant.Disabled
+    val elevation = variant.elevation(metrics)
 
     Button(
         onClick = onClick,
-        enabled = isEnabled,
+        enabled = enabled,
         modifier = modifier
             .padding(horizontal = ActionButtonHorizontalPadding)
             .fillMaxWidth()
@@ -91,13 +89,13 @@ fun ActionButton(
         colors = ButtonDefaults.buttonColors(
             containerColor = colors.container,
             contentColor = colors.content,
-            disabledContainerColor = actionButtonDisabledLight,
-            disabledContentColor = onActionButtonDisabledLight,
+            disabledContainerColor = colors.disabledContainer,
+            disabledContentColor = colors.disabledContent,
         ),
         elevation = ButtonDefaults.buttonElevation(
-            defaultElevation = metrics.elevation,
-            pressedElevation = metrics.pressedElevation,
-            disabledElevation = metrics.elevation,
+            defaultElevation = elevation.default,
+            pressedElevation = elevation.pressed,
+            disabledElevation = elevation.default,
         ),
         contentPadding = metrics.contentPadding,
     ) {
@@ -112,7 +110,6 @@ fun ActionButton(
                 Icon(
                     painter = painterResource(icon.resId),
                     contentDescription = null,
-                    tint = colors.content,
                     modifier = Modifier.size(metrics.iconSize),
                 )
             }
@@ -128,6 +125,8 @@ fun ActionButton(
 private data class ActionButtonColors(
     val container: Color,
     val content: Color,
+    val disabledContainer: Color = actionButtonDisabledLight,
+    val disabledContent: Color = onActionButtonDisabledLight,
 )
 
 private data class ActionButtonMetrics(
@@ -141,6 +140,11 @@ private data class ActionButtonMetrics(
     val textStyle: TextStyle,
 )
 
+private data class ActionButtonElevation(
+    val default: Dp,
+    val pressed: Dp,
+)
+
 private fun ActionButtonVariant.colors(): ActionButtonColors =
     when (this) {
         ActionButtonVariant.Primary -> ActionButtonColors(
@@ -148,14 +152,16 @@ private fun ActionButtonVariant.colors(): ActionButtonColors =
             content = onActionButtonPrimaryLight,
         )
 
+        ActionButtonVariant.Secondary -> ActionButtonColors(
+            container = actionButtonSecondaryLight,
+            content = onActionButtonSecondaryLight,
+        )
+
         ActionButtonVariant.Success -> ActionButtonColors(
             container = actionButtonSuccessLight,
             content = onActionButtonSuccessLight,
-        )
-
-        ActionButtonVariant.MutedSuccess -> ActionButtonColors(
-            container = actionButtonMutedSuccessLight,
-            content = onActionButtonMutedSuccessLight,
+            disabledContainer = actionButtonMutedSuccessLight,
+            disabledContent = onActionButtonMutedSuccessLight,
         )
 
         ActionButtonVariant.Warning -> ActionButtonColors(
@@ -163,9 +169,18 @@ private fun ActionButtonVariant.colors(): ActionButtonColors =
             content = onActionButtonWarningLight,
         )
 
-        ActionButtonVariant.Disabled -> ActionButtonColors(
-            container = actionButtonDisabledLight,
-            content = onActionButtonDisabledLight,
+    }
+
+private fun ActionButtonVariant.elevation(metrics: ActionButtonMetrics): ActionButtonElevation =
+    when (this) {
+        ActionButtonVariant.Secondary -> ActionButtonElevation(
+            default = 0.dp,
+            pressed = 0.dp,
+        )
+
+        else -> ActionButtonElevation(
+            default = metrics.elevation,
+            pressed = metrics.pressedElevation,
         )
     }
 
@@ -181,17 +196,6 @@ private fun ActionButtonSize.metrics(): ActionButtonMetrics =
             pressedElevation = 2.dp,
             contentPadding = PaddingValues(horizontal = Spacing.xl),
             textStyle = actionButtonCompactTextStyle,
-        )
-
-        ActionButtonSize.Large -> ActionButtonMetrics(
-            height = defaultPrimaryButtonHeight,
-            iconSize = ActionButtonLargeIconSize,
-            iconTextSpacing = Spacing.xl,
-            shape = RoundedCornerShape(Radii.lg),
-            elevation = 10.dp,
-            pressedElevation = 4.dp,
-            contentPadding = PaddingValues(horizontal = 44.dp),
-            textStyle = actionButtonLargeTextStyle,
         )
     }
 
@@ -223,7 +227,8 @@ private fun ActionButtonAllCompactStatesPreview() {
             ActionButton(
                 text = "Завершить",
                 icon = ActionButtonIcon.Check,
-                variant = ActionButtonVariant.MutedSuccess,
+                variant = ActionButtonVariant.Success,
+                enabled = false,
                 onClick = {},
             )
             ActionButton(
@@ -239,9 +244,14 @@ private fun ActionButtonAllCompactStatesPreview() {
                 onClick = {},
             )
             ActionButton(
+                text = "Редактировать профиль",
+                variant = ActionButtonVariant.Secondary,
+                onClick = {},
+            )
+            ActionButton(
                 text = "Зарегистрировать",
                 icon = ActionButtonIcon.Check,
-                variant = ActionButtonVariant.Disabled,
+                enabled = false,
                 onClick = {},
             )
         }
@@ -250,7 +260,19 @@ private fun ActionButtonAllCompactStatesPreview() {
 
 @Preview(widthDp = 1016)
 @Composable
-private fun ActionButtonLargePreview() {
+private fun ActionButtonSecondaryPreview() {
+    MaterialTheme {
+        ActionButton(
+            text = "Редактировать профиль",
+            variant = ActionButtonVariant.Secondary,
+            onClick = {},
+        )
+    }
+}
+
+@Preview(widthDp = 1016)
+@Composable
+private fun ActionButtonSawdustPreview() {
     MaterialTheme {
         ActionButton(
             text = "Засыпать опилки",
@@ -267,7 +289,8 @@ private fun ActionButtonStatesPreview() {
         ActionButton(
             text = "Завершить",
             icon = ActionButtonIcon.Check,
-            variant = ActionButtonVariant.MutedSuccess,
+            variant = ActionButtonVariant.Success,
+            enabled = false,
             onClick = {},
         )
     }

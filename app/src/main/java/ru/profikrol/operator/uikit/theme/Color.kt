@@ -54,6 +54,8 @@ val actionButtonMutedSuccessLight = Color(0xFF96B596)
 val onActionButtonMutedSuccessLight = Color(0xFFFFFFFF)
 val actionButtonWarningLight = Color(0xFFE9859D)
 val onActionButtonWarningLight = Color(0xFFFFFFFF)
+val actionButtonSecondaryLight = Color(0xFFF3F4F6)
+val onActionButtonSecondaryLight = Color(0xFF111827)
 val actionButtonDisabledLight = Color(0xFFD1D5DC)
 val onActionButtonDisabledLight = Color(0xFF6A7282)
 

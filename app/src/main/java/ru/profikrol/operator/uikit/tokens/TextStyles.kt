@@ -16,12 +16,6 @@ val actionButtonCompactTextStyle = TextStyle(
     fontWeight = FontWeight.SemiBold,
 )
 
-val actionButtonLargeTextStyle = TextStyle(
-    fontSize = 30.sp,
-    lineHeight = 36.sp,
-    fontWeight = FontWeight.SemiBold,
-)
-
 val statusBannerWarningTitleTextStyle = TextStyle(
     fontSize = 26.sp,
     lineHeight = 32.sp,
