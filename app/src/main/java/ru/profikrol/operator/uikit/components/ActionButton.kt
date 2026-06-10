@@ -21,11 +21,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.TextStyle
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import ru.profikrol.operator.R
 import ru.profikrol.operator.uikit.theme.actionButtonDisabledLight
 import ru.profikrol.operator.uikit.theme.actionButtonMutedSuccessLight
@@ -39,22 +37,13 @@ import ru.profikrol.operator.uikit.theme.onActionButtonSuccessLight
 import ru.profikrol.operator.uikit.theme.onActionButtonWarningLight
 import ru.profikrol.operator.uikit.tokens.Radii
 import ru.profikrol.operator.uikit.tokens.Spacing
+import ru.profikrol.operator.uikit.tokens.actionButtonCompactTextStyle
+import ru.profikrol.operator.uikit.tokens.actionButtonLargeTextStyle
+import ru.profikrol.operator.uikit.tokens.defaultPrimaryButtonHeight
 
-private val ActionButtonCompactHeight = 56.dp
-private val ActionButtonLargeHeight = 112.dp
 private val ActionButtonCompactIconSize = 20.dp
 private val ActionButtonLargeIconSize = 48.dp
-
-private val ActionButtonCompactTextStyle = TextStyle(
-    fontSize = 16.sp,
-    lineHeight = 20.sp,
-    fontWeight = FontWeight.SemiBold,
-)
-private val ActionButtonLargeTextStyle = TextStyle(
-    fontSize = 30.sp,
-    lineHeight = 36.sp,
-    fontWeight = FontWeight.SemiBold,
-)
+private val ActionButtonHorizontalPadding = Spacing.xs
 
 enum class ActionButtonVariant {
     Primary,
@@ -95,6 +84,7 @@ fun ActionButton(
         onClick = onClick,
         enabled = isEnabled,
         modifier = modifier
+            .padding(horizontal = ActionButtonHorizontalPadding)
             .fillMaxWidth()
             .defaultMinSize(minHeight = metrics.height),
         shape = metrics.shape,
@@ -183,25 +173,25 @@ private fun ActionButtonVariant.colors(): ActionButtonColors =
 private fun ActionButtonSize.metrics(): ActionButtonMetrics =
     when (this) {
         ActionButtonSize.Compact -> ActionButtonMetrics(
-            height = ActionButtonCompactHeight,
+            height = defaultPrimaryButtonHeight,
             iconSize = ActionButtonCompactIconSize,
             iconTextSpacing = Spacing.xs,
             shape = RoundedCornerShape(Radii.sm),
             elevation = 6.dp,
             pressedElevation = 2.dp,
             contentPadding = PaddingValues(horizontal = Spacing.xl),
-            textStyle = ActionButtonCompactTextStyle,
+            textStyle = actionButtonCompactTextStyle,
         )
 
         ActionButtonSize.Large -> ActionButtonMetrics(
-            height = ActionButtonLargeHeight,
+            height = defaultPrimaryButtonHeight,
             iconSize = ActionButtonLargeIconSize,
             iconTextSpacing = Spacing.xl,
             shape = RoundedCornerShape(Radii.lg),
             elevation = 10.dp,
             pressedElevation = 4.dp,
             contentPadding = PaddingValues(horizontal = 44.dp),
-            textStyle = ActionButtonLargeTextStyle,
+            textStyle = actionButtonLargeTextStyle,
         )
     }
 
@@ -265,7 +255,6 @@ private fun ActionButtonLargePreview() {
         ActionButton(
             text = "Засыпать опилки",
             icon = ActionButtonIcon.Sawdust,
-            size = ActionButtonSize.Large,
             onClick = {},
         )
     }

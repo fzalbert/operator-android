@@ -24,7 +24,6 @@ import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import ru.profikrol.operator.R
 import ru.profikrol.operator.uikit.theme.statusBannerInfoContainerLight
 import ru.profikrol.operator.uikit.theme.statusBannerInfoLight
@@ -35,6 +34,8 @@ import ru.profikrol.operator.uikit.theme.statusBannerWarningOutlineLight
 import ru.profikrol.operator.uikit.theme.statusBannerWarningTitleLight
 import ru.profikrol.operator.uikit.tokens.Radii
 import ru.profikrol.operator.uikit.tokens.Spacing
+import ru.profikrol.operator.uikit.tokens.statusBannerWarningTextStyle
+import ru.profikrol.operator.uikit.tokens.statusBannerWarningTitleTextStyle
 
 private val StatusBannerInfoIconSize = 40.dp
 private val StatusBannerInfoBorderWidth = 1.dp
@@ -42,14 +43,6 @@ private val StatusBannerInfoShape = RoundedCornerShape(Radii.md)
 private val StatusBannerWarningIconSize = 42.dp
 private val StatusBannerWarningBorderWidth = 2.dp
 private val StatusBannerWarningShape = RoundedCornerShape(14.dp)
-private val StatusBannerWarningTitleTextStyle = TextStyle(
-    fontSize = 26.sp,
-    lineHeight = 32.sp,
-)
-private val StatusBannerWarningTextStyle = TextStyle(
-    fontSize = 22.sp,
-    lineHeight = 28.sp,
-)
 
 enum class StatusBannerStatus {
     Info,
@@ -186,14 +179,14 @@ private fun StatusBannerStatus.metrics(): StatusBannerMetrics =
 private fun StatusBannerStatus.titleTextStyle(): TextStyle =
     when (this) {
         StatusBannerStatus.Info -> MaterialTheme.typography.headlineMedium
-        StatusBannerStatus.Warning -> StatusBannerWarningTitleTextStyle
+        StatusBannerStatus.Warning -> statusBannerWarningTitleTextStyle
     }
 
 @Composable
 private fun StatusBannerStatus.textStyle(): TextStyle =
     when (this) {
         StatusBannerStatus.Info -> MaterialTheme.typography.headlineSmall
-        StatusBannerStatus.Warning -> StatusBannerWarningTextStyle
+        StatusBannerStatus.Warning -> statusBannerWarningTextStyle
     }
 
 @Composable
