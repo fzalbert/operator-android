@@ -52,10 +52,6 @@ enum class ActionButtonVariant {
     Warning,
 }
 
-enum class ActionButtonSize {
-    Compact,
-}
-
 enum class ActionButtonIcon(@DrawableRes val resId: Int) {
     Scan(R.drawable.ic_scan_label),
     Sawdust(R.drawable.ic_nest_preparation),
@@ -70,12 +66,11 @@ fun ActionButton(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
     variant: ActionButtonVariant = ActionButtonVariant.Primary,
-    size: ActionButtonSize = ActionButtonSize.Compact,
     icon: ActionButtonIcon? = null,
     enabled: Boolean = true,
 ) {
     val colors = variant.colors()
-    val metrics = size.metrics()
+    val metrics = DefaultActionButtonMetrics
     val elevation = variant.elevation(metrics)
 
     Button(
@@ -140,6 +135,17 @@ private data class ActionButtonMetrics(
     val textStyle: TextStyle,
 )
 
+private val DefaultActionButtonMetrics = ActionButtonMetrics(
+    height = defaultPrimaryButtonHeight,
+    iconSize = ActionButtonCompactIconSize,
+    iconTextSpacing = Spacing.xs,
+    shape = RoundedCornerShape(Radii.sm),
+    elevation = 6.dp,
+    pressedElevation = 2.dp,
+    contentPadding = PaddingValues(horizontal = Spacing.xl),
+    textStyle = actionButtonCompactTextStyle,
+)
+
 private data class ActionButtonElevation(
     val default: Dp,
     val pressed: Dp,
@@ -181,21 +187,6 @@ private fun ActionButtonVariant.elevation(metrics: ActionButtonMetrics): ActionB
         else -> ActionButtonElevation(
             default = metrics.elevation,
             pressed = metrics.pressedElevation,
-        )
-    }
-
-@Composable
-private fun ActionButtonSize.metrics(): ActionButtonMetrics =
-    when (this) {
-        ActionButtonSize.Compact -> ActionButtonMetrics(
-            height = defaultPrimaryButtonHeight,
-            iconSize = ActionButtonCompactIconSize,
-            iconTextSpacing = Spacing.xs,
-            shape = RoundedCornerShape(Radii.sm),
-            elevation = 6.dp,
-            pressedElevation = 2.dp,
-            contentPadding = PaddingValues(horizontal = Spacing.xl),
-            textStyle = actionButtonCompactTextStyle,
         )
     }
 
