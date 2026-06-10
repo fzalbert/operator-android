@@ -6,8 +6,8 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
+import ru.profikrol.operator.uikit.tokens.defaultPrimaryButtonHeight
 
-private val DefaultPrimaryButtonHeight = 56.dp
 
 @Composable
 fun PrimaryButton(
@@ -19,7 +19,7 @@ fun PrimaryButton(
     Button(
         onClick = onClick,
         enabled = enabled,
-        modifier = modifier.defaultMinSize(minHeight = DefaultPrimaryButtonHeight),
+        modifier = modifier.defaultMinSize(minHeight = defaultPrimaryButtonHeight),
     ) {
         Text(text)
     }
