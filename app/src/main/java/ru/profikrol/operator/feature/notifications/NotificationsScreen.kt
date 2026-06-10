@@ -27,31 +27,29 @@ fun NotificationsScreen(
     onBack: () -> Unit,
     viewModel: NotificationViewModel = hiltViewModel(),
 ) {
-
     val notifications = viewModel.notifications
-
+    val unreadCount = notifications.count { it.isUnread }
     Scaffold(
         topBar = {
             AppTopBar(
-                title = (stringResource(R.string.notification)),
+                title = stringResource(R.string.notification),
+                subtitle = stringResource(R.string.unread, unreadCount),
                 onBack = onBack,
+                actions = {
+                    TextButton(
+                        onClick = { viewModel.markAllAsRead() }
+                    ) {
+                        Text(stringResource(R.string.read_all))
+                    }
+                }
             )
-        },
+        }
     ) { innerPadding ->
-
         Column(
             modifier = Modifier
                 .fillMaxSize()
                 .padding(innerPadding),
         ) {
-
-            NotificationsHeader(
-                unreadCount = notifications.count { it.isUnread },
-                onReadAllClick = {
-                    viewModel.markAllAsRead()
-                },
-            )
-
             LazyColumn(
                 modifier = Modifier.fillMaxSize(),
             ) {
@@ -68,32 +66,6 @@ fun NotificationsScreen(
                     )
                 }
             }
-        }
-    }
-}
-
-@Composable
-private fun NotificationsHeader(
-    unreadCount: Int,
-    onReadAllClick: () -> Unit,
-) {
-    Row(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 8.dp),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Text(
-            text = stringResource(R.string.unread, unreadCount),
-            style = MaterialTheme.typography.bodySmall,
-            color = Color.Gray,
-        )
-
-        TextButton(
-            onClick = onReadAllClick,
-        ) {
-            Text(stringResource(R.string.read_all))
         }
     }
 }
