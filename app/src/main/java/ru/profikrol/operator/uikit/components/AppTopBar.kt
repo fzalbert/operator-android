@@ -1,7 +1,6 @@
 package ru.profikrol.operator.uikit.components
 
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.RowScope
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -24,7 +23,6 @@ fun AppTopBar(
     title: String,
     subtitle: String? = null,
     onBack: (() -> Unit)? = null,
-    actions: @Composable RowScope.() -> Unit = {}
 ) {
     TopAppBar(
         title = {
@@ -51,6 +49,5 @@ fun AppTopBar(
                 }
             }
         },
-        actions = actions
     )
 }
