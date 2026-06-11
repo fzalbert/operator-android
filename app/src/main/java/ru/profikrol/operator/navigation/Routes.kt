@@ -23,6 +23,9 @@ sealed interface Route {
     data object RfidScan : Route
 
     @Serializable
+    data class RfidScanResult(val code: String) : Route
+
+    @Serializable
     data object NestPreparation : Route
 
     @Serializable
@@ -34,8 +37,3 @@ sealed interface Route {
     @Serializable
     data object RabbitCulling : Route
 }
-
-/**
- * Ключ savedStateHandle для возврата RFID-кода с экрана сканирования.
- */
-const val RESULT_KEY_RFID_CODE = "rfid_code"

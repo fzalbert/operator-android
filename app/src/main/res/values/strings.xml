@@ -42,11 +42,13 @@
 
     <!-- RFID Scan -->
     <string name="rfid_scan_title">Сканирование RFID</string>
+    <string name="rfid_scan_result_title">Результат сканирования</string>
     <string name="rfid_scan_demo_button">Демо: Сканировать</string>
     <string name="rfid_scan_hint">Поднесите метку к считывателю</string>
 
     <!-- Generic placeholder -->
     <string name="placeholder_screen">Экран в разработке</string>
+
 
     <!-- Notifications -->
     <string name="notifications_title">Уведомления</string>
@@ -54,5 +56,6 @@
 
     <!-- Settings -->
     <string name="settings_title">Настройки</string>
+    <string name="weighing">Взвешивание</string>
     <string name="settings_placeholder">Здесь будут настройки</string>
 </resources>

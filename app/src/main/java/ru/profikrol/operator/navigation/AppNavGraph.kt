@@ -1,11 +1,10 @@
 package ru.profikrol.operator.navigation
 
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
+import androidx.navigation.toRoute
 import ru.profikrol.operator.feature.auth.AuthScreen
 import ru.profikrol.operator.feature.home.HomeScreen
 import ru.profikrol.operator.feature.nestalignment.NestAlignmentScreen
@@ -14,6 +13,7 @@ import ru.profikrol.operator.feature.notifications.NotificationsScreen
 import ru.profikrol.operator.feature.rabbitculling.RabbitCullingScreen
 import ru.profikrol.operator.feature.rfidinstallation.RfidInstallationScreen
 import ru.profikrol.operator.feature.rfidscan.RfidScanScreen
+import ru.profikrol.operator.feature.rfidscanresult.RfidScanResultScreen
 import ru.profikrol.operator.feature.settings.SettingsScreen
 
 @Composable
@@ -35,12 +35,7 @@ fun AppNavGraph() {
             )
         }
 
-        composable<Route.Home> { backStackEntry ->
-            // Слушаем результат сканирования RFID, возвращённый через savedStateHandle.
-            val lastRfidCode by backStackEntry.savedStateHandle
-                .getStateFlow<String?>(RESULT_KEY_RFID_CODE, null)
-                .collectAsStateWithLifecycle()
-
+        composable<Route.Home> {
             HomeScreen(
                 onOpenNotifications = { navController.navigate(Route.Notifications) },
                 onOpenSettings = { navController.navigate(Route.Settings) },
@@ -49,7 +44,6 @@ fun AppNavGraph() {
                 onOpenNestAlignment = { navController.navigate(Route.NestAlignment) },
                 onOpenRfidInstallation = { navController.navigate(Route.RfidInstallation) },
                 onOpenRabbitCulling = { navController.navigate(Route.RabbitCulling) },
-                lastRfidCode = lastRfidCode,
             )
         }
         composable<Route.Notifications> {
@@ -66,12 +60,15 @@ fun AppNavGraph() {
             RfidScanScreen(
                 onBack = { navController.popBackStack() },
                 onScanned = { code ->
-                    // Кладём результат в savedStateHandle ПРЕДЫДУЩЕГО экрана и поп-аем.
-                    navController.previousBackStackEntry
-                        ?.savedStateHandle
-                        ?.set(RESULT_KEY_RFID_CODE, code)
-                    navController.popBackStack()
+                    navController.navigate(Route.RfidScanResult(code))
                 },
+            )
+        }
+        composable<Route.RfidScanResult> { backStackEntry ->
+            val route = backStackEntry.toRoute<Route.RfidScanResult>()
+            RfidScanResultScreen(
+                rfidCode = route.code,
+                onBack = { navController.popBackStack() },
             )
         }
         composable<Route.NestPreparation> {
