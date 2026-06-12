@@ -14,48 +14,67 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
-import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBar
-import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.tooling.preview.Preview
-import androidx.compose.ui.unit.dp
+import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import ru.profikrol.operator.R
+import ru.profikrol.operator.domain.model.Rabbit
+import ru.profikrol.operator.uikit.components.AppTopBar
 import ru.profikrol.operator.uikit.components.OutlinedButton
 import ru.profikrol.operator.uikit.components.OutlinedButtonVariant
-import ru.profikrol.operator.uikit.theme.ProfikrolTheme
-import ru.profikrol.operator.uikit.theme.actionButtonPrimaryLight
-import ru.profikrol.operator.uikit.theme.onActionButtonPrimaryLight
-import ru.profikrol.operator.uikit.theme.primaryContainerLight
+import ru.profikrol.operator.uikit.tokens.Alpha
 import ru.profikrol.operator.uikit.tokens.Radii
 import ru.profikrol.operator.uikit.tokens.Spacing
-
-private val ResultScreenHorizontalPadding = 24.dp
-private val RabbitInfoCardElevation = 6.dp
-private val RabbitInfoRowHeight = 48.dp
-private val StatusChipShape = RoundedCornerShape(24.dp)
+import ru.profikrol.operator.uikit.tokens.cardElevation
+import ru.profikrol.operator.uikit.tokens.defaultBorderWidth
+import ru.profikrol.operator.uikit.tokens.defaultInfoRowHeight
 
 @Composable
 fun RfidScanResultScreen(
     rfidCode: String,
     onBack: () -> Unit,
+    onScanAgain: () -> Unit,
+    viewModel: RfidScanResultViewModel = hiltViewModel(),
+) {
+    val state by viewModel.uiState.collectAsStateWithLifecycle()
+
+    LaunchedEffect(rfidCode) {
+        viewModel.loadRabbit(rfidCode)
+    }
+
+    RfidScanResultContent(
+        state = state,
+        onBack = onBack,
+        onScanAgain = onScanAgain,
+    )
+}
+
+@Composable
+private fun RfidScanResultContent(
+    state: RfidScanResultUiState,
+    onBack: () -> Unit,
+    onScanAgain: () -> Unit,
 ) {
     Scaffold(
         topBar = {
-            RfidScanResultTopBar(onBack = onBack)
+            AppTopBar(
+                title = stringResource(R.string.rfid_scan_result_title),
+                onBack = onBack,
+            )
         },
         containerColor = MaterialTheme.colorScheme.surface,
     ) { innerPadding ->
@@ -64,26 +83,48 @@ fun RfidScanResultScreen(
                 .fillMaxSize()
                 .padding(innerPadding)
                 .verticalScroll(rememberScrollState())
-                .padding(horizontal = ResultScreenHorizontalPadding),
+                .padding(horizontal = Spacing.xl),
         ) {
             Spacer(Modifier.height(Spacing.xl))
 
             OutlinedButton(
-                text = "Сканировать RFID-метку",
+                text = stringResource(R.string.rfid_scan_result_scan_button),
                 iconResId = R.drawable.ic_scan_label,
                 variant = OutlinedButtonVariant.Filled,
                 centerContent = true,
-                onClick = {},
+                onClick = onScanAgain,
             )
 
-            Spacer(Modifier.height(36.dp))
+            Spacer(Modifier.height(Spacing.xxl))
 
-            RabbitInfoCard(rfidCode = rfidCode)
+            when {
+                state.isLoading -> {
+                    Text(
+                        text = stringResource(R.string.rfid_scan_result_loading),
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        modifier = Modifier.align(Alignment.CenterHorizontally),
+                    )
+                }
+
+                state.isError || state.rabbit == null -> {
+                    Text(
+                        text = stringResource(R.string.rfid_scan_result_load_error),
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = MaterialTheme.colorScheme.error,
+                        modifier = Modifier.align(Alignment.CenterHorizontally),
+                    )
+                }
+
+                else -> {
+                    RabbitInfoCard(rabbit = state.rabbit)
+                }
+            }
 
             Spacer(Modifier.height(Spacing.xl))
 
             Text(
-                text = "Быстрые действия",
+                text = stringResource(R.string.rfid_scan_result_quick_actions),
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.Bold,
                 color = MaterialTheme.colorScheme.onSurface,
@@ -91,51 +132,25 @@ fun RfidScanResultScreen(
 
             Spacer(Modifier.height(Spacing.lg))
 
-            QuickActions()
+            QuickActions(
+                rabbit = state.rabbit,
+            )
 
             Spacer(Modifier.height(Spacing.xxl))
         }
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-private fun RfidScanResultTopBar(
-    onBack: () -> Unit,
-) {
-    TopAppBar(
-        title = {
-            Text(
-                text = stringResource(R.string.rfid_scan_result_title),
-                fontWeight = FontWeight.SemiBold,
-            )
-        },
-        navigationIcon = {
-            IconButton(onClick = onBack) {
-                Icon(
-                    imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                    contentDescription = stringResource(R.string.cd_back),
-                )
-            }
-        },
-        colors = TopAppBarDefaults.topAppBarColors(
-            containerColor = actionButtonPrimaryLight,
-            navigationIconContentColor = onActionButtonPrimaryLight,
-            titleContentColor = onActionButtonPrimaryLight,
-        ),
-    )
-}
-
 @Composable
 private fun RabbitInfoCard(
-    rfidCode: String,
+    rabbit: Rabbit,
 ) {
     Surface(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(Radii.md),
         color = MaterialTheme.colorScheme.surface,
-        border = BorderStroke(2.dp, actionButtonPrimaryLight),
-        shadowElevation = RabbitInfoCardElevation,
+        border = BorderStroke(defaultBorderWidth, MaterialTheme.colorScheme.primary),
+        shadowElevation = cardElevation,
     ) {
         Column(
             modifier = Modifier.padding(
@@ -149,20 +164,33 @@ private fun RabbitInfoCard(
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Text(
-                    text = rfidCode,
+                    text = rabbit.rfidCode,
                     style = MaterialTheme.typography.headlineSmall,
                     fontWeight = FontWeight.Bold,
-                    color = actionButtonPrimaryLight,
+                    color = MaterialTheme.colorScheme.primary,
                 )
-                StatusChip(text = "Здорова")
+                StatusChip(text = rabbit.status)
             }
 
             Spacer(Modifier.height(Spacing.lg))
 
-            RabbitInfoRow(label = "Возраст", value = "8 мес")
-            RabbitInfoRow(label = "Клетка", value = "A-12")
-            RabbitInfoRow(label = "Вес", value = "3.2 кг")
-            RabbitInfoRow(label = "Диагноз", value = "Здорова", showDivider = false)
+            RabbitInfoRow(
+                label = stringResource(R.string.rfid_scan_result_age_label),
+                value = rabbit.age,
+            )
+            RabbitInfoRow(
+                label = stringResource(R.string.rfid_scan_result_cage_label),
+                value = rabbit.cage,
+            )
+            RabbitInfoRow(
+                label = stringResource(R.string.rfid_scan_result_weight_label),
+                value = rabbit.weight,
+            )
+            RabbitInfoRow(
+                label = stringResource(R.string.rfid_scan_result_diagnosis_label),
+                value = rabbit.diagnosis,
+                showDivider = false,
+            )
         }
     }
 }
@@ -173,7 +201,7 @@ private fun StatusChip(
 ) {
     Box(
         modifier = Modifier
-            .background(primaryContainerLight, StatusChipShape)
+            .background(MaterialTheme.colorScheme.primaryContainer, RoundedCornerShape(Radii.xl))
             .padding(horizontal = Spacing.md, vertical = Spacing.xs),
         contentAlignment = Alignment.Center,
     ) {
@@ -181,7 +209,7 @@ private fun StatusChip(
             text = text,
             style = MaterialTheme.typography.labelMedium,
             fontWeight = FontWeight.SemiBold,
-            color = actionButtonPrimaryLight,
+            color = MaterialTheme.colorScheme.onPrimaryContainer,
         )
     }
 }
@@ -196,7 +224,7 @@ private fun RabbitInfoRow(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(RabbitInfoRowHeight),
+                .height(defaultInfoRowHeight),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically,
         ) {
@@ -213,13 +241,17 @@ private fun RabbitInfoRow(
             )
         }
         if (showDivider) {
-            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.6f))
+            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = Alpha.divider))
         }
     }
 }
 
 @Composable
-private fun QuickActions() {
+private fun QuickActions(
+    rabbit: Rabbit?,
+) {
+    var showInseminationDialog by remember { mutableStateOf(false) }
+
     Column(
         verticalArrangement = Arrangement.spacedBy(Spacing.md),
     ) {
@@ -229,40 +261,38 @@ private fun QuickActions() {
             onClick = {},
         )
         OutlinedButton(
-            text = "Пальпация",
+            text = stringResource(R.string.palpation),
             iconResId = R.drawable.ic_palpation,
             onClick = {},
         )
         OutlinedButton(
-            text = "Перемещение",
+            text = stringResource(R.string.moving),
             iconResId = R.drawable.ic_moving,
             onClick = {},
         )
         OutlinedButton(
-            text = "Осеменение",
+            text = stringResource(R.string.insemination),
             iconResId = R.drawable.ic_insemination_accept,
-            onClick = {},
+            enabled = rabbit != null,
+            onClick = { showInseminationDialog = true },
         )
         OutlinedButton(
-            text = "Просмотр карточки",
+            text = stringResource(R.string.view_card),
             iconResId = R.drawable.ic_heart,
             onClick = {},
         )
         OutlinedButton(
-            text = "Выбраковка",
+            text = stringResource(R.string.culling),
             iconResId = R.drawable.ic_cancel,
             onClick = {},
         )
     }
-}
 
-@Preview(showBackground = true, widthDp = 390, heightDp = 844)
-@Composable
-private fun RfidScanResultScreenPreview() {
-    ProfikrolTheme {
-        RfidScanResultScreen(
-            rfidCode = "RF-00247",
-            onBack = {},
+    if (showInseminationDialog && rabbit != null) {
+        InseminationConfirmationDialog(
+            rabbit = rabbit,
+            onDismiss = { showInseminationDialog = false },
+            onConfirm = { showInseminationDialog = false },
         )
     }
 }

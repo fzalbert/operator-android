@@ -69,6 +69,15 @@ fun AppNavGraph() {
             RfidScanResultScreen(
                 rfidCode = route.code,
                 onBack = { navController.popBackStack() },
+                onScanAgain = {
+                    navController.popBackStack(
+                        route = Route.RfidScan,
+                        inclusive = true,
+                    )
+                    navController.navigate(Route.RfidScan) {
+                        launchSingleTop = true
+                    }
+                },
             )
         }
         composable<Route.NestPreparation> {
