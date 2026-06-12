@@ -3,6 +3,8 @@
 
     <!-- Common -->
     <string name="cd_back">Назад</string>
+    <string name="cancel">Отмена</string>
+    <string name="confirm">Подтвердить</string>
 
     <!-- Auth -->
     <string name="auth_logo">🐰</string>
@@ -42,11 +44,25 @@
 
     <!-- RFID Scan -->
     <string name="rfid_scan_title">Сканирование RFID</string>
+    <string name="rfid_scan_result_title">Результат сканирования</string>
+    <string name="rfid_scan_result_scan_button">Сканировать RFID-метку</string>
+    <string name="rfid_scan_result_quick_actions">Быстрые действия</string>
+    <string name="rfid_scan_result_loading">Загрузка данных кролика…</string>
+    <string name="rfid_scan_result_load_error">Не удалось загрузить данные кролика</string>
+    <string name="rfid_scan_result_age_label">Возраст</string>
+    <string name="rfid_scan_result_cage_label">Клетка</string>
+    <string name="rfid_scan_result_weight_label">Вес</string>
+    <string name="rfid_scan_result_diagnosis_label">Диагноз</string>
+    <string name="insemination_dialog_title">Подтверждение осеменения</string>
+    <string name="insemination_dialog_animal_label">Животное:</string>
+    <string name="insemination_dialog_message">Подтвердите выполнение процедуры осеменения</string>
+    <string name="insemination_dialog_field_format">%1$s: </string>
     <string name="rfid_scan_demo_button">Демо: Сканировать</string>
     <string name="rfid_scan_hint">Поднесите метку к считывателю</string>
 
     <!-- Generic placeholder -->
     <string name="placeholder_screen">Экран в разработке</string>
+
 
     <!-- Notifications -->
     <string name="notifications_title">Уведомления</string>
@@ -54,8 +70,17 @@
 
     <!-- Settings -->
     <string name="settings_title">Настройки</string>
+    <string name="weighing">Взвешивание</string>
+    <string name="palpation">Пальпация</string>
+    <string name="moving">Перемещение</string>
+    <string name="insemination">Осеменение</string>
+    <string name="view_card">Просмотр карточки</string>
+    <string name="culling">Выбраковка</string>
+
     <string name="settings_placeholder">Здесь будут настройки</string>
     <string name="notification">Уведомления</string>
     <string name="unread">Непрочитанных: %1$d</string>
+
     <string name="read_all">Прочитать всё</string>
+
 </resources>
