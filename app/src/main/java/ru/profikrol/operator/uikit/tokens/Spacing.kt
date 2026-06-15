@@ -12,7 +12,11 @@ object Spacing {
 }
 
 object Radii {
-    val sm = 8.dp
     val md = 12.dp
     val lg = 16.dp
+    val xl = 24.dp
+}
+
+object Alpha {
+    const val divider = 0.6f
 }

@@ -6,12 +6,20 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.sp
 
-val AppTypography = Typography(
+
+private val Material3DefaultTypography = Typography()
+
+val AppTypography = Material3DefaultTypography.copy(
+    titleLarge = Material3DefaultTypography.titleLarge.copy(
+        fontSize = 20.sp,
+        lineHeight = 26.sp,
+    ),
+
     bodyLarge = TextStyle(
         fontFamily = FontFamily.Default,
         fontWeight = FontWeight.Normal,
         fontSize = 16.sp,
         lineHeight = 24.sp,
-        letterSpacing = 0.5.sp
-    )
+        letterSpacing = 0.5.sp,
+    ),
 )
