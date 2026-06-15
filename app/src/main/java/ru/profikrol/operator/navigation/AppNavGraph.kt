@@ -6,6 +6,7 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.toRoute
 import ru.profikrol.operator.feature.auth.AuthScreen
+import ru.profikrol.operator.feature.home.HomeActionId
 import ru.profikrol.operator.feature.home.HomeScreen
 import ru.profikrol.operator.feature.nestalignment.NestAlignmentScreen
 import ru.profikrol.operator.feature.nestpreparation.NestPreparationScreen
@@ -40,10 +41,17 @@ fun AppNavGraph() {
                 onOpenNotifications = { navController.navigate(Route.Notifications) },
                 onOpenSettings = { navController.navigate(Route.Settings) },
                 onScanRfid = { navController.navigate(Route.RfidScan) },
-                onOpenNestPreparation = { navController.navigate(Route.NestPreparation) },
-                onOpenNestAlignment = { navController.navigate(Route.NestAlignment) },
-                onOpenRfidInstallation = { navController.navigate(Route.RfidInstallation) },
-                onOpenRabbitCulling = { navController.navigate(Route.RabbitCulling) },
+                onActionClick = { id ->
+                    // Маппинг id действия → роут. `when` без `else`:
+                    // компилятор не даст забыть ветку при добавлении нового HomeActionId.
+                    val route = when (id) {
+                        HomeActionId.NestPreparation -> Route.NestPreparation
+                        HomeActionId.NestAlignment -> Route.NestAlignment
+                        HomeActionId.RfidInstallation -> Route.RfidInstallation
+                        HomeActionId.RabbitCulling -> Route.RabbitCulling
+                    }
+                    navController.navigate(route)
+                },
             )
         }
         composable<Route.Notifications> {

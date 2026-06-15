@@ -20,14 +20,19 @@
     <string name="auth_error_unknown">Что-то пошло не так</string>
 
     <!-- Home -->
-    <string name="home_title">Профикрол</string>
+    <string name="home_title">ООО «Профикроль»</string>
+    <string name="home_subtitle">Кролиководческая ферма</string>
     <string name="home_cd_notifications">Уведомления</string>
     <string name="home_cd_settings">Настройки</string>
     <string name="home_action_scan_rfid">Сканировать RFID-метку</string>
     <string name="home_action_nest_preparation">Подготовка гнёзд</string>
+    <string name="home_action_nest_preparation_desc">Плановый окрол</string>
     <string name="home_action_nest_alignment">Выравнивание гнёзд</string>
+    <string name="home_action_nest_alignment_desc">Распределение крольчат</string>
     <string name="home_action_rfid_installation">Установка RFID</string>
+    <string name="home_action_rfid_installation_desc">Маркировка новых кроликов</string>
     <string name="home_action_rabbit_culling">Выбраковка кроликов</string>
+    <string name="home_action_rabbit_culling_desc">Отбор по весу и здоровью</string>
     <string name="home_last_rfid">Последний код: %1$s</string>
 
     <!-- Nest Preparation -->

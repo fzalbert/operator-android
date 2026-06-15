@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
@@ -20,10 +21,13 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.shadow
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import ru.profikrol.operator.R
 import ru.profikrol.operator.domain.model.Rabbit
 import ru.profikrol.operator.uikit.components.OutlinedButton
@@ -45,77 +49,12 @@ fun InseminationConfirmationDialog(
     onDismiss: () -> Unit,
     onConfirm: () -> Unit,
 ) {
-    Dialog(onDismissRequest = onDismiss) {
-        Surface(
-            modifier = Modifier.fillMaxWidth(),
-            shape = DialogShape,
-            color = MaterialTheme.colorScheme.surface,
-            tonalElevation = dialogElevation,
-        ) {
-            Column(
-                modifier = Modifier.padding(
-                    horizontal = Spacing.xl,
-                    vertical = Spacing.xl,
-                ),
-            ) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(Spacing.md),
-                ) {
-                    TargetIcon(
-                        modifier = Modifier.size(targetIconSize),
-                    )
-                    Text(
-                        text = stringResource(R.string.insemination_dialog_title),
-                        style = MaterialTheme.typography.headlineSmall,
-                        fontWeight = FontWeight.SemiBold,
-                        color = MaterialTheme.colorScheme.onSurface,
-                    )
-                }
-
-                Spacer(Modifier.height(Spacing.xl))
-
-                AnimalInfoCard(rabbit = rabbit)
-
-                Spacer(Modifier.height(Spacing.xl))
-
-                Text(
-                    text = stringResource(R.string.insemination_dialog_message),
-                    style = MaterialTheme.typography.bodyLarge,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    textAlign = TextAlign.Center,
-                    modifier = Modifier.fillMaxWidth(),
-                )
-
-                Spacer(Modifier.height(Spacing.xl))
-
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(Spacing.md),
-                    modifier = Modifier.fillMaxWidth(),
-                ) {
-                    OutlinedButton(
-                        text = stringResource(R.string.cancel),
-                        onClick = onDismiss,
-                        showDefaultIcon = false,
-                        centerContent = true,
-                        modifier = Modifier
-                            .weight(1f)
-                            .height(defaultPrimaryButtonHeight),
-                    )
-                    OutlinedButton(
-                        text = stringResource(R.string.confirm),
-                        onClick = onConfirm,
-                        variant = OutlinedButtonVariant.Filled,
-                        showDefaultIcon = false,
-                        centerContent = true,
-                        modifier = Modifier
-                            .weight(1f)
-                            .height(defaultPrimaryButtonHeight)
-                            .shadow(actionButtonShadowElevation, RoundedCornerShape(Radii.lg)),
-                    )
-                }
-            }
-        }
+    Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false)) {
+        InseminationConfirmationDialogContent(
+            rabbit = rabbit,
+            onDismiss = onDismiss,
+            onConfirm = onConfirm
+        )
     }
 }
 
@@ -131,7 +70,7 @@ private fun AnimalInfoCard(
     ) {
         Text(
             text = stringResource(R.string.insemination_dialog_animal_label),
-            style = MaterialTheme.typography.bodyLarge,
+            style = MaterialTheme.typography.titleMedium,
             color = MaterialTheme.colorScheme.onSurface,
         )
 
@@ -139,7 +78,8 @@ private fun AnimalInfoCard(
 
         Text(
             text = rabbit.rfidCode,
-            style = MaterialTheme.typography.headlineSmall,
+            style = MaterialTheme.typography.bodyLarge,
+            fontWeight = FontWeight.Medium,
             color = MaterialTheme.colorScheme.primary,
         )
 
@@ -166,40 +106,191 @@ private fun AnimalInfoValue(
     label: String,
     value: String,
 ) {
-    Row {
+    Row(horizontalArrangement = Arrangement.spacedBy(Spacing.xs)) {
         Text(
             text = stringResource(R.string.insemination_dialog_field_format, label),
-            style = MaterialTheme.typography.titleSmall,
+            style = MaterialTheme.typography.labelMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
         Text(
             text = value,
-            style = MaterialTheme.typography.bodyMedium,
+            style = MaterialTheme.typography.labelMedium,
             fontWeight = FontWeight.Medium,
             color = MaterialTheme.colorScheme.onSurface,
         )
     }
 }
 
+//@Composable
+//private fun TargetIcon(
+//    modifier: Modifier = Modifier,
+//) {
+//    val color = MaterialTheme.colorScheme.primary
+//
+//    Box(
+//        modifier = modifier,
+//        contentAlignment = Alignment.Center,
+//    ) {
+//        Canvas(modifier = Modifier.matchParentSize()) {
+//            val stroke = targetIconStrokeWidth.toPx()
+//            val center = this.center
+//            val maxRadius = (size.minDimension - stroke) / 2
+//
+//            drawCircle(color = color, radius = maxRadius, center = center, style = Stroke(stroke))
+//            drawCircle(color = color, radius = maxRadius * 0.58f, center = center, style = Stroke(stroke))
+//            drawCircle(color = color, radius = maxRadius * 0.22f, center = center, style = Stroke(stroke))
+//            drawCircle(color = color, radius = maxRadius * 0.08f, center = center)
+//        }
+//    }
+//}
+
+// ---------- Previews ----------
+
+private val PreviewRabbit = Rabbit(
+    rfidCode = "RF-00247",
+    status = "Здоров",
+    age = "8 мес",
+    cage = "A-12",
+    weight = "3.4 кг",
+    diagnosis = "Без замечаний",
+)
+
+@androidx.compose.ui.tooling.preview.Preview(
+    name = "InseminationDialog — обычный",
+    showBackground = true,
+    backgroundColor = 0xFF888888,
+)
 @Composable
-private fun TargetIcon(
-    modifier: Modifier = Modifier,
+private fun InseminationDialogPreview() {
+    ru.profikrol.operator.uikit.theme.ProfikrolTheme {
+        InseminationConfirmationDialogContent(
+            rabbit = PreviewRabbit,
+            onDismiss = {},
+            onConfirm = {},
+        )
+    }
+}
+
+@androidx.compose.ui.tooling.preview.Preview(
+    name = "InseminationDialog — длинный RFID",
+    showBackground = true,
+    backgroundColor = 0xFF888888,
+)
+@Composable
+private fun InseminationDialogLongCodePreview() {
+    ru.profikrol.operator.uikit.theme.ProfikrolTheme {
+        InseminationConfirmationDialogContent(
+            rabbit = PreviewRabbit.copy(
+                rfidCode = "RF-99999-XYZ-LONG-CODE",
+                age = "12 мес",
+                cage = "B-104",
+            ),
+            onDismiss = {},
+            onConfirm = {},
+        )
+    }
+}
+
+@androidx.compose.ui.tooling.preview.Preview(
+    name = "InseminationDialog — тёмная тема",
+    showBackground = true,
+    backgroundColor = 0xFF000000,
+    uiMode = android.content.res.Configuration.UI_MODE_NIGHT_YES,
+)
+@Composable
+private fun InseminationDialogDarkPreview() {
+    ru.profikrol.operator.uikit.theme.ProfikrolTheme(darkTheme = true) {
+        InseminationConfirmationDialogContent(
+            rabbit = PreviewRabbit,
+            onDismiss = {},
+            onConfirm = {},
+        )
+    }
+}
+
+/**
+ * Содержимое диалога без обёртки [Dialog].
+ * @Preview не умеет показывать настоящие Dialog'и (это другое окно ОС),
+ * поэтому для превью извлекаем "лист" отдельно.
+ */
+@Composable
+private fun InseminationConfirmationDialogContent(
+    rabbit: Rabbit,
+    onDismiss: () -> Unit,
+    onConfirm: () -> Unit,
 ) {
-    val color = MaterialTheme.colorScheme.primary
-
-    Box(
-        modifier = modifier,
-        contentAlignment = Alignment.Center,
+    Surface(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = Spacing.xl),
+        shape = DialogShape,
+        color = MaterialTheme.colorScheme.surface,
+        tonalElevation = 0.dp,
+        shadowElevation = dialogElevation,
     ) {
-        Canvas(modifier = Modifier.matchParentSize()) {
-            val stroke = targetIconStrokeWidth.toPx()
-            val center = this.center
-            val maxRadius = (size.minDimension - stroke) / 2
+        Column(
+            modifier = Modifier.padding(
+                horizontal = Spacing.lg,
+                vertical = Spacing.lg,
+            ),
+        ) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(Spacing.sm),
+            ) {
+                Icon(
+                    modifier = Modifier.size(targetIconSize),
+                    painter = painterResource(R.drawable.ic_insemination_accept),
+                    contentDescription = stringResource(R.string.insemination_dialog_title),
+                    tint = MaterialTheme.colorScheme.primary
+                )
+                Text(
+                    text = stringResource(R.string.insemination_dialog_title),
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.SemiBold,
+                    color = MaterialTheme.colorScheme.onSurface,
+                )
+            }
 
-            drawCircle(color = color, radius = maxRadius, center = center, style = Stroke(stroke))
-            drawCircle(color = color, radius = maxRadius * 0.58f, center = center, style = Stroke(stroke))
-            drawCircle(color = color, radius = maxRadius * 0.22f, center = center, style = Stroke(stroke))
-            drawCircle(color = color, radius = maxRadius * 0.08f, center = center)
+            Spacer(Modifier.height(Spacing.xl))
+            AnimalInfoCard(rabbit = rabbit)
+            Spacer(Modifier.height(Spacing.xl))
+
+            Text(
+                text = stringResource(R.string.insemination_dialog_message),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                textAlign = TextAlign.Center,
+                modifier = Modifier.fillMaxWidth(),
+            )
+
+            Spacer(Modifier.height(Spacing.xl))
+
+            Row(
+                horizontalArrangement = Arrangement.spacedBy(Spacing.md),
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                OutlinedButton(
+                    text = stringResource(R.string.cancel),
+                    onClick = onDismiss,
+                    showDefaultIcon = false,
+                    centerContent = true,
+                    modifier = Modifier
+                        .weight(1f)
+                        .height(defaultPrimaryButtonHeight),
+                )
+                OutlinedButton(
+                    text = stringResource(R.string.confirm),
+                    onClick = onConfirm,
+                    variant = OutlinedButtonVariant.Filled,
+                    showDefaultIcon = false,
+                    centerContent = true,
+                    modifier = Modifier
+                        .weight(1f)
+                        .height(defaultPrimaryButtonHeight)
+                        .shadow(actionButtonShadowElevation, RoundedCornerShape(Radii.lg)),
+                )
+            }
         }
     }
 }

@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.CornerBasedShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -70,7 +71,18 @@ fun ActionButton(
     enabled: Boolean = true,
 ) {
     val colors = variant.colors()
-    val metrics = DefaultActionButtonMetrics
+
+    val metrics = ActionButtonMetrics(
+        height = defaultPrimaryButtonHeight,
+        iconSize = ActionButtonCompactIconSize,
+        iconTextSpacing = Spacing.xs,
+        shape = MaterialTheme.shapes.small,
+        elevation = 6.dp,
+        pressedElevation = 2.dp,
+        contentPadding = PaddingValues(horizontal = Spacing.xl),
+        textStyle = actionButtonCompactTextStyle,
+    )
+
     val elevation = variant.elevation(metrics)
 
     Button(
@@ -128,22 +140,11 @@ private data class ActionButtonMetrics(
     val height: Dp,
     val iconSize: Dp,
     val iconTextSpacing: Dp,
-    val shape: RoundedCornerShape,
+    val shape: CornerBasedShape,
     val elevation: Dp,
     val pressedElevation: Dp,
     val contentPadding: PaddingValues,
     val textStyle: TextStyle,
-)
-
-private val DefaultActionButtonMetrics = ActionButtonMetrics(
-    height = defaultPrimaryButtonHeight,
-    iconSize = ActionButtonCompactIconSize,
-    iconTextSpacing = Spacing.xs,
-    shape = RoundedCornerShape(Radii.sm),
-    elevation = 6.dp,
-    pressedElevation = 2.dp,
-    contentPadding = PaddingValues(horizontal = Spacing.xl),
-    textStyle = actionButtonCompactTextStyle,
 )
 
 private data class ActionButtonElevation(
@@ -190,7 +191,7 @@ private fun ActionButtonVariant.elevation(metrics: ActionButtonMetrics): ActionB
         )
     }
 
-@Preview(widthDp = 600)
+@Preview(widthDp = 700)
 @Composable
 private fun ActionButtonScanPreview() {
     MaterialTheme {
@@ -202,7 +203,7 @@ private fun ActionButtonScanPreview() {
     }
 }
 
-@Preview(widthDp = 680)
+@Preview(widthDp = 700)
 @Composable
 private fun ActionButtonAllCompactStatesPreview() {
     MaterialTheme {
@@ -249,7 +250,7 @@ private fun ActionButtonAllCompactStatesPreview() {
     }
 }
 
-@Preview(widthDp = 1016)
+@Preview(widthDp = 700)
 @Composable
 private fun ActionButtonSecondaryPreview() {
     MaterialTheme {
@@ -261,7 +262,7 @@ private fun ActionButtonSecondaryPreview() {
     }
 }
 
-@Preview(widthDp = 1016)
+@Preview(widthDp = 700)
 @Composable
 private fun ActionButtonSawdustPreview() {
     MaterialTheme {
@@ -273,7 +274,7 @@ private fun ActionButtonSawdustPreview() {
     }
 }
 
-@Preview(widthDp = 680)
+@Preview(widthDp = 700)
 @Composable
 private fun ActionButtonStatesPreview() {
     MaterialTheme {

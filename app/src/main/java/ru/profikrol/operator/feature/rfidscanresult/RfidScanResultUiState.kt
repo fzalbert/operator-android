@@ -6,4 +6,5 @@ data class RfidScanResultUiState(
     val isLoading: Boolean = false,
     val rabbit: Rabbit? = null,
     val isError: Boolean = false,
+    val actions: List<RabbitAction> = emptyList(),
 )

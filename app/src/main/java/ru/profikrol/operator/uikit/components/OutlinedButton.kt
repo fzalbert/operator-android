@@ -133,7 +133,7 @@ private fun OutlinedButtonVariant.colors(enabled: Boolean): OutlinedButtonColors
             container = Color.Transparent,
             content = onActionButtonDisabledLight,
             border = onActionButtonDisabledLight,
-            borderWidth = 2.dp,
+            borderWidth = 1.dp,
         )
     }
 
@@ -142,7 +142,7 @@ private fun OutlinedButtonVariant.colors(enabled: Boolean): OutlinedButtonColors
             container = Color.Transparent,
             content = actionButtonPrimaryLight,
             border = actionButtonPrimaryLight,
-            borderWidth = 2.dp,
+            borderWidth = 1.dp,
         )
 
         OutlinedButtonVariant.Filled -> OutlinedButtonColors(

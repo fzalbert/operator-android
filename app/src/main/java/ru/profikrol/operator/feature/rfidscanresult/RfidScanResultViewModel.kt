@@ -8,15 +8,25 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import ru.profikrol.operator.core.role.RoleFeatureProvider
 import ru.profikrol.operator.domain.repository.RabbitRepository
 import javax.inject.Inject
 
 @HiltViewModel
 class RfidScanResultViewModel @Inject constructor(
     private val rabbitRepository: RabbitRepository,
+    roleFeatureProvider: RoleFeatureProvider,
 ) : ViewModel() {
 
-    private val _uiState = MutableStateFlow(RfidScanResultUiState(isLoading = true))
+    // Список действий определяется ролью текущего пользователя.
+    private val actions: List<RabbitAction> =
+        roleFeatureProvider.current()
+            .rabbitScanActions()
+            .map(RabbitAction::byId)
+
+    private val _uiState = MutableStateFlow(
+        RfidScanResultUiState(isLoading = true, actions = actions),
+    )
     val uiState: StateFlow<RfidScanResultUiState> = _uiState.asStateFlow()
 
     fun loadRabbit(rfidCode: String) {
