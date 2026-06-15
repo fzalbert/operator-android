@@ -4,6 +4,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.channels.Channel
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -24,11 +25,22 @@ class RfidScanViewModel @Inject constructor() : ViewModel() {
 
     /** Демо-сканирование: генерим случайный код вида RF-00247. */
     fun onDemoScanClick() {
-        if (_uiState.value.isScanning) return
+        if (_uiState.value.isDemoScanInProgress) return
         viewModelScope.launch {
-            _uiState.update { it.copy(isScanning = true) }
+            _uiState.update { it.copy(isDemoScanInProgress = true) }
+            delay(RfidScanDemoDurationMillis)
             val code = generateDemoRfidCode()
-            _uiState.update { it.copy(isScanning = false) }
+            _uiState.update { it.copy(isDemoScanInProgress = false) }
+            _events.send(RfidScanEvent.Scanned(code))
+        }
+    }
+
+    fun onNfcTagScanned(code: String) {
+        if (code.isBlank()) return
+        viewModelScope.launch {
+            _uiState.update {
+                it.copy(isScanning = true)
+            }
             _events.send(RfidScanEvent.Scanned(code))
         }
     }
@@ -42,3 +54,5 @@ class RfidScanViewModel @Inject constructor() : ViewModel() {
 sealed interface RfidScanEvent {
     data class Scanned(val code: String) : RfidScanEvent
 }
+
+private const val RfidScanDemoDurationMillis = 1_200L
