@@ -25,6 +25,8 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import ru.profikrol.operator.R
 import ru.profikrol.operator.domain.model.Rabbit
+import ru.profikrol.operator.uikit.components.ActionButton
+import ru.profikrol.operator.uikit.components.ActionButtonIcon
 import ru.profikrol.operator.uikit.components.AppTopBar
 import ru.profikrol.operator.uikit.components.OutlinedButton
 import ru.profikrol.operator.uikit.tokens.Spacing
@@ -72,6 +74,13 @@ private fun RfidScanResultContent(
                 .verticalScroll(rememberScrollState())
                 .padding(horizontal = Spacing.xl),
         ) {
+            ActionButton(
+                text = stringResource(R.string.rfid_scan_result_scan_button),
+                icon = ActionButtonIcon.Scan,
+                onClick = onScanAgain,
+            )
+
+            Spacer(Modifier.height(Spacing.xl))
 
             when {
                 state.isError -> {

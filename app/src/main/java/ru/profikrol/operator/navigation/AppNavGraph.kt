@@ -40,7 +40,11 @@ fun AppNavGraph() {
             HomeScreen(
                 onOpenNotifications = { navController.navigate(Route.Notifications) },
                 onOpenSettings = { navController.navigate(Route.Settings) },
-                onScanRfid = { navController.navigate(Route.RfidScan) },
+                onScanRfid = {
+                    navController.navigate(Route.RfidScan) {
+                        launchSingleTop = true
+                    }
+                },
                 onActionClick = { id ->
                     // Маппинг id действия → роут. `when` без `else`:
                     // компилятор не даст забыть ветку при добавлении нового HomeActionId.
@@ -68,7 +72,9 @@ fun AppNavGraph() {
             RfidScanScreen(
                 onBack = { navController.popBackStack() },
                 onScanned = { code ->
-                    navController.navigate(Route.RfidScanResult(code))
+                    navController.navigate(Route.RfidScanResult(code)) {
+                        popUpTo(Route.RfidScan) { inclusive = true }
+                    }
                 },
             )
         }
@@ -78,11 +84,8 @@ fun AppNavGraph() {
                 rfidCode = route.code,
                 onBack = { navController.popBackStack() },
                 onScanAgain = {
-                    navController.popBackStack(
-                        route = Route.RfidScan,
-                        inclusive = true,
-                    )
                     navController.navigate(Route.RfidScan) {
+                        popUpTo(Route.Home)
                         launchSingleTop = true
                     }
                 },
