@@ -216,7 +216,7 @@ private fun StatusBannerIcon(
 @Composable
 private fun StatusBannerWarningPreview() {
     StatusBanner(
-        status = StatusBannerStatus.Info,
+        status = StatusBannerStatus.Warning,
         title = "Внимание!",
         text = "Это действие необратимо. Животное будет удалено из системы.",
     )

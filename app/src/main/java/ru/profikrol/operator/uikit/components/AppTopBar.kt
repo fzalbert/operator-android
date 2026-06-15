@@ -2,6 +2,7 @@ package ru.profikrol.operator.uikit.components
 
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.RowScope
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -10,9 +11,13 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import ru.profikrol.operator.R
+import ru.profikrol.operator.uikit.theme.onPrimaryLight
+import ru.profikrol.operator.uikit.theme.primaryLight
 
 /**
  * Дефолтный тулбар: кнопка "назад" (опционально), title и subtitle.
@@ -25,19 +30,25 @@ fun AppTopBar(
     subtitle: String? = null,
     onBack: (() -> Unit)? = null,
     actions: @Composable RowScope.() -> Unit = {},
-
-    ) {
+) {
     TopAppBar(
         title = {
-            Column {
+            Column(
+                modifier = Modifier.fillMaxWidth(0.7f)
+            ) {
                 Text(
                     text = title,
                     style = MaterialTheme.typography.titleMedium,
+                    color = onPrimaryLight,
+                    maxLines = 1,
                 )
+
                 if (!subtitle.isNullOrBlank()) {
                     Text(
                         text = subtitle,
                         style = MaterialTheme.typography.bodySmall,
+                        color = onPrimaryLight,
+                        maxLines = 1,
                     )
                 }
             }
@@ -49,10 +60,19 @@ fun AppTopBar(
                     Icon(
                         imageVector = Icons.AutoMirrored.Filled.ArrowBack,
                         contentDescription = stringResource(R.string.cd_back),
+                        tint = onPrimaryLight,
                     )
                 }
             }
         },
-        actions = actions
+
+        actions = actions,
+
+        colors = TopAppBarDefaults.topAppBarColors(
+            containerColor = primaryLight,
+            titleContentColor = onPrimaryLight,
+            navigationIconContentColor = onPrimaryLight,
+            actionIconContentColor = onPrimaryLight,
+        ),
     )
 }
