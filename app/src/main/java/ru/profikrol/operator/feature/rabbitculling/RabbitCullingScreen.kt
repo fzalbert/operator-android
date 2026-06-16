@@ -44,8 +44,7 @@ fun RabbitCullingScreen(
     var selectedCage by remember { mutableStateOf<Cage?>(null) }
     var selectedReason by remember { mutableStateOf<CullingReason?>(null) }
 
-    var quantity by remember { mutableStateOf("1") }
-
+    var quantity by remember { mutableStateOf("") }
     var cageExpanded by remember { mutableStateOf(false) }
     var reasonExpanded by remember { mutableStateOf(false) }
 
@@ -72,7 +71,7 @@ fun RabbitCullingScreen(
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .verticalScroll(rememberScrollState())
+//                .verticalScroll(rememberScrollState())
                 .padding(padding)
                 .padding(12.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp),
@@ -151,7 +150,7 @@ fun RabbitCullingScreen(
                                 onValueChange = {},
                                 readOnly = true,
                                 modifier = Modifier.fillMaxWidth(),
-                                label = { Text("Клетка") },
+                                label = { Text(stringResource(R.string.cage)) },
                                 trailingIcon = {
                                     IconButton(
                                         onClick = { cageExpanded = true }
@@ -203,19 +202,19 @@ fun RabbitCullingScreen(
                         verticalArrangement = Arrangement.spacedBy(6.dp),
                     ) {
                         Text(
-                            text = "Ручная выбраковка",
+                            text = stringResource(R.string.manual_culling),
                             style = MaterialTheme.typography.titleMedium,
                         )
 
-                        Text("Клетка: ${selectedCage?.name ?: "—"}")
-                        Text("Количество: $quantity")
+                        Text("${stringResource(R.string.cage)}: ${selectedCage?.name ?: "—"}")
+                        Text("${stringResource(R.string.count)}: $quantity")
                     }
                 }
             }
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
 
                 Text(
-                    text = "Причина выбраковки",
+                    text = stringResource(R.string.reason_for_culling),
                     style = MaterialTheme.typography.bodyMedium,
                 )
 
@@ -254,12 +253,14 @@ fun RabbitCullingScreen(
                     }
                 }
             }
-
             Text(
                 text = if (inputMode is InputMode.Scan)
-                    "Я подтверждаю выбраковку животного ${rabbit?.rfidCode.orEmpty()}"
+                    stringResource(
+                        R.string.confirm_the_culling_of_the_animal,
+                        rabbit?.rfidCode.orEmpty(),
+                    )
                 else
-                    "Я подтверждаю выбраковку по ручному вводу",
+                    stringResource(R.string.confirm_the_rejection_of_the_manual_input),
                 style = MaterialTheme.typography.bodyMedium,
             )
 
