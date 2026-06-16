@@ -11,11 +11,15 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import ru.profikrol.operator.domain.nfc.NfcReader
+import ru.profikrol.operator.domain.nfc.ScannedPayload
 import javax.inject.Inject
 import kotlin.random.Random
 
 @HiltViewModel
-class RfidScanViewModel @Inject constructor() : ViewModel() {
+class RfidScanViewModel @Inject constructor(
+    private val nfcReader: NfcReader,
+) : ViewModel() {
 
     private val _uiState = MutableStateFlow(RfidScanUiState())
     val uiState: StateFlow<RfidScanUiState> = _uiState.asStateFlow()
@@ -35,19 +39,30 @@ class RfidScanViewModel @Inject constructor() : ViewModel() {
         }
     }
 
-    fun onNfcTagScanned(code: String) {
-        if (code.isBlank()) return
+    fun startNfcScanning() {
+        if (!nfcReader.isAvailable) return
+        nfcReader.start(::onNfcScanned)
+    }
+
+    fun stopNfcScanning() {
+        nfcReader.stop()
+    }
+
+    private fun onNfcScanned(payload: ScannedPayload) {
+        if (payload.value.isBlank()) return
         viewModelScope.launch {
-            _uiState.update {
-                it.copy(isScanning = true)
-            }
-            _events.send(RfidScanEvent.Scanned(code))
+            _events.send(RfidScanEvent.Scanned(payload.value))
         }
     }
 
     private fun generateDemoRfidCode(): String {
         val number = Random.nextInt(0, 100_000).toString().padStart(5, '0')
         return "RF-$number"
+    }
+
+    override fun onCleared() {
+        nfcReader.stop()
+        super.onCleared()
     }
 }
 

@@ -1,12 +1,5 @@
 package ru.profikrol.operator.feature.rfidscan
 
-import android.app.Activity
-import android.content.Context
-import android.content.ContextWrapper
-import android.nfc.NfcAdapter
-import android.nfc.NdefRecord
-import android.nfc.Tag
-import android.nfc.tech.Ndef
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
@@ -45,7 +38,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.PathEffect
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.Dp
@@ -76,29 +68,10 @@ fun RfidScanScreen(
     viewModel: RfidScanViewModel = hiltViewModel(),
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
-    val context = LocalContext.current
 
-    DisposableEffect(context) {
-        val activity = context.findActivity()
-        val nfcAdapter = NfcAdapter.getDefaultAdapter(context)
-
-        if (activity != null && nfcAdapter != null && nfcAdapter.isEnabled) {
-            nfcAdapter.enableReaderMode(
-                activity,
-                { tag -> viewModel.onNfcTagScanned(tag.toScannedPayload()) },
-                NfcAdapter.FLAG_READER_NFC_A or
-                    NfcAdapter.FLAG_READER_NFC_B or
-                    NfcAdapter.FLAG_READER_NFC_F or
-                    NfcAdapter.FLAG_READER_NFC_V,
-                null,
-            )
-        }
-
-        onDispose {
-            if (activity != null && nfcAdapter != null) {
-                nfcAdapter.disableReaderMode(activity)
-            }
-        }
+    DisposableEffect(Unit) {
+        viewModel.startNfcScanning()
+        onDispose(viewModel::stopNfcScanning)
     }
 
     LaunchedEffect(Unit) {
@@ -118,7 +91,6 @@ fun RfidScanScreen(
         },
     ) { innerPadding ->
         RfidScanContent(
-            isScanning = state.isScanning,
             isDemoScanInProgress = state.isDemoScanInProgress,
             onDemoScanClick = viewModel::onDemoScanClick,
             modifier = Modifier
@@ -131,7 +103,6 @@ fun RfidScanScreen(
 
 @Composable
 private fun RfidScanContent(
-    isScanning: Boolean,
     isDemoScanInProgress: Boolean,
     onDemoScanClick: () -> Unit,
     modifier: Modifier = Modifier,
@@ -142,7 +113,6 @@ private fun RfidScanContent(
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         RfidScanArea(
-            isScanning = isScanning,
             modifier = Modifier.fillMaxWidth(),
         )
 
@@ -167,7 +137,6 @@ private fun RfidScanContent(
 
 @Composable
 fun RfidScanArea(
-    isScanning: Boolean,
     modifier: Modifier = Modifier,
 ) {
     val shape = RoundedCornerShape(Radii.lg)
@@ -201,13 +170,11 @@ fun RfidScanArea(
             ),
         contentAlignment = Alignment.Center,
     ) {
-        if (isScanning) {
-            RfidScanLine(
-                progress = scanProgress,
-                color = contentColor,
-                modifier = Modifier.matchParentSize(),
-            )
-        }
+        RfidScanLine(
+            progress = scanProgress,
+            color = contentColor,
+            modifier = Modifier.matchParentSize(),
+        )
 
         Icon(
             painter = painterResource(R.drawable.ic_square),
@@ -280,52 +247,3 @@ private fun Modifier.dashedBorder(
         ),
     )
 }
-
-private fun Tag.toScannedPayload(): String =
-    readNdefText().orEmpty().ifBlank { id.toHexString() }
-
-private fun Tag.readNdefText(): String? {
-    val ndef = Ndef.get(this) ?: return null
-    return runCatching {
-        ndef.connect()
-        val message = ndef.ndefMessage ?: ndef.cachedNdefMessage
-        message
-            ?.records
-            ?.mapNotNull(NdefRecord::toText)
-            ?.joinToString(separator = "\n")
-    }.also {
-        runCatching { ndef.close() }
-    }.getOrNull()
-}
-
-private fun NdefRecord.toText(): String? {
-    return when {
-        tnf == NdefRecord.TNF_WELL_KNOWN && type.contentEquals(NdefRecord.RTD_TEXT) -> {
-            val status = payload.firstOrNull()?.toInt() ?: return null
-            val languageCodeLength = status and 0x3F
-            val textStart = 1 + languageCodeLength
-            if (payload.size <= textStart) return null
-
-            val charset = if (status and 0x80 == 0) Charsets.UTF_8 else Charsets.UTF_16
-            String(payload, textStart, payload.size - textStart, charset)
-        }
-
-        tnf == NdefRecord.TNF_MIME_MEDIA && String(type) == "text/plain" -> {
-            String(payload, Charsets.UTF_8)
-        }
-
-        else -> null
-    }
-}
-
-private fun ByteArray.toHexString(): String =
-    joinToString(separator = "") { byte ->
-        "%02X".format(byte)
-    }
-
-private tailrec fun Context.findActivity(): Activity? =
-    when (this) {
-        is Activity -> this
-        is ContextWrapper -> baseContext.findActivity()
-        else -> null
-    }
