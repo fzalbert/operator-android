@@ -7,6 +7,8 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
@@ -55,6 +57,7 @@ fun RabbitCullingScreen(
         selectedReason != null &&
                 ((inputMode is InputMode.Scan && isScanValid) ||
                         (inputMode is InputMode.Manual && isManualValid))
+    val quantityFocusRequester = remember { FocusRequester() }
 
     Scaffold(
         topBar = {
@@ -71,7 +74,7 @@ fun RabbitCullingScreen(
         Column(
             modifier = Modifier
                 .fillMaxSize()
-//                .verticalScroll(rememberScrollState())
+                .verticalScroll(rememberScrollState())
                 .padding(padding)
                 .padding(12.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp),
@@ -178,13 +181,14 @@ fun RabbitCullingScreen(
                                 }
                             }
                         }
-
                         OutlinedTextField(
                             value = quantity,
                             onValueChange = {
                                 quantity = it.filter(Char::isDigit)
                             },
-                            modifier = Modifier.fillMaxWidth(),
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .focusRequester(quantityFocusRequester),
                             label = { Text(stringResource(R.string.count)) },
                             keyboardOptions = KeyboardOptions(
                                 keyboardType = KeyboardType.Number
