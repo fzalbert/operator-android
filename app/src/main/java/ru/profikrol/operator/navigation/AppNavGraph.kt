@@ -5,6 +5,7 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.toRoute
+import ru.profikrol.operator.domain.model.Rabbit
 import ru.profikrol.operator.feature.auth.AuthScreen
 import ru.profikrol.operator.feature.home.HomeActionId
 import ru.profikrol.operator.feature.home.HomeScreen
@@ -82,10 +83,35 @@ fun AppNavGraph() {
                         route = Route.RfidScan,
                         inclusive = true,
                     )
-                    navController.navigate(Route.RfidScan) {
-                        launchSingleTop = true
-                    }
+                    navController.navigate(Route.RfidScan)
                 },
+                onCullingClick = { rabbit ->
+                    navController.currentBackStackEntry
+                        ?.savedStateHandle
+                        ?.set("rfidCode", rabbit.rfidCode)
+
+                    navController.currentBackStackEntry
+                        ?.savedStateHandle
+                        ?.set("status", rabbit.status)
+
+                    navController.currentBackStackEntry
+                        ?.savedStateHandle
+                        ?.set("age", rabbit.age)
+
+                    navController.currentBackStackEntry
+                        ?.savedStateHandle
+                        ?.set("cage", rabbit.cage)
+
+                    navController.currentBackStackEntry
+                        ?.savedStateHandle
+                        ?.set("weight", rabbit.weight)
+
+                    navController.currentBackStackEntry
+                        ?.savedStateHandle
+                        ?.set("diagnosis", rabbit.diagnosis)
+
+                    navController.navigate(Route.RabbitCulling)
+                }
             )
         }
         composable<Route.NestPreparation> {
@@ -98,7 +124,26 @@ fun AppNavGraph() {
             RfidInstallationScreen(onBack = { navController.popBackStack() })
         }
         composable<Route.RabbitCulling> {
-            RabbitCullingScreen(onBack = { navController.popBackStack() })
+
+            val savedStateHandle =
+                navController.previousBackStackEntry?.savedStateHandle
+
+            val rabbit = Rabbit(
+                rfidCode = savedStateHandle?.get<String>("rfidCode").orEmpty(),
+                status = savedStateHandle?.get<String>("status").orEmpty(),
+                age = savedStateHandle?.get<String>("age").orEmpty(),
+                cage = savedStateHandle?.get<String>("cage").orEmpty(),
+                weight = savedStateHandle?.get<String>("weight").orEmpty(),
+                diagnosis = savedStateHandle?.get<String>("diagnosis").orEmpty(),
+            )
+
+            RabbitCullingScreen(
+                rabbit = rabbit,
+                onBack = { navController.popBackStack() },
+                onScanAgain = {
+                    navController.navigate(Route.RfidScan)
+                }
+            )
         }
     }
 }

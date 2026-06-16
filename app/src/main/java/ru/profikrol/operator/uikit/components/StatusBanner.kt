@@ -165,13 +165,13 @@ private fun StatusBannerStatus.metrics(): StatusBannerMetrics =
         StatusBannerStatus.Warning -> StatusBannerMetrics(
             borderWidth = StatusBannerWarningBorderWidth,
             shape = StatusBannerWarningShape,
-            iconSize = StatusBannerWarningIconSize,
-            iconTextSpacing = 36.dp,
-            titleTextSpacing = Spacing.sm,
-            startPadding = 36.dp,
-            topPadding = 28.dp,
-            endPadding = 36.dp,
-            bottomPadding = 28.dp,
+            iconSize = 20.dp,
+            iconTextSpacing = 12.dp,
+            titleTextSpacing = 4.dp,
+            startPadding = 12.dp,
+            topPadding = 12.dp,
+            endPadding = 12.dp,
+            bottomPadding = 12.dp,
         )
     }
 
@@ -207,7 +207,7 @@ private fun StatusBannerIcon(
             painter = painterResource(R.drawable.ic_warning),
             contentDescription = null,
             tint = tint,
-            modifier = modifier,
+            modifier = modifier
         )
     }
 }
@@ -219,5 +219,6 @@ private fun StatusBannerWarningPreview() {
         status = StatusBannerStatus.Warning,
         title = "Внимание!",
         text = "Это действие необратимо. Животное будет удалено из системы.",
+
     )
 }

@@ -85,7 +85,10 @@
     <string name="settings_placeholder">Здесь будут настройки</string>
     <string name="notification">Уведомления</string>
     <string name="unread">Непрочитанных: %1$d</string>
-
     <string name="read_all">Прочитать всё</string>
+    <string name="count">Количество</string>
+    <string name="cage">Клетка</string>
+
+
 
 </resources>

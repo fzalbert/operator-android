@@ -7,22 +7,39 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.KeyboardType
-import androidx.compose.ui.unit.DpOffset
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import kotlinx.coroutines.launch
+import ru.profikrol.operator.domain.model.Rabbit
 import ru.profikrol.operator.uikit.components.*
+import ru.profikrol.operator.R
+
+
+sealed interface InputMode {
+    data object Scan : InputMode
+    data object Manual : InputMode
+}
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun RabbitCullingScreen(
+    rabbit: Rabbit? = null,
     onBack: () -> Unit,
+    onScanAgain: () -> Unit,
     viewModel: RabbitCullingViewModel = hiltViewModel(),
 ) {
+
+    var inputMode by remember {
+        mutableStateOf<InputMode>(InputMode.Scan)
+    }
+
+    val snackbarHostState = remember { SnackbarHostState() }
+    val scope = rememberCoroutineScope()
+
     val cages by viewModel.cages.collectAsState()
     val reasons by viewModel.reasons.collectAsState()
-
-    var isManualInputExpanded by remember { mutableStateOf(false) }
 
     var selectedCage by remember { mutableStateOf<Cage?>(null) }
     var selectedReason by remember { mutableStateOf<CullingReason?>(null) }
@@ -32,20 +49,31 @@ fun RabbitCullingScreen(
     var cageExpanded by remember { mutableStateOf(false) }
     var reasonExpanded by remember { mutableStateOf(false) }
 
+    val isManualValid = selectedCage != null && quantity.isNotBlank()
+    val isScanValid = rabbit != null
+
+    val canConfirm =
+        selectedReason != null &&
+                ((inputMode is InputMode.Scan && isScanValid) ||
+                        (inputMode is InputMode.Manual && isManualValid))
+
     Scaffold(
         topBar = {
             AppTopBar(
                 title = "Выбраковка",
                 onBack = onBack,
             )
+        },
+        snackbarHost = {
+            SnackbarHost(hostState = snackbarHostState)
         }
-    ) { paddingValues ->
+    ) { padding ->
 
         Column(
             modifier = Modifier
                 .fillMaxSize()
                 .verticalScroll(rememberScrollState())
-                .padding(paddingValues)
+                .padding(padding)
                 .padding(12.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
@@ -53,7 +81,10 @@ fun RabbitCullingScreen(
             ActionButton(
                 text = "Сканировать RFID-метку",
                 icon = ActionButtonIcon.Scan,
-                onClick = {},
+                onClick = {
+                    inputMode = InputMode.Scan
+                    onScanAgain()
+                }
             )
 
             StatusBanner(
@@ -61,15 +92,49 @@ fun RabbitCullingScreen(
                 title = "Внимание!",
                 text = "Это действие необратимо. Животное будет удалено из системы.",
             )
-
             ActionButton(
-                text = if (isManualInputExpanded) "Скрыть ручной ввод"
-                else "Ввести данные вручную",
+                text = if (inputMode is InputMode.Manual)
+                    "Скрыть ручной ввод"
+                else
+                    "Ввести данные вручную",
                 variant = ActionButtonVariant.Secondary,
-                onClick = { isManualInputExpanded = !isManualInputExpanded },
+                onClick = {
+                    inputMode = InputMode.Manual
+                }
             )
+            if (inputMode is InputMode.Scan && rabbit != null) {
 
-            if (isManualInputExpanded) {
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    elevation = CardDefaults.cardElevation(2.dp),
+                ) {
+                    Column(
+                        modifier = Modifier.padding(16.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
+                        Text(
+                            text = rabbit.rfidCode,
+                            style = MaterialTheme.typography.titleLarge,
+                        )
+
+                        Text(
+                            text = buildString {
+                                append(rabbit.status)
+
+                                if (!rabbit.age.isNullOrBlank()) {
+                                    append(" • ${rabbit.age}")
+                                }
+
+                                if (!rabbit.cage.isNullOrBlank()) {
+                                    append(" • Клетка ${rabbit.cage}")
+                                }
+                            },
+                            style = MaterialTheme.typography.bodySmall,
+                        )
+                    }
+                }
+            }
+            if (inputMode is InputMode.Manual) {
 
                 Card(
                     modifier = Modifier.fillMaxWidth(),
@@ -80,14 +145,12 @@ fun RabbitCullingScreen(
                         verticalArrangement = Arrangement.spacedBy(12.dp),
                     ) {
 
-                        // ---------------- CAGE DROPDOWN ----------------
                         Box {
                             OutlinedTextField(
                                 value = selectedCage?.name.orEmpty(),
                                 onValueChange = {},
                                 readOnly = true,
-                                modifier = Modifier
-                                    .fillMaxWidth(),
+                                modifier = Modifier.fillMaxWidth(),
                                 label = { Text("Клетка") },
                                 trailingIcon = {
                                     IconButton(
@@ -123,7 +186,7 @@ fun RabbitCullingScreen(
                                 quantity = it.filter(Char::isDigit)
                             },
                             modifier = Modifier.fillMaxWidth(),
-                            label = { Text("Количество") },
+                            label = { Text(stringResource(R.string.count)) },
                             keyboardOptions = KeyboardOptions(
                                 keyboardType = KeyboardType.Number
                             ),
@@ -131,29 +194,24 @@ fun RabbitCullingScreen(
                         )
                     }
                 }
-            }
-
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                elevation = CardDefaults.cardElevation(2.dp),
-            ) {
-                Column(
-                    modifier = Modifier.padding(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    elevation = CardDefaults.cardElevation(2.dp),
                 ) {
-                    Text(
-                        text = "DEMO001",
-                        style = MaterialTheme.typography.titleLarge,
-                    )
+                    Column(
+                        modifier = Modifier.padding(16.dp),
+                        verticalArrangement = Arrangement.spacedBy(6.dp),
+                    ) {
+                        Text(
+                            text = "Ручная выбраковка",
+                            style = MaterialTheme.typography.titleMedium,
+                        )
 
-                    Text(
-                        text = "Самка • 8 мес • Клетка A-12",
-                        style = MaterialTheme.typography.bodySmall,
-                    )
+                        Text("Клетка: ${selectedCage?.name ?: "—"}")
+                        Text("Количество: $quantity")
+                    }
                 }
             }
-
-            // ---------------- REASON DROPDOWN ----------------
             Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
 
                 Text(
@@ -162,6 +220,7 @@ fun RabbitCullingScreen(
                 )
 
                 Box {
+
                     OutlinedTextField(
                         value = selectedReason?.title.orEmpty(),
                         onValueChange = {},
@@ -181,8 +240,7 @@ fun RabbitCullingScreen(
                     DropdownMenu(
                         expanded = reasonExpanded,
                         onDismissRequest = { reasonExpanded = false },
-                        modifier = Modifier.fillMaxWidth(),
-                        offset = DpOffset(0.dp, 4.dp)
+                        modifier = Modifier.fillMaxWidth()
                     ) {
                         reasons.forEach { reason ->
                             DropdownMenuItem(
@@ -198,7 +256,10 @@ fun RabbitCullingScreen(
             }
 
             Text(
-                text = "Я подтверждаю выбраковку животного DEMO001",
+                text = if (inputMode is InputMode.Scan)
+                    "Я подтверждаю выбраковку животного ${rabbit?.rfidCode.orEmpty()}"
+                else
+                    "Я подтверждаю выбраковку по ручному вводу",
                 style = MaterialTheme.typography.bodyMedium,
             )
 
@@ -206,9 +267,13 @@ fun RabbitCullingScreen(
                 text = "Подтвердить выбраковку",
                 icon = ActionButtonIcon.Warning,
                 variant = ActionButtonVariant.Warning,
-                enabled = selectedReason != null,
+                enabled = canConfirm,
                 onClick = {
-                    // viewModel.confirmCulling(...)
+                    scope.launch {
+                        snackbarHostState.showSnackbar(
+                            message = "Выбраковка подтверждена"
+                        )
+                    }
                 },
             )
 

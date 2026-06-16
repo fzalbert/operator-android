@@ -17,11 +17,11 @@ val actionButtonCompactTextStyle = TextStyle(
 )
 
 val statusBannerWarningTitleTextStyle = TextStyle(
-    fontSize = 26.sp,
-    lineHeight = 32.sp,
+    fontSize = 18.sp,
+    lineHeight = 22.sp,
 )
 
 val statusBannerWarningTextStyle = TextStyle(
-    fontSize = 22.sp,
-    lineHeight = 28.sp,
+    fontSize = 14.sp,
+    lineHeight = 18.sp,
 )
