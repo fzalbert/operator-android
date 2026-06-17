@@ -1,5 +1,11 @@
 package ru.profikrol.operator.feature.rfidscan
 
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -17,6 +23,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
@@ -25,8 +32,11 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.PathEffect
+import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
@@ -47,6 +57,9 @@ private val RfidScanAreaBorderWidth = 2.dp
 private val RfidScanAreaDashLength = 14.dp
 private val RfidScanAreaDashGap = 10.dp
 private val RfidScanAreaIconSize = 110.dp
+private const val RfidScanAnimationDurationMillis = 1_100
+private const val RfidScanLineAlpha = 0.92f
+private const val RfidScanBandAlpha = 0.18f
 
 @Composable
 fun RfidScanScreen(
@@ -55,6 +68,11 @@ fun RfidScanScreen(
     viewModel: RfidScanViewModel = hiltViewModel(),
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
+
+    DisposableEffect(Unit) {
+        viewModel.startNfcScanning()
+        onDispose(viewModel::stopNfcScanning)
+    }
 
     LaunchedEffect(Unit) {
         viewModel.events.collectLatest { event ->
@@ -73,7 +91,7 @@ fun RfidScanScreen(
         },
     ) { innerPadding ->
         RfidScanContent(
-            isScanning = state.isScanning,
+            isDemoScanInProgress = state.isDemoScanInProgress,
             onDemoScanClick = viewModel::onDemoScanClick,
             modifier = Modifier
                 .fillMaxSize()
@@ -85,7 +103,7 @@ fun RfidScanScreen(
 
 @Composable
 private fun RfidScanContent(
-    isScanning: Boolean,
+    isDemoScanInProgress: Boolean,
     onDemoScanClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
@@ -109,7 +127,7 @@ private fun RfidScanContent(
         PrimaryButton(
             text = stringResource(R.string.rfid_scan_demo_button),
             onClick = onDemoScanClick,
-            enabled = !isScanning,
+            enabled = !isDemoScanInProgress,
             modifier = Modifier
                 .fillMaxWidth()
                 .padding(top = Spacing.xl),
@@ -127,6 +145,16 @@ fun RfidScanArea(
         alpha = RfidScanAreaBackgroundAlpha,
     )
     val borderColor = contentColor.copy(alpha = RfidScanAreaBackgroundAlpha)
+    val transition = rememberInfiniteTransition(label = "rfid_scan_transition")
+    val scanProgress by transition.animateFloat(
+        initialValue = 0f,
+        targetValue = 1f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(durationMillis = RfidScanAnimationDurationMillis),
+            repeatMode = RepeatMode.Reverse,
+        ),
+        label = "rfid_scan_progress",
+    )
 
     Box(
         modifier = modifier
@@ -142,12 +170,53 @@ fun RfidScanArea(
             ),
         contentAlignment = Alignment.Center,
     ) {
+        RfidScanLine(
+            progress = scanProgress,
+            color = contentColor,
+            modifier = Modifier.matchParentSize(),
+        )
+
         Icon(
             painter = painterResource(R.drawable.ic_square),
             contentDescription = null,
             tint = contentColor,
             modifier = Modifier.size(RfidScanAreaIconSize),
-            )
+        )
+    }
+}
+
+@Composable
+private fun RfidScanLine(
+    progress: Float,
+    color: Color,
+    modifier: Modifier = Modifier,
+) {
+    Canvas(modifier = modifier) {
+        val lineY = size.height * progress
+        val bandHeight = size.height * 0.18f
+        val bandTop = (lineY - bandHeight / 2).coerceIn(0f, size.height)
+
+        drawRect(
+            brush = Brush.verticalGradient(
+                colors = listOf(
+                    Color.Transparent,
+                    color.copy(alpha = RfidScanBandAlpha),
+                    Color.Transparent,
+                ),
+                startY = bandTop,
+                endY = bandTop + bandHeight,
+            ),
+            topLeft = Offset(0f, bandTop),
+            size = Size(width = size.width, height = bandHeight),
+        )
+
+        drawLine(
+            color = color.copy(alpha = RfidScanLineAlpha),
+            start = Offset(0f, lineY),
+            end = Offset(size.width, lineY),
+            strokeWidth = 5.dp.toPx(),
+            cap = StrokeCap.Round,
+        )
     }
 }
 
