@@ -99,7 +99,11 @@
     <string name="settings_placeholder">Здесь будут настройки</string>
     <string name="notification">Уведомления</string>
     <string name="unread">Непрочитанных: %1$d</string>
-
     <string name="read_all">Прочитать всё</string>
-
+    <string name="count">Количество</string>
+    <string name="cage">Клетка</string>
+    <string name="manual_culling">Ручная выбраковка</string>
+    <string name="reason_for_culling">Причина выбраковки</string>
+    <string name="confirm_the_culling_of_the_animal">Я подтверждаю выбраковку животного %1$s</string>
+    <string name="confirm_the_rejection_of_the_manual_input">Я подтверждаю выбраковку по ручному вводу</string>
 </resources>

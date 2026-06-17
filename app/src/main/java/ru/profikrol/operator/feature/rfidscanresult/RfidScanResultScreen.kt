@@ -35,6 +35,7 @@ fun RfidScanResultScreen(
     rfidCode: String,
     onBack: () -> Unit,
     onScanAgain: () -> Unit,
+    onCullingClick: (Rabbit) -> Unit,
     viewModel: RfidScanResultViewModel = hiltViewModel(),
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
@@ -47,6 +48,7 @@ fun RfidScanResultScreen(
         state = state,
         onBack = onBack,
         onScanAgain = onScanAgain,
+        onCullingClick = onCullingClick, // 👈 ПЕРЕДАЁМ ДАЛЬШЕ
     )
 }
 
@@ -55,6 +57,7 @@ private fun RfidScanResultContent(
     state: RfidScanResultUiState,
     onBack: () -> Unit,
     onScanAgain: () -> Unit,
+    onCullingClick: (Rabbit) -> Unit,
 ) {
     Scaffold(
         topBar = {
@@ -105,6 +108,7 @@ private fun RfidScanResultContent(
             QuickActions(
                 actions = state.actions,
                 rabbit = state.rabbit,
+                onCullingClick = onCullingClick, // 👈 ВАЖНО
             )
 
             Spacer(Modifier.height(Spacing.xxl))
@@ -116,7 +120,9 @@ private fun RfidScanResultContent(
 private fun QuickActions(
     actions: List<RabbitAction>,
     rabbit: Rabbit?,
-) {
+    onCullingClick: (Rabbit) -> Unit,
+
+    ) {
     var showInseminationDialog by remember { mutableStateOf(false) }
 
     Column(
@@ -131,6 +137,9 @@ private fun QuickActions(
                 onClick = {
                     when (action.id) {
                         RabbitActionId.Insemination -> showInseminationDialog = true
+                        RabbitActionId.Culling -> {
+                            rabbit?.let { onCullingClick(it) }
+                        }
                         else -> Unit
                     }
                 },
