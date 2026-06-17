@@ -95,6 +95,33 @@ fun AppNavGraph() {
                 },
                 onWeighing = { code -> navController.navigate(Route.Weighing(code)) },
                 onMoving = { code -> navController.navigate(Route.Moving(code)) },
+                onCullingClick = { rabbit ->
+                    navController.currentBackStackEntry
+                        ?.savedStateHandle
+                        ?.set("rfidCode", rabbit.rfidCode)
+
+                    navController.currentBackStackEntry
+                        ?.savedStateHandle
+                        ?.set("status", rabbit.status)
+
+                    navController.currentBackStackEntry
+                        ?.savedStateHandle
+                        ?.set("age", rabbit.age)
+
+                    navController.currentBackStackEntry
+                        ?.savedStateHandle
+                        ?.set("cage", rabbit.cage)
+
+                    navController.currentBackStackEntry
+                        ?.savedStateHandle
+                        ?.set("weight", rabbit.weight)
+
+                    navController.currentBackStackEntry
+                        ?.savedStateHandle
+                        ?.set("diagnosis", rabbit.diagnosis)
+
+                    navController.navigate(Route.RabbitCulling)
+                },
             )
         }
         composable<Route.Weighing> { backStackEntry ->
@@ -127,33 +154,6 @@ fun AppNavGraph() {
                         launchSingleTop = true
                     }
                 },
-                onCullingClick = { rabbit ->
-                    navController.currentBackStackEntry
-                        ?.savedStateHandle
-                        ?.set("rfidCode", rabbit.rfidCode)
-
-                    navController.currentBackStackEntry
-                        ?.savedStateHandle
-                        ?.set("status", rabbit.status)
-
-                    navController.currentBackStackEntry
-                        ?.savedStateHandle
-                        ?.set("age", rabbit.age)
-
-                    navController.currentBackStackEntry
-                        ?.savedStateHandle
-                        ?.set("cage", rabbit.cage)
-
-                    navController.currentBackStackEntry
-                        ?.savedStateHandle
-                        ?.set("weight", rabbit.weight)
-
-                    navController.currentBackStackEntry
-                        ?.savedStateHandle
-                        ?.set("diagnosis", rabbit.diagnosis)
-
-                    navController.navigate(Route.RabbitCulling)
-                }
             )
         }
         composable<Route.NestPreparation> {

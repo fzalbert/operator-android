@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
@@ -30,10 +31,10 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import ru.profikrol.operator.R
-import ru.profikrol.operator.feature.weighing.OperationRabbitCard
 import ru.profikrol.operator.feature.weighing.OperationSaveButton
 import ru.profikrol.operator.feature.weighing.OperationScanButton
 import ru.profikrol.operator.feature.weighing.OperationTopBar
+import ru.profikrol.operator.uikit.components.RabbitSummaryCard
 import ru.profikrol.operator.uikit.theme.ProfikrolTheme
 import ru.profikrol.operator.uikit.tokens.Radii
 import ru.profikrol.operator.uikit.tokens.Spacing
@@ -69,7 +70,7 @@ fun MovingScreen(
 
             Spacer(Modifier.height(Spacing.xl))
 
-            OperationRabbitCard(
+            RabbitSummaryCard(
                 rfidCode = rfidCode,
                 details = stringResource(R.string.moving_rabbit_details),
             )
@@ -124,6 +125,8 @@ private enum class MovingAction {
     AnotherHangar,
 }
 
+private val MovingActionIconSize = 20.dp
+
 @Composable
 private fun MovingActionRow(
     action: MovingAction,
@@ -163,6 +166,7 @@ private fun MovingActionRow(
                 },
             ),
             contentDescription = null,
+            modifier = Modifier.size(MovingActionIconSize),
             tint = MaterialTheme.colorScheme.onSurface,
         )
         Text(
@@ -173,7 +177,6 @@ private fun MovingActionRow(
             },
             modifier = Modifier.padding(start = Spacing.sm),
             style = MaterialTheme.typography.bodyMedium,
-            fontWeight = FontWeight.Medium,
             color = MaterialTheme.colorScheme.onSurface,
         )
     }

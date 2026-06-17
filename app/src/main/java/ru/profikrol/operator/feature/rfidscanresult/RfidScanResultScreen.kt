@@ -130,10 +130,10 @@ private fun QuickActions(
     rabbit: Rabbit?,
     onWeighing: (String) -> Unit,
     onMoving: (String) -> Unit,
-) {
     onCullingClick: (Rabbit) -> Unit,
 
     ) {
+
     var showInseminationDialog by remember { mutableStateOf(false) }
 
     Column(

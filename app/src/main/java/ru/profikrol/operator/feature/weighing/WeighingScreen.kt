@@ -1,6 +1,5 @@
 package ru.profikrol.operator.feature.weighing
 
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
@@ -18,8 +17,6 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -36,7 +33,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
@@ -44,6 +40,9 @@ import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import ru.profikrol.operator.R
+import ru.profikrol.operator.uikit.components.ActionButton
+import ru.profikrol.operator.uikit.components.ActionButtonIcon
+import ru.profikrol.operator.uikit.components.RabbitSummaryCard
 import ru.profikrol.operator.uikit.theme.ProfikrolTheme
 import ru.profikrol.operator.uikit.tokens.Radii
 import ru.profikrol.operator.uikit.tokens.Spacing
@@ -100,7 +99,7 @@ private fun WeighingContent(
 
             Spacer(Modifier.height(Spacing.xl))
 
-            OperationRabbitCard(
+            RabbitSummaryCard(
                 rfidCode = rfidCode,
                 details = stringResource(R.string.weighing_rabbit_details),
             )
@@ -120,6 +119,7 @@ private fun WeighingContent(
                 value = weight,
                 onValueChange = { weight = it },
                 singleLine = true,
+                textStyle = MaterialTheme.typography.bodyMedium,
                 modifier = Modifier.fillMaxWidth(),
             )
 
@@ -136,7 +136,8 @@ private fun WeighingContent(
             Text(
                 text = stringResource(R.string.weighing_history_title),
                 style = MaterialTheme.typography.labelLarge,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                fontWeight = FontWeight.Medium,
+                color = MaterialTheme.colorScheme.onSurface,
             )
 
             Spacer(Modifier.height(Spacing.sm))
@@ -183,58 +184,11 @@ internal fun OperationScanButton(
     text: String,
     onClick: () -> Unit,
 ) {
-    Button(
+    ActionButton(
+        text = text,
+        icon = ActionButtonIcon.Scan,
         onClick = onClick,
-        modifier = Modifier
-            .fillMaxWidth()
-            .height(defaultPrimaryButtonHeight),
-        shape = RoundedCornerShape(Radii.lg),
-        colors = ButtonDefaults.buttonColors(
-            containerColor = MaterialTheme.colorScheme.primary,
-            contentColor = MaterialTheme.colorScheme.onPrimary,
-        ),
-    ) {
-        Icon(
-            painter = painterResource(R.drawable.ic_scan_label),
-            contentDescription = null,
-        )
-        Text(
-            text = text,
-            modifier = Modifier.padding(start = Spacing.xs),
-            style = MaterialTheme.typography.titleSmall,
-            fontWeight = FontWeight.SemiBold,
-        )
-    }
-}
-
-@Composable
-internal fun OperationRabbitCard(
-    rfidCode: String,
-    details: String,
-) {
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        shape = RoundedCornerShape(Radii.md),
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-    ) {
-        Column(
-            modifier = Modifier.padding(horizontal = Spacing.md, vertical = Spacing.md),
-        ) {
-            Text(
-                text = rfidCode,
-                style = MaterialTheme.typography.titleMedium,
-                fontWeight = FontWeight.SemiBold,
-                color = MaterialTheme.colorScheme.primary,
-            )
-            Spacer(Modifier.height(Spacing.sm))
-            Text(
-                text = details,
-                style = MaterialTheme.typography.labelSmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-        }
-    }
+    )
 }
 
 @Composable
