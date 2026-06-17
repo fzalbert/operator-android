@@ -10,7 +10,7 @@ import kotlin.coroutines.cancellation.CancellationException
 
 
 @Singleton
-class FakeRabbitRepository @Inject constructor() : RabbitRepository {
+class InMemoryRabbitRepository @Inject constructor() : RabbitRepository {
 
     override suspend fun getRabbitByRfid(rfidCode: String): Result<Rabbit> {
         return try {
@@ -30,6 +30,22 @@ class FakeRabbitRepository @Inject constructor() : RabbitRepository {
                     diagnosis = "Здорова",
                 ),
             )
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Throwable) {
+            Result.failure(RabbitError.Unknown)
+        }
+    }
+
+    override suspend fun saveRabbitWeight(rfidCode: String, weightKg: String): Result<Unit> {
+        return try {
+            delay(600)
+
+            if (rfidCode.isBlank() || weightKg.isBlank()) {
+                return Result.failure(RabbitError.InvalidWeight)
+            }
+
+            Result.success(Unit)
         } catch (e: CancellationException) {
             throw e
         } catch (e: Throwable) {

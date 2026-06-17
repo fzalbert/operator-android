@@ -5,6 +5,7 @@
     <string name="cd_back">Назад</string>
     <string name="cancel">Отмена</string>
     <string name="confirm">Подтвердить</string>
+    <string name="save">Сохранить</string>
 
     <!-- Auth -->
     <string name="auth_logo">🐰</string>
@@ -76,8 +77,20 @@
     <!-- Settings -->
     <string name="settings_title">Настройки</string>
     <string name="weighing">Взвешивание</string>
+    <string name="weighing_title">Взвешивание</string>
+    <string name="weighing_scan_rfid">Сканировать RFID-метку</string>
+    <string name="weighing_rabbit_details">Самка  •  8 мес  •  Клетка A-12</string>
+    <string name="weighing_weight_label">Введите вес (кг)</string>
+    <string name="weighing_history_title">История взвешиваний</string>
     <string name="palpation">Пальпация</string>
     <string name="moving">Перемещение</string>
+    <string name="moving_title">Перемещение</string>
+    <string name="moving_scan_rfid">Сканировать RFID-метку</string>
+    <string name="moving_rabbit_details">Самка  •  8 мес  •  Текущая клетка: A-12  •  Беременна (18 дней)</string>
+    <string name="moving_action_label">Выберите действие</string>
+    <string name="moving_action_up">Переместить вверх</string>
+    <string name="moving_action_down">Переместить вниз</string>
+    <string name="moving_action_another_hangar">В другой ангар</string>
     <string name="insemination">Осеменение</string>
     <string name="view_card">Просмотр карточки</string>
     <string name="culling">Выбраковка</string>
