@@ -45,6 +45,8 @@ class FakeAuthRepository @Inject constructor(
                 displayName = login.replaceFirstChar { it.uppercase() },
                 token = "fake-token-${UUID.randomUUID()}",
                 role = role,
+                email = "$login@profikrol.ru",
+                phone = "+7 (916) 123-45-67",
             )
 
             sessionStore.save(user)

@@ -75,6 +75,20 @@
 
     <!-- Settings -->
     <string name="settings_title">Настройки</string>
+    <string name="settings_section_profile">Профиль</string>
+    <string name="settings_section_language">Язык интерфейса</string>
+    <string name="settings_section_additional">Дополнительно</string>
+    <string name="settings_email_label">Email</string>
+    <string name="settings_phone_label">Номер телефона</string>
+    <string name="settings_value_placeholder">—</string>
+    <string name="settings_language_ru">🇷🇺 Русский</string>
+    <string name="settings_language_en">🇬🇧 English</string>
+    <string name="settings_language_uz">🇺🇿 O\'zbekcha</string>
+    <string name="settings_about">О приложении</string>
+    <string name="settings_support">Помощь и поддержка</string>
+    <string name="settings_logout">Выйти из аккаунта</string>
+    <string name="role_operator">Оператор фермы</string>
+    <string name="role_technologist">Технолог</string>
     <string name="weighing">Взвешивание</string>
     <string name="palpation">Пальпация</string>
     <string name="moving">Перемещение</string>

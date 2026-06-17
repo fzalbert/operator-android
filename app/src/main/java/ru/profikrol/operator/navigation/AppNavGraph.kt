@@ -62,6 +62,12 @@ fun AppNavGraph() {
         composable<Route.Settings> {
             SettingsScreen(
                 onBack = { navController.popBackStack() },
+                onLoggedOut = {
+                    navController.navigate(Route.Auth) {
+                        popUpTo(0) { inclusive = true }
+                        launchSingleTop = true
+                    }
+                },
             )
         }
         composable<Route.RfidScan> {

@@ -6,4 +6,6 @@ data class User(
     val displayName: String,
     val token: String,
     val role: UserRole,
+    val email: String? = null,
+    val phone: String? = null,
 )
