@@ -22,12 +22,13 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.OutlinedTextFieldDefaults
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.saveable.rememberSaveable
-import androidx.compose.runtime.setValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusDirection
@@ -41,6 +42,9 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import kotlinx.coroutines.flow.collectLatest
 import ru.profikrol.operator.R
 import ru.profikrol.operator.uikit.components.AppTopBar
 import ru.profikrol.operator.uikit.theme.ProfikrolTheme
@@ -57,40 +61,41 @@ private val DisabledActionContainer = Color(0xFFF3F4F6)
 private val DisabledActionContent = Color(0xFF99A1AF)
 
 @Composable
-fun NestPreparationScreen(onBack: () -> Unit) {
-    var row by rememberSaveable { mutableStateOf("") }
-    var cage by rememberSaveable { mutableStateOf("") }
-    var sawdustAdded by rememberSaveable { mutableStateOf(false) }
-    var nestInstalled by rememberSaveable { mutableStateOf(false) }
+fun NestPreparationScreen(
+    onBack: () -> Unit,
+    viewModel: NestPreparationViewModel = hiltViewModel(),
+) {
+    val state by viewModel.uiState.collectAsStateWithLifecycle()
+    val snackbarHostState = remember { SnackbarHostState() }
+    val requestFailedMessage = stringResource(R.string.nest_preparation_request_failed)
+
+    LaunchedEffect(Unit) {
+        viewModel.events.collectLatest { event ->
+            when (event) {
+                NestPreparationEvent.Finished -> onBack()
+                NestPreparationEvent.RequestFailed -> {
+                    snackbarHostState.showSnackbar(requestFailedMessage)
+                }
+            }
+        }
+    }
 
     NestPreparationContent(
-        row = row,
-        cage = cage,
-        sawdustAdded = sawdustAdded,
-        nestInstalled = nestInstalled,
-        onRowChange = {
-            row = it.filter(Char::isLetter).take(1)
-            sawdustAdded = false
-            nestInstalled = false
-        },
-        onCageChange = {
-            cage = it.filter(Char::isDigit).take(3)
-            sawdustAdded = false
-            nestInstalled = false
-        },
-        onAddSawdust = { sawdustAdded = true },
-        onInstallNest = { nestInstalled = true },
-        onFinish = onBack,
+        state = state,
+        snackbarHostState = snackbarHostState,
+        onRowChange = viewModel::onRowChange,
+        onCageChange = viewModel::onCageChange,
+        onAddSawdust = viewModel::onAddSawdustClick,
+        onInstallNest = viewModel::onInstallNestClick,
+        onFinish = viewModel::onFinishClick,
         onBack = onBack,
     )
 }
 
 @Composable
 private fun NestPreparationContent(
-    row: String,
-    cage: String,
-    sawdustAdded: Boolean,
-    nestInstalled: Boolean,
+    state: NestPreparationUiState,
+    snackbarHostState: SnackbarHostState,
     onRowChange: (String) -> Unit,
     onCageChange: (String) -> Unit,
     onAddSawdust: () -> Unit,
@@ -99,8 +104,6 @@ private fun NestPreparationContent(
     onBack: () -> Unit,
 ) {
     val focusManager = LocalFocusManager.current
-    val hasSelectedCage = row.isNotBlank() && cage.isNotBlank()
-    val canFinish = hasSelectedCage && sawdustAdded && nestInstalled
 
     Scaffold(
         topBar = {
@@ -108,6 +111,9 @@ private fun NestPreparationContent(
                 title = stringResource(R.string.nest_preparation_title),
                 onBack = onBack,
             )
+        },
+        snackbarHost = {
+            SnackbarHost(hostState = snackbarHostState)
         },
     ) { innerPadding ->
         Column(
@@ -137,9 +143,10 @@ private fun NestPreparationContent(
             ) {
                 CageField(
                     label = stringResource(R.string.nest_preparation_row),
-                    value = row,
+                    value = state.row,
                     onValueChange = onRowChange,
                     modifier = Modifier.weight(1f),
+                    enabled = !state.isLoading,
                     keyboardOptions = KeyboardOptions(
                         keyboardType = KeyboardType.Text,
                         imeAction = ImeAction.Next,
@@ -151,9 +158,10 @@ private fun NestPreparationContent(
 
                 CageField(
                     label = stringResource(R.string.nest_preparation_cage),
-                    value = cage,
+                    value = state.cage,
                     onValueChange = onCageChange,
                     modifier = Modifier.weight(1f),
+                    enabled = !state.isLoading,
                     keyboardOptions = KeyboardOptions(
                         keyboardType = KeyboardType.Number,
                         imeAction = ImeAction.Done,
@@ -166,9 +174,9 @@ private fun NestPreparationContent(
 
             Spacer(Modifier.height(Spacing.lg))
 
-            if (hasSelectedCage) {
+            if (state.isCageSelected) {
                 SelectedCageCard(
-                    cageName = "${row.trim().uppercase()}–${cage.trim().padStart(2, '0')}",
+                    cageName = state.selectedCageName,
                 )
                 Spacer(Modifier.height(Spacing.lg))
             }
@@ -176,8 +184,10 @@ private fun NestPreparationContent(
             PreparationActionButton(
                 text = stringResource(R.string.nest_preparation_add_sawdust),
                 iconRes = R.drawable.ic_nest_preparation,
-                enabled = hasSelectedCage && !sawdustAdded,
-                completed = sawdustAdded,
+                enabled = state.isCageSelected &&
+                    !state.isSawdustAdded &&
+                    !state.isLoading,
+                completed = state.isSawdustAdded,
                 onClick = onAddSawdust,
             )
 
@@ -186,15 +196,17 @@ private fun NestPreparationContent(
             PreparationActionButton(
                 text = stringResource(R.string.nest_preparation_install_nest),
                 iconRes = R.drawable.ic_cube,
-                enabled = hasSelectedCage && !nestInstalled,
-                completed = nestInstalled,
+                enabled = state.isCageSelected &&
+                    !state.isNestInstalled &&
+                    !state.isLoading,
+                completed = state.isNestInstalled,
                 onClick = onInstallNest,
             )
 
             Spacer(Modifier.height(Spacing.lg))
 
             FinishButton(
-                enabled = canFinish,
+                enabled = state.canFinish,
                 onClick = onFinish,
             )
         }
@@ -207,6 +219,7 @@ private fun CageField(
     value: String,
     onValueChange: (String) -> Unit,
     modifier: Modifier = Modifier,
+    enabled: Boolean = true,
     keyboardOptions: KeyboardOptions,
     keyboardActions: KeyboardActions,
 ) {
@@ -222,6 +235,7 @@ private fun CageField(
         OutlinedTextField(
             value = value,
             onValueChange = onValueChange,
+            enabled = enabled,
             modifier = Modifier
                 .fillMaxWidth()
                 .height(FieldHeight),
@@ -377,10 +391,8 @@ private fun FinishButton(
 private fun NestPreparationEmptyPreview() {
     ProfikrolTheme {
         NestPreparationContent(
-            row = "",
-            cage = "",
-            sawdustAdded = false,
-            nestInstalled = false,
+            state = NestPreparationUiState(),
+            snackbarHostState = remember { SnackbarHostState() },
             onRowChange = {},
             onCageChange = {},
             onAddSawdust = {},
@@ -396,10 +408,11 @@ private fun NestPreparationEmptyPreview() {
 private fun NestPreparationSelectedPreview() {
     ProfikrolTheme {
         NestPreparationContent(
-            row = "А",
-            cage = "3",
-            sawdustAdded = false,
-            nestInstalled = false,
+            state = NestPreparationUiState(
+                row = "А",
+                cage = "3",
+            ),
+            snackbarHostState = remember { SnackbarHostState() },
             onRowChange = {},
             onCageChange = {},
             onAddSawdust = {},

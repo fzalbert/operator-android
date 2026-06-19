@@ -46,6 +46,7 @@
     <string name="nest_preparation_install_nest">Установить гнездо</string>
     <string name="nest_preparation_finish">Завершить</string>
     <string name="nest_preparation_action_completed">Выполнено</string>
+    <string name="nest_preparation_request_failed">Не удалось выполнить операцию. Повторите попытку</string>
 
     <!-- Nest Alignment -->
     <string name="nest_alignment_title">Выравнивание гнёзд</string>
