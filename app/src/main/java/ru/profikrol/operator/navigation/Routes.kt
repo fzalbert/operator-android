@@ -26,6 +26,12 @@ sealed interface Route {
     data class RfidScanResult(val code: String) : Route
 
     @Serializable
+    data class Weighing(val code: String) : Route
+
+    @Serializable
+    data class Moving(val code: String) : Route
+
+    @Serializable
     data object NestPreparation : Route
 
     @Serializable

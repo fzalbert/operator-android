@@ -1,46 +1,29 @@
 package ru.profikrol.operator.feature.rfidscanresult
 
-import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.shadow
-import androidx.compose.ui.graphics.drawscope.Stroke
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
-import androidx.compose.ui.unit.dp
-import androidx.compose.ui.window.Dialog
-import androidx.compose.ui.window.DialogProperties
+import androidx.compose.ui.tooling.preview.Preview
 import ru.profikrol.operator.R
 import ru.profikrol.operator.domain.model.Rabbit
-import ru.profikrol.operator.uikit.components.OutlinedButton
-import ru.profikrol.operator.uikit.components.OutlinedButtonVariant
+import ru.profikrol.operator.uikit.components.ConfirmationDialog
+import ru.profikrol.operator.uikit.components.ConfirmationDialogContent
 import ru.profikrol.operator.uikit.tokens.Radii
 import ru.profikrol.operator.uikit.tokens.Spacing
-import ru.profikrol.operator.uikit.tokens.actionButtonShadowElevation
-import ru.profikrol.operator.uikit.tokens.defaultPrimaryButtonHeight
-import ru.profikrol.operator.uikit.tokens.dialogElevation
-import ru.profikrol.operator.uikit.tokens.targetIconSize
-import ru.profikrol.operator.uikit.tokens.targetIconStrokeWidth
 
-private val DialogShape = RoundedCornerShape(Radii.xl)
 private val AnimalCardShape = RoundedCornerShape(Radii.lg)
 
 @Composable
@@ -49,12 +32,13 @@ fun InseminationConfirmationDialog(
     onDismiss: () -> Unit,
     onConfirm: () -> Unit,
 ) {
-    Dialog(onDismissRequest = onDismiss, properties = DialogProperties(usePlatformDefaultWidth = false)) {
-        InseminationConfirmationDialogContent(
-            rabbit = rabbit,
-            onDismiss = onDismiss,
-            onConfirm = onConfirm
-        )
+    ConfirmationDialog(
+        title = stringResource(R.string.insemination_dialog_title),
+        iconResId = R.drawable.ic_insemination_accept,
+        onDismiss = onDismiss,
+        onConfirm = onConfirm,
+    ) {
+        InseminationDialogBody(rabbit = rabbit)
     }
 }
 
@@ -121,29 +105,6 @@ private fun AnimalInfoValue(
     }
 }
 
-//@Composable
-//private fun TargetIcon(
-//    modifier: Modifier = Modifier,
-//) {
-//    val color = MaterialTheme.colorScheme.primary
-//
-//    Box(
-//        modifier = modifier,
-//        contentAlignment = Alignment.Center,
-//    ) {
-//        Canvas(modifier = Modifier.matchParentSize()) {
-//            val stroke = targetIconStrokeWidth.toPx()
-//            val center = this.center
-//            val maxRadius = (size.minDimension - stroke) / 2
-//
-//            drawCircle(color = color, radius = maxRadius, center = center, style = Stroke(stroke))
-//            drawCircle(color = color, radius = maxRadius * 0.58f, center = center, style = Stroke(stroke))
-//            drawCircle(color = color, radius = maxRadius * 0.22f, center = center, style = Stroke(stroke))
-//            drawCircle(color = color, radius = maxRadius * 0.08f, center = center)
-//        }
-//    }
-//}
-
 // ---------- Previews ----------
 
 private val PreviewRabbit = Rabbit(
@@ -155,7 +116,7 @@ private val PreviewRabbit = Rabbit(
     diagnosis = "Без замечаний",
 )
 
-@androidx.compose.ui.tooling.preview.Preview(
+@Preview(
     name = "InseminationDialog — обычный",
     showBackground = true,
     backgroundColor = 0xFF888888,
@@ -163,7 +124,7 @@ private val PreviewRabbit = Rabbit(
 @Composable
 private fun InseminationDialogPreview() {
     ru.profikrol.operator.uikit.theme.ProfikrolTheme {
-        InseminationConfirmationDialogContent(
+        InseminationConfirmationDialogPreviewContent(
             rabbit = PreviewRabbit,
             onDismiss = {},
             onConfirm = {},
@@ -171,7 +132,7 @@ private fun InseminationDialogPreview() {
     }
 }
 
-@androidx.compose.ui.tooling.preview.Preview(
+@Preview(
     name = "InseminationDialog — длинный RFID",
     showBackground = true,
     backgroundColor = 0xFF888888,
@@ -179,7 +140,7 @@ private fun InseminationDialogPreview() {
 @Composable
 private fun InseminationDialogLongCodePreview() {
     ru.profikrol.operator.uikit.theme.ProfikrolTheme {
-        InseminationConfirmationDialogContent(
+        InseminationConfirmationDialogPreviewContent(
             rabbit = PreviewRabbit.copy(
                 rfidCode = "RF-99999-XYZ-LONG-CODE",
                 age = "12 мес",
@@ -191,7 +152,7 @@ private fun InseminationDialogLongCodePreview() {
     }
 }
 
-@androidx.compose.ui.tooling.preview.Preview(
+@Preview(
     name = "InseminationDialog — тёмная тема",
     showBackground = true,
     backgroundColor = 0xFF000000,
@@ -200,7 +161,7 @@ private fun InseminationDialogLongCodePreview() {
 @Composable
 private fun InseminationDialogDarkPreview() {
     ru.profikrol.operator.uikit.theme.ProfikrolTheme(darkTheme = true) {
-        InseminationConfirmationDialogContent(
+        InseminationConfirmationDialogPreviewContent(
             rabbit = PreviewRabbit,
             onDismiss = {},
             onConfirm = {},
@@ -209,88 +170,38 @@ private fun InseminationDialogDarkPreview() {
 }
 
 /**
- * Содержимое диалога без обёртки [Dialog].
+ * Содержимое диалога без обёртки Dialog.
  * @Preview не умеет показывать настоящие Dialog'и (это другое окно ОС),
  * поэтому для превью извлекаем "лист" отдельно.
  */
 @Composable
-private fun InseminationConfirmationDialogContent(
+private fun InseminationConfirmationDialogPreviewContent(
     rabbit: Rabbit,
     onDismiss: () -> Unit,
     onConfirm: () -> Unit,
 ) {
-    Surface(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = Spacing.xl),
-        shape = DialogShape,
-        color = MaterialTheme.colorScheme.surface,
-        tonalElevation = 0.dp,
-        shadowElevation = dialogElevation,
+    ConfirmationDialogContent(
+        title = stringResource(R.string.insemination_dialog_title),
+        iconResId = R.drawable.ic_insemination_accept,
+        onDismiss = onDismiss,
+        onConfirm = onConfirm,
     ) {
-        Column(
-            modifier = Modifier.padding(
-                horizontal = Spacing.lg,
-                vertical = Spacing.lg,
-            ),
-        ) {
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(Spacing.sm),
-            ) {
-                Icon(
-                    modifier = Modifier.size(targetIconSize),
-                    painter = painterResource(R.drawable.ic_insemination_accept),
-                    contentDescription = stringResource(R.string.insemination_dialog_title),
-                    tint = MaterialTheme.colorScheme.primary
-                )
-                Text(
-                    text = stringResource(R.string.insemination_dialog_title),
-                    style = MaterialTheme.typography.titleLarge,
-                    fontWeight = FontWeight.SemiBold,
-                    color = MaterialTheme.colorScheme.onSurface,
-                )
-            }
-
-            Spacer(Modifier.height(Spacing.xl))
-            AnimalInfoCard(rabbit = rabbit)
-            Spacer(Modifier.height(Spacing.xl))
-
-            Text(
-                text = stringResource(R.string.insemination_dialog_message),
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                textAlign = TextAlign.Center,
-                modifier = Modifier.fillMaxWidth(),
-            )
-
-            Spacer(Modifier.height(Spacing.xl))
-
-            Row(
-                horizontalArrangement = Arrangement.spacedBy(Spacing.md),
-                modifier = Modifier.fillMaxWidth(),
-            ) {
-                OutlinedButton(
-                    text = stringResource(R.string.cancel),
-                    onClick = onDismiss,
-                    showDefaultIcon = false,
-                    centerContent = true,
-                    modifier = Modifier
-                        .weight(1f)
-                        .height(defaultPrimaryButtonHeight),
-                )
-                OutlinedButton(
-                    text = stringResource(R.string.confirm),
-                    onClick = onConfirm,
-                    variant = OutlinedButtonVariant.Filled,
-                    showDefaultIcon = false,
-                    centerContent = true,
-                    modifier = Modifier
-                        .weight(1f)
-                        .height(defaultPrimaryButtonHeight)
-                        .shadow(actionButtonShadowElevation, RoundedCornerShape(Radii.lg)),
-                )
-            }
-        }
+        InseminationDialogBody(rabbit = rabbit)
     }
+}
+
+@Composable
+private fun InseminationDialogBody(
+    rabbit: Rabbit,
+) {
+    AnimalInfoCard(rabbit = rabbit)
+    Spacer(Modifier.height(Spacing.xl))
+
+    Text(
+        text = stringResource(R.string.insemination_dialog_message),
+        style = MaterialTheme.typography.bodyMedium,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        textAlign = TextAlign.Center,
+        modifier = Modifier.fillMaxWidth(),
+    )
 }

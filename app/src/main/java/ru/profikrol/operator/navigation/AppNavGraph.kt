@@ -12,11 +12,13 @@ import ru.profikrol.operator.feature.home.HomeScreen
 import ru.profikrol.operator.feature.nestalignment.NestAlignmentScreen
 import ru.profikrol.operator.feature.nestpreparation.NestPreparationScreen
 import ru.profikrol.operator.feature.notifications.NotificationsScreen
+import ru.profikrol.operator.feature.moving.MovingScreen
 import ru.profikrol.operator.feature.rabbitculling.RabbitCullingScreen
 import ru.profikrol.operator.feature.rfidinstallation.RfidInstallationScreen
 import ru.profikrol.operator.feature.rfidscan.RfidScanScreen
 import ru.profikrol.operator.feature.rfidscanresult.RfidScanResultScreen
 import ru.profikrol.operator.feature.settings.SettingsScreen
+import ru.profikrol.operator.feature.weighing.WeighingScreen
 
 @Composable
 fun AppNavGraph() {
@@ -91,6 +93,8 @@ fun AppNavGraph() {
                     )
                     navController.navigate(Route.RfidScan)
                 },
+                onWeighing = { code -> navController.navigate(Route.Weighing(code)) },
+                onMoving = { code -> navController.navigate(Route.Moving(code)) },
                 onCullingClick = { rabbit ->
                     navController.currentBackStackEntry
                         ?.savedStateHandle
@@ -117,7 +121,39 @@ fun AppNavGraph() {
                         ?.set("diagnosis", rabbit.diagnosis)
 
                     navController.navigate(Route.RabbitCulling)
-                }
+                },
+            )
+        }
+        composable<Route.Weighing> { backStackEntry ->
+            val route = backStackEntry.toRoute<Route.Weighing>()
+            WeighingScreen(
+                rfidCode = route.code,
+                onBack = { navController.popBackStack() },
+                onScanRfid = {
+                    navController.popBackStack(
+                        route = Route.RfidScan,
+                        inclusive = true,
+                    )
+                    navController.navigate(Route.RfidScan) {
+                        launchSingleTop = true
+                    }
+                },
+            )
+        }
+        composable<Route.Moving> { backStackEntry ->
+            val route = backStackEntry.toRoute<Route.Moving>()
+            MovingScreen(
+                rfidCode = route.code,
+                onBack = { navController.popBackStack() },
+                onScanRfid = {
+                    navController.popBackStack(
+                        route = Route.RfidScan,
+                        inclusive = true,
+                    )
+                    navController.navigate(Route.RfidScan) {
+                        launchSingleTop = true
+                    }
+                },
             )
         }
         composable<Route.NestPreparation> {
