@@ -37,6 +37,15 @@
 
     <!-- Nest Preparation -->
     <string name="nest_preparation_title">Подготовка гнёзд</string>
+    <string name="nest_preparation_cage_selection">Выбор клетки</string>
+    <string name="nest_preparation_cage_selection_hint">Укажите ряд и номер клетки</string>
+    <string name="nest_preparation_row">Ряд</string>
+    <string name="nest_preparation_cage">Клетка</string>
+    <string name="nest_preparation_selected_cage">Выбрана клетка</string>
+    <string name="nest_preparation_add_sawdust">Засыпать опилки</string>
+    <string name="nest_preparation_install_nest">Установить гнездо</string>
+    <string name="nest_preparation_finish">Завершить</string>
+    <string name="nest_preparation_action_completed">Выполнено</string>
 
     <!-- Nest Alignment -->
     <string name="nest_alignment_title">Выравнивание гнёзд</string>
