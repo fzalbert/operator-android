@@ -15,7 +15,7 @@ import kotlin.coroutines.cancellation.CancellationException
 
 
 @Singleton
-class FakeRabbitRepository @Inject constructor() : RabbitRepository {
+class InMemoryRabbitRepository @Inject constructor() : RabbitRepository {
 
     override suspend fun getRabbitByRfid(rfidCode: String): Result<Rabbit> {
         return try {
@@ -78,7 +78,7 @@ class FakeRabbitRepository @Inject constructor() : RabbitRepository {
         return fields.toRabbit()
     }
 
-    private fun Map<String, String>.toRabbit(): Rabbit? {
+    private fun Map<String, String>.toRabbit(): Rabbit {
         val rfidCode = firstValue(
             "rfidCode",
             "rfid",
@@ -99,7 +99,7 @@ class FakeRabbitRepository @Inject constructor() : RabbitRepository {
         )
     }
 
-    private fun JsonObject.toRabbit(): Rabbit? =
+    private fun JsonObject.toRabbit(): Rabbit =
         mapValues { (_, value) -> (value as? JsonPrimitive)?.jsonPrimitive?.content.orEmpty() }
             .toRabbit()
 
@@ -126,6 +126,22 @@ class FakeRabbitRepository @Inject constructor() : RabbitRepository {
             substring(startIndex = 0, endIndex = separatorIndex),
             substring(startIndex = separatorIndex + 1),
         )
+    }
+
+    override suspend fun saveRabbitWeight(rfidCode: String, weightKg: String): Result<Unit> {
+        return try {
+            delay(600)
+
+            if (rfidCode.isBlank() || weightKg.isBlank()) {
+                return Result.failure(RabbitError.InvalidWeight)
+            }
+
+            Result.success(Unit)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Throwable) {
+            Result.failure(RabbitError.Unknown)
+        }
     }
 }
 

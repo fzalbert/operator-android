@@ -4,7 +4,7 @@ import dagger.Binds
 import dagger.Module
 import dagger.hilt.InstallIn
 import dagger.hilt.components.SingletonComponent
-import ru.profikrol.operator.data.repository.FakeRabbitRepository
+import ru.profikrol.operator.data.repository.InMemoryRabbitRepository
 import ru.profikrol.operator.domain.repository.RabbitRepository
 import javax.inject.Singleton
 
@@ -14,5 +14,5 @@ abstract class RabbitModule {
 
     @Binds
     @Singleton
-    abstract fun bindRabbitRepository(impl: FakeRabbitRepository): RabbitRepository
+    abstract fun bindRabbitRepository(impl: InMemoryRabbitRepository): RabbitRepository
 }
