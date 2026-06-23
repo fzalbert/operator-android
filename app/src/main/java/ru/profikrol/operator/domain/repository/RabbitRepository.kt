@@ -6,6 +6,11 @@ interface RabbitRepository {
 
     suspend fun getRabbitByRfid(rfidCode: String): Result<Rabbit>
 
+    /**
+     * Возвращает ответ профиля без жёсткой схемы: UI отображает все пришедшие поля.
+     */
+    suspend fun getRabbitProfile(rfidCode: String): Result<LinkedHashMap<String, Any?>>
+
     suspend fun saveRabbitWeight(rfidCode: String, weightKg: String): Result<Unit>
 }
 

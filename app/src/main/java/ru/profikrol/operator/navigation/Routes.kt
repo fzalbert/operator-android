@@ -26,6 +26,9 @@ sealed interface Route {
     data class RfidScanResult(val code: String) : Route
 
     @Serializable
+    data class RabbitProfile(val code: String) : Route
+
+    @Serializable
     data class Weighing(val code: String) : Route
 
     @Serializable
