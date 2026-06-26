@@ -14,6 +14,7 @@ import ru.profikrol.operator.feature.nestpreparation.NestPreparationScreen
 import ru.profikrol.operator.feature.notifications.NotificationsScreen
 import ru.profikrol.operator.feature.moving.MovingScreen
 import ru.profikrol.operator.feature.rabbitculling.RabbitCullingScreen
+import ru.profikrol.operator.feature.rabbitprofile.RabbitProfileScreen
 import ru.profikrol.operator.feature.rfidinstallation.RfidInstallationScreen
 import ru.profikrol.operator.feature.rfidscan.RfidScanScreen
 import ru.profikrol.operator.feature.rfidscanresult.RfidScanResultScreen
@@ -95,6 +96,7 @@ fun AppNavGraph() {
                 },
                 onWeighing = { code -> navController.navigate(Route.Weighing(code)) },
                 onMoving = { code -> navController.navigate(Route.Moving(code)) },
+                onViewCard = { code -> navController.navigate(Route.RabbitProfile(code)) },
                 onCullingClick = { rabbit ->
                     navController.currentBackStackEntry
                         ?.savedStateHandle
@@ -119,6 +121,37 @@ fun AppNavGraph() {
                     navController.currentBackStackEntry
                         ?.savedStateHandle
                         ?.set("diagnosis", rabbit.diagnosis)
+
+                    navController.navigate(Route.RabbitCulling)
+                },
+            )
+        }
+        composable<Route.RabbitProfile> { backStackEntry ->
+            val route = backStackEntry.toRoute<Route.RabbitProfile>()
+            RabbitProfileScreen(
+                rfidCode = route.code,
+                onBack = { navController.popBackStack() },
+                onWeighing = { code -> navController.navigate(Route.Weighing(code)) },
+                onMoving = { code -> navController.navigate(Route.Moving(code)) },
+                onCulling = { profile ->
+                    navController.currentBackStackEntry
+                        ?.savedStateHandle
+                        ?.set("rfidCode", profile.code)
+                    navController.currentBackStackEntry
+                        ?.savedStateHandle
+                        ?.set("status", profile.status.orEmpty())
+                    navController.currentBackStackEntry
+                        ?.savedStateHandle
+                        ?.set("age", profile.fieldValue("Возраст"))
+                    navController.currentBackStackEntry
+                        ?.savedStateHandle
+                        ?.set("cage", profile.fieldValue("Клетка"))
+                    navController.currentBackStackEntry
+                        ?.savedStateHandle
+                        ?.set("weight", profile.fieldValue("Вес (живая масса)"))
+                    navController.currentBackStackEntry
+                        ?.savedStateHandle
+                        ?.set("diagnosis", profile.fieldValue("Диагноз"))
 
                     navController.navigate(Route.RabbitCulling)
                 },
@@ -189,3 +222,9 @@ fun AppNavGraph() {
         }
     }
 }
+
+private fun ru.profikrol.operator.feature.rabbitprofile.RabbitProfileUiModel.fieldValue(
+    label: String,
+): String = sections
+    .firstNotNullOfOrNull { section -> section.fields[label] }
+    .orEmpty()

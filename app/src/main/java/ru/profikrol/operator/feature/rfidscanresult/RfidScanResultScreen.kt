@@ -37,6 +37,7 @@ fun RfidScanResultScreen(
     onScanAgain: () -> Unit,
     onWeighing: (String) -> Unit,
     onMoving: (String) -> Unit,
+    onViewCard: (String) -> Unit,
     onCullingClick: (Rabbit) -> Unit,
     viewModel: RfidScanResultViewModel = hiltViewModel(),
 ) {
@@ -52,6 +53,7 @@ fun RfidScanResultScreen(
         onScanAgain = onScanAgain,
         onWeighing = onWeighing,
         onMoving = onMoving,
+        onViewCard = onViewCard,
         onCullingClick = onCullingClick, // 👈 ПЕРЕДАЁМ ДАЛЬШЕ
     )
 }
@@ -63,6 +65,7 @@ private fun RfidScanResultContent(
     onScanAgain: () -> Unit,
     onWeighing: (String) -> Unit,
     onMoving: (String) -> Unit,
+    onViewCard: (String) -> Unit,
     onCullingClick: (Rabbit) -> Unit,
 ) {
     Scaffold(
@@ -116,6 +119,7 @@ private fun RfidScanResultContent(
                 rabbit = state.rabbit,
                 onWeighing = onWeighing,
                 onMoving = onMoving,
+                onViewCard = onViewCard,
                 onCullingClick = onCullingClick, 
             )
 
@@ -130,6 +134,7 @@ private fun QuickActions(
     rabbit: Rabbit?,
     onWeighing: (String) -> Unit,
     onMoving: (String) -> Unit,
+    onViewCard: (String) -> Unit,
     onCullingClick: (Rabbit) -> Unit,
 
     ) {
@@ -148,11 +153,12 @@ private fun QuickActions(
                     when (action.id) {
                         RabbitActionId.Weighing -> rabbit?.rfidCode?.let(onWeighing)
                         RabbitActionId.Moving -> rabbit?.rfidCode?.let(onMoving)
+                        RabbitActionId.ViewCard -> rabbit?.rfidCode?.let(onViewCard)
                         RabbitActionId.Insemination -> showInseminationDialog = true
                         RabbitActionId.Culling -> {
                             rabbit?.let { onCullingClick(it) }
                         }
-                        else -> Unit
+                        RabbitActionId.Palpation -> Unit
                     }
                 },
             )

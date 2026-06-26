@@ -21,6 +21,7 @@ import ru.profikrol.operator.R
 import ru.profikrol.operator.domain.model.Rabbit
 import ru.profikrol.operator.uikit.components.ConfirmationDialog
 import ru.profikrol.operator.uikit.components.ConfirmationDialogContent
+import ru.profikrol.operator.uikit.theme.ProfikrolTheme
 import ru.profikrol.operator.uikit.tokens.Radii
 import ru.profikrol.operator.uikit.tokens.Spacing
 
@@ -123,7 +124,7 @@ private val PreviewRabbit = Rabbit(
 )
 @Composable
 private fun InseminationDialogPreview() {
-    ru.profikrol.operator.uikit.theme.ProfikrolTheme {
+    ProfikrolTheme {
         InseminationConfirmationDialogPreviewContent(
             rabbit = PreviewRabbit,
             onDismiss = {},
@@ -139,7 +140,7 @@ private fun InseminationDialogPreview() {
 )
 @Composable
 private fun InseminationDialogLongCodePreview() {
-    ru.profikrol.operator.uikit.theme.ProfikrolTheme {
+    ProfikrolTheme {
         InseminationConfirmationDialogPreviewContent(
             rabbit = PreviewRabbit.copy(
                 rfidCode = "RF-99999-XYZ-LONG-CODE",
@@ -160,7 +161,7 @@ private fun InseminationDialogLongCodePreview() {
 )
 @Composable
 private fun InseminationDialogDarkPreview() {
-    ru.profikrol.operator.uikit.theme.ProfikrolTheme(darkTheme = true) {
+    ProfikrolTheme(darkTheme = true) {
         InseminationConfirmationDialogPreviewContent(
             rabbit = PreviewRabbit,
             onDismiss = {},

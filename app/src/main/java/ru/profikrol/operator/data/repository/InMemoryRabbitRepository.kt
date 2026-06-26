@@ -46,6 +46,45 @@ class InMemoryRabbitRepository @Inject constructor() : RabbitRepository {
         }
     }
 
+    override suspend fun getRabbitProfile(
+        rfidCode: String,
+    ): Result<LinkedHashMap<String, Any?>> {
+        return try {
+            delay(500)
+
+            if (rfidCode.isBlank()) {
+                return Result.failure(RabbitError.NotFound)
+            }
+
+            Result.success(
+                linkedMapOf(
+                    "code" to rfidCode,
+                    "status" to "Беременна",
+                    "classification" to "Самка",
+                    "gender" to "Самка",
+                    "age" to "8 мес",
+                    "breed" to "Калифорнийская",
+                    "weight" to "3.2 кг",
+                    "registrationDate" to "10.08.2025",
+                    "inseminationDate" to "15.02.2026",
+                    "department" to "Отделение 2",
+                    "responsibleEmployee" to "Иванов И.И.",
+                    "transferDate" to "20.03.2026",
+                    "hangarNumber" to "Ангар 2",
+                    "cage" to "A-12",
+                    "diagnosis" to "Здорова",
+                    "feedType" to "Комбикорм №3",
+                    "readyForInsemination" to "Да (28.03.2026)",
+                    "plannedSlaughterDate" to "15.05.2026",
+                ),
+            )
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Throwable) {
+            Result.failure(RabbitError.Unknown)
+        }
+    }
+
     private fun parseRabbitFromTagPayload(payload: String): Rabbit? {
         val trimmedPayload = payload.trim()
         return when {

@@ -38,6 +38,16 @@
 
     <!-- Nest Preparation -->
     <string name="nest_preparation_title">Подготовка гнёзд</string>
+    <string name="nest_preparation_cage_selection">Выбор клетки</string>
+    <string name="nest_preparation_cage_selection_hint">Укажите ряд и номер клетки</string>
+    <string name="nest_preparation_row">Ряд</string>
+    <string name="nest_preparation_cage">Клетка</string>
+    <string name="nest_preparation_selected_cage">Выбрана клетка</string>
+    <string name="nest_preparation_add_sawdust">Засыпать опилки</string>
+    <string name="nest_preparation_install_nest">Установить гнездо</string>
+    <string name="nest_preparation_finish">Завершить</string>
+    <string name="nest_preparation_action_completed">Выполнено</string>
+    <string name="nest_preparation_request_failed">Не удалось выполнить операцию. Повторите попытку</string>
 
     <!-- Nest Alignment -->
     <string name="nest_alignment_title">Выравнивание гнёзд</string>
@@ -59,6 +69,9 @@
     <string name="rfid_scan_result_cage_label">Клетка</string>
     <string name="rfid_scan_result_weight_label">Вес</string>
     <string name="rfid_scan_result_diagnosis_label">Диагноз</string>
+    <string name="rabbit_profile_title">Профиль животного</string>
+    <string name="rabbit_profile_load_error">Не удалось загрузить профиль животного</string>
+    <string name="rabbit_profile_actions">Действия</string>
     <string name="insemination_dialog_title">Подтверждение осеменения</string>
     <string name="insemination_dialog_animal_label">Животное:</string>
     <string name="insemination_dialog_message">Подтвердите выполнение процедуры осеменения</string>
