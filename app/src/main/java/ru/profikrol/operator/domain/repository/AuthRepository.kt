@@ -9,6 +9,8 @@ interface AuthRepository {
      * Возвращает Result.success(User) при успехе или Result.failure(AuthError) при ошибке.
      */
     suspend fun login(login: String, password: String): Result<User>
+
+    suspend fun refreshSession(): Result<User>
 }
 
 /** Доменные ошибки авторизации. */
