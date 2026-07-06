@@ -8,22 +8,22 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
-import ru.profikrol.operator.data.local.SessionStore
+import ru.profikrol.operator.domain.service.AuthService
 import javax.inject.Inject
 
 @HiltViewModel
 class SettingsViewModel @Inject constructor(
-    private val sessionStore: SessionStore,
+    private val authService: AuthService,
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(
-        SettingsUiState(user = sessionStore.currentUser),
+        SettingsUiState(user = authService.currentUser),
     )
     val uiState: StateFlow<SettingsUiState> = _uiState.asStateFlow()
 
     init {
         viewModelScope.launch {
-            sessionStore.user.collect { user ->
+            authService.user.collect { user ->
                 _uiState.update { it.copy(user = user) }
             }
         }
@@ -35,6 +35,6 @@ class SettingsViewModel @Inject constructor(
     }
 
     fun onLogout() {
-        sessionStore.clear()
+        authService.logout()
     }
 }

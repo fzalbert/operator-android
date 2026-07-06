@@ -4,7 +4,7 @@ import dagger.Binds
 import dagger.Module
 import dagger.hilt.InstallIn
 import dagger.hilt.components.SingletonComponent
-import ru.profikrol.operator.data.repository.FakeAuthRepository
+import ru.profikrol.operator.data.repository.AuthRepositoryImpl
 import ru.profikrol.operator.domain.repository.AuthRepository
 import javax.inject.Singleton
 
@@ -13,10 +13,10 @@ import javax.inject.Singleton
 abstract class AuthModule {
 
     /**
-     * @Binds — сообщает Hilt: "когда кто-то просит AuthRepository,
-     * подсуни FakeAuthRepository". Без рантайм-кода, всё в compile-time.
-     */
+     * @Binds сообщает Hilt: когда кто-то просит AuthRepository,
+     * нужно подставить реальную реализацию авторизации.
+    */
     @Binds
     @Singleton
-    abstract fun bindAuthRepository(impl: FakeAuthRepository): AuthRepository
+    abstract fun bindAuthRepository(impl: AuthRepositoryImpl): AuthRepository
 }

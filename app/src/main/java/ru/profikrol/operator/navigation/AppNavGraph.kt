@@ -1,6 +1,10 @@
 package ru.profikrol.operator.navigation
 
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
@@ -22,12 +26,24 @@ import ru.profikrol.operator.feature.settings.SettingsScreen
 import ru.profikrol.operator.feature.weighing.WeighingScreen
 
 @Composable
-fun AppNavGraph() {
+fun AppNavGraph(
+    viewModel: AppNavViewModel = hiltViewModel(),
+) {
     val navController = rememberNavController()
+    val isLoggedIn by viewModel.isLoggedIn.collectAsStateWithLifecycle()
+
+    LaunchedEffect(isLoggedIn) {
+        if (!isLoggedIn) {
+            navController.navigate(Route.Auth) {
+                popUpTo(0) { inclusive = true }
+                launchSingleTop = true
+            }
+        }
+    }
 
     NavHost(
         navController = navController,
-        startDestination = Route.Auth,
+        startDestination = viewModel.startDestination,
     ) {
         composable<Route.Auth> {
             AuthScreen(
