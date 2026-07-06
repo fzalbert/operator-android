@@ -197,7 +197,7 @@ private fun StatusBannerIcon(
 ) {
     when (status) {
         StatusBannerStatus.Info -> Icon(
-            painter = painterResource(R.drawable.ic_birth),
+            painter = painterResource(R.drawable.ic_warning),
             contentDescription = null,
             tint = tint,
             modifier = modifier,
@@ -216,9 +216,8 @@ private fun StatusBannerIcon(
 @Composable
 private fun StatusBannerWarningPreview() {
     StatusBanner(
-        status = StatusBannerStatus.Warning,
-        title = "Внимание!",
-        text = "Это действие необратимо. Животное будет удалено из системы.",
+        status = StatusBannerStatus.Info,
+        text = "Сначала отсканируйте RFID-метку для регистрации нового кролика.",
 
     )
 }

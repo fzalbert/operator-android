@@ -1,6 +1,7 @@
 package ru.profikrol.operator.navigation
 
 import androidx.compose.runtime.Composable
+import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
@@ -16,6 +17,7 @@ import ru.profikrol.operator.feature.moving.MovingScreen
 import ru.profikrol.operator.feature.rabbitculling.RabbitCullingScreen
 import ru.profikrol.operator.feature.rabbitprofile.RabbitProfileScreen
 import ru.profikrol.operator.feature.rfidinstallation.RfidInstallationScreen
+import ru.profikrol.operator.feature.rfidinstallation.RfidInstallationViewModel
 import ru.profikrol.operator.feature.rfidscan.RfidScanScreen
 import ru.profikrol.operator.feature.rfidscanresult.RfidScanResultScreen
 import ru.profikrol.operator.feature.settings.SettingsScreen
@@ -196,7 +198,14 @@ fun AppNavGraph() {
             NestAlignmentScreen(onBack = { navController.popBackStack() })
         }
         composable<Route.RfidInstallation> {
-            RfidInstallationScreen(onBack = { navController.popBackStack() })
+            RfidInstallationScreen(
+                onScanRfid = {
+                    navController.navigate(Route.RfidInstallationScan)
+                },
+                onBack = {
+                    navController.popBackStack()
+                }
+            )
         }
         composable<Route.RabbitCulling> {
 
@@ -217,6 +226,25 @@ fun AppNavGraph() {
                 onBack = { navController.popBackStack() },
                 onScanAgain = {
                     navController.navigate(Route.RfidScan)
+                }
+            )
+        }
+        composable<Route.RfidInstallationScan> {
+            RfidScanScreen(
+                onBack = {
+                    navController.popBackStack()
+                },
+                onScanned = { code ->
+
+                    // 1. возвращаемся назад
+                    navController.popBackStack()
+
+                    // 2. передаём результат в ViewModel предыдущего экрана
+                    navController.previousBackStackEntry
+                        ?.let { backStackEntry ->
+                            val vm = hiltViewModel<RfidInstallationViewModel>(backStackEntry)
+                            vm.setRfid(code)
+                        }
                 }
             )
         }

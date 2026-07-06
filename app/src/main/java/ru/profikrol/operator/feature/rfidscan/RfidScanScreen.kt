@@ -64,7 +64,7 @@ private const val RfidScanBandAlpha = 0.18f
 @Composable
 fun RfidScanScreen(
     onBack: () -> Unit,
-    onScanned: (code: String) -> Unit,
+    onScanned:  (code: String) -> Unit,
     viewModel: RfidScanViewModel = hiltViewModel(),
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()

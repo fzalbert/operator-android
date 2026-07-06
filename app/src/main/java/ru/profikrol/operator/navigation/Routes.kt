@@ -45,4 +45,6 @@ sealed interface Route {
 
     @Serializable
     data object RabbitCulling : Route
+    @Serializable
+    data object RfidInstallationScan : Route
 }
