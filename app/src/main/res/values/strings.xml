@@ -132,4 +132,15 @@
     <string name="reason_for_culling">Причина выбраковки</string>
     <string name="confirm_the_culling_of_the_animal">Я подтверждаю выбраковку животного %1$s</string>
     <string name="confirm_the_rejection_of_the_manual_input">Я подтверждаю выбраковку по ручному вводу</string>
+    <string name="location">Расположение</string>
+    <string name="hangar">Ангар</string>
+    <string name="rabbit_information">Информация о кролике</string>
+    <string name="breed">Порода</string>
+    <string name="register">Зарегистрировать</string>
+    <string name="tag_installed">Метка установлена!</string>
+    <string name="rfid_tag_scanned">RFID-метка считана</string>
+    <string name="rfid_registration_hint">Номер закрепится за кроликом после регистрации.</string>
+
+
+
 </resources>

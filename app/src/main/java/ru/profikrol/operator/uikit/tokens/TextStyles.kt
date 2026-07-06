@@ -25,3 +25,14 @@ val statusBannerWarningTextStyle = TextStyle(
     fontSize = 14.sp,
     lineHeight = 18.sp,
 )
+
+val statusBannerInfoTitleTextStyle = TextStyle(
+    fontSize = 18.sp,
+    lineHeight = 22.sp,
+    fontWeight = FontWeight.SemiBold,
+)
+
+val statusBannerInfoTextStyle = TextStyle(
+    fontSize = 14.sp,
+    lineHeight = 18.sp,
+)

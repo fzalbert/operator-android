@@ -34,6 +34,8 @@ import ru.profikrol.operator.uikit.theme.statusBannerWarningOutlineLight
 import ru.profikrol.operator.uikit.theme.statusBannerWarningTitleLight
 import ru.profikrol.operator.uikit.tokens.Radii
 import ru.profikrol.operator.uikit.tokens.Spacing
+import ru.profikrol.operator.uikit.tokens.statusBannerInfoTextStyle
+import ru.profikrol.operator.uikit.tokens.statusBannerInfoTitleTextStyle
 import ru.profikrol.operator.uikit.tokens.statusBannerWarningTextStyle
 import ru.profikrol.operator.uikit.tokens.statusBannerWarningTitleTextStyle
 
@@ -55,7 +57,8 @@ fun StatusBanner(
     modifier: Modifier = Modifier,
     status: StatusBannerStatus = StatusBannerStatus.Info,
     title: String? = null,
-) {
+    iconSize: Dp? = null,
+    ) {
     val colors = status.colors()
     val metrics = status.metrics()
 
@@ -86,7 +89,8 @@ fun StatusBanner(
         StatusBannerIcon(
             status = status,
             tint = colors.icon,
-            modifier = Modifier.size(metrics.iconSize),
+            modifier = Modifier.size(iconSize ?: metrics.iconSize),
+
         )
 
         Column(
@@ -178,14 +182,13 @@ private fun StatusBannerStatus.metrics(): StatusBannerMetrics =
 @Composable
 private fun StatusBannerStatus.titleTextStyle(): TextStyle =
     when (this) {
-        StatusBannerStatus.Info -> MaterialTheme.typography.headlineMedium
+        StatusBannerStatus.Info -> statusBannerInfoTitleTextStyle
         StatusBannerStatus.Warning -> statusBannerWarningTitleTextStyle
     }
-
 @Composable
 private fun StatusBannerStatus.textStyle(): TextStyle =
     when (this) {
-        StatusBannerStatus.Info -> MaterialTheme.typography.headlineSmall
+        StatusBannerStatus.Info -> statusBannerInfoTextStyle
         StatusBannerStatus.Warning -> statusBannerWarningTextStyle
     }
 
@@ -197,7 +200,7 @@ private fun StatusBannerIcon(
 ) {
     when (status) {
         StatusBannerStatus.Info -> Icon(
-            painter = painterResource(R.drawable.ic_warning),
+            painter = painterResource(R.drawable.ic_info),
             contentDescription = null,
             tint = tint,
             modifier = modifier,

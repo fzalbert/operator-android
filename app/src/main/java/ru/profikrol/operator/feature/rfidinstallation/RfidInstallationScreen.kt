@@ -84,16 +84,16 @@ fun RfidInstallationScreen(
 
             if (scannedRfid.isNullOrBlank()) {
                 StatusBanner(
-                    status = StatusBannerStatus.Warning,
-                    title = "RFID-метка не выбрана",
-                    text = "Сначала отсканируйте RFID-метку для регистрации нового кролика."
+                    status = StatusBannerStatus.Info,
+                    text = "Сначала отсканируйте RFID-метку для регистрации нового кролика.",
+                    iconSize = 24.dp
                 )
             } else {
                 ScannedRfidCard(rfidCode = scannedRfid.orEmpty())
             }
 
             Text(
-                text = "Расположение",
+                text = stringResource(R.string.location),
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.SemiBold,
             )
@@ -102,12 +102,12 @@ fun RfidInstallationScreen(
                 value = hangar,
                 onValueChange = { hangar = it },
                 modifier = Modifier.fillMaxWidth(),
-                label = { Text("Ангар") },
+                label = { Text(stringResource(R.string.hangar)) },
                 singleLine = true,
             )
 
             Text(
-                text = "Информация о кролике",
+                text = stringResource(R.string.rabbit_information),
                 style = MaterialTheme.typography.titleMedium,
                 fontWeight = FontWeight.SemiBold,
             )
@@ -116,12 +116,15 @@ fun RfidInstallationScreen(
                 value = breed,
                 onValueChange = { breed = it },
                 modifier = Modifier.fillMaxWidth(),
-                label = { Text("Порода") },
+                label = { Text(stringResource(R.string.breed)) },
                 singleLine = true,
             )
 
             ActionButton(
-                text = if (installed) "Метка установлена!" else "Зарегистрировать",
+                text = if (installed)
+                    stringResource(R.string.tag_installed)
+                else
+                    stringResource(R.string.register),
                 icon = if (installed)
                     ActionButtonIcon.CheckCircle
                 else
@@ -132,7 +135,7 @@ fun RfidInstallationScreen(
             )
 
             ActionButton(
-                text = "Отмена",
+                text = stringResource(R.string.cancel),
                 variant = ActionButtonVariant.Secondary,
                 onClick = onBack,
             )
