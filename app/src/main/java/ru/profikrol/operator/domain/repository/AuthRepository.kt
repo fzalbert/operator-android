@@ -10,7 +10,7 @@ interface AuthRepository {
      */
     suspend fun login(login: String, password: String): Result<User>
 
-    suspend fun refreshSession(): Result<User>
+    suspend fun refresh(refreshToken: String): Result<String>
 }
 
 /** Доменные ошибки авторизации. */

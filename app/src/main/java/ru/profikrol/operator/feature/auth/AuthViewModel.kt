@@ -11,13 +11,13 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
-import ru.profikrol.operator.domain.repository.AuthError
-import ru.profikrol.operator.domain.repository.AuthRepository
+import ru.profikrol.operator.domain.service.AuthService
 import javax.inject.Inject
 
 @HiltViewModel
 class AuthViewModel @Inject constructor(
-    private val authRepository: AuthRepository,
+    private val authService: AuthService,
+    private val authErrorHandler: AuthErrorHandler,
 ) : ViewModel() {
 
     private val _uiState = MutableStateFlow(AuthUiState())
@@ -45,7 +45,7 @@ class AuthViewModel @Inject constructor(
             Log.d(TAG, "Submit started: login=${state.login}")
             _uiState.update { it.copy(isLoading = true, errorText = null) }
 
-            authRepository.login(state.login, state.password)
+            authService.login(state.login, state.password)
                 .onSuccess {
                     Log.d(TAG, "Submit succeeded: login=${state.login}")
                     _uiState.update { it.copy(isLoading = false) }
@@ -53,11 +53,7 @@ class AuthViewModel @Inject constructor(
                 }
                 .onFailure { throwable ->
                     Log.w(TAG, "Submit failed: login=${state.login}, error=${throwable.message}")
-                    val errorRes = when (throwable) {
-                        AuthError.InvalidCredentials -> "Неверный логин или пароль"
-                        AuthError.Network -> "Нет связи с сервером"
-                        else -> "Что-то пошло не так"
-                    }
+                    val errorRes = authErrorHandler.messageFor(throwable)
                     _uiState.update { it.copy(isLoading = false, errorText = errorRes) }
                 }
         }

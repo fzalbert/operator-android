@@ -5,7 +5,6 @@ import retrofit2.HttpException
 import ru.profikrol.operator.data.auth.AuthApi
 import ru.profikrol.operator.data.auth.LoginRequest
 import ru.profikrol.operator.data.auth.RefreshRequest
-import ru.profikrol.operator.data.local.SessionStore
 import ru.profikrol.operator.domain.model.User
 import ru.profikrol.operator.domain.model.UserRole
 import ru.profikrol.operator.domain.repository.AuthError
@@ -18,11 +17,13 @@ import kotlin.coroutines.cancellation.CancellationException
 @Singleton
 class AuthRepositoryImpl @Inject constructor(
     private val authApi: AuthApi,
-    private val sessionStore: SessionStore,
 ) : AuthRepository {
 
     override suspend fun login(login: String, password: String): Result<User> {
-        return try {
+        return runAuthRequest(
+            requestName = "Login",
+            failureLog = "login=$login",
+        ) {
             Log.d(TAG, "Login request started: login=$login")
 
             val token = authApi.login(
@@ -41,60 +42,52 @@ class AuthRepositoryImpl @Inject constructor(
                 role = UserRole.Operator,
             )
 
-            sessionStore.save(user)
             Log.d(TAG, "Login request succeeded: login=$login, tokenLength=${token.length}")
-            Result.success(user)
-        } catch (e: CancellationException) {
-            Log.d(TAG, "Login request cancelled: login=$login")
-            throw e
-        } catch (e: HttpException) {
-            Log.w(TAG, "Login request failed with HTTP ${e.code()}: login=$login")
-            when (e.code()) {
-                401, 403 -> Result.failure(AuthError.InvalidCredentials)
-                else -> Result.failure(AuthError.Unknown)
-            }
-        } catch (e: IOException) {
-            Log.w(TAG, "Login request failed with network error: login=$login", e)
-            Result.failure(AuthError.Network)
-        } catch (e: Throwable) {
-            Log.e(TAG, "Login request failed with unexpected error: login=$login", e)
-            Result.failure(AuthError.Unknown)
+            user
         }
     }
 
-    override suspend fun refreshSession(): Result<User> {
-        val currentUser = sessionStore.currentUser ?: return Result.failure(AuthError.InvalidCredentials)
-        val refreshToken = currentUser.refreshToken ?: currentUser.token
-
-        return try {
-            Log.d(TAG, "Refresh request started: login=${currentUser.login}")
+    override suspend fun refresh(refreshToken: String): Result<String> {
+        return runAuthRequest(
+            requestName = "Refresh",
+            failureLog = null,
+        ) {
+            Log.d(TAG, "Refresh request started")
 
             val token = authApi.refresh(RefreshRequest(refreshToken)).string()
-            val refreshedUser = currentUser.copy(token = token)
 
-            sessionStore.save(refreshedUser)
-            Log.d(
-                TAG,
-                "Refresh request succeeded: login=${currentUser.login}, tokenLength=${token.length}",
-            )
-            Result.success(refreshedUser)
+            Log.d(TAG, "Refresh request succeeded: tokenLength=${token.length}")
+            token
+        }
+    }
+
+    private suspend fun <T> runAuthRequest(
+        requestName: String,
+        failureLog: String?,
+        block: suspend () -> T,
+    ): Result<T> {
+        return try {
+            Result.success(block())
         } catch (e: CancellationException) {
-            Log.d(TAG, "Refresh request cancelled: login=${currentUser.login}")
+            Log.d(TAG, "$requestName request cancelled${failureLog.suffix()}")
             throw e
         } catch (e: HttpException) {
-            Log.w(TAG, "Refresh request failed with HTTP ${e.code()}: login=${currentUser.login}")
+            Log.w(TAG, "$requestName request failed with HTTP ${e.code()}${failureLog.suffix()}")
             when (e.code()) {
                 401, 403 -> Result.failure(AuthError.InvalidCredentials)
                 else -> Result.failure(AuthError.Unknown)
             }
         } catch (e: IOException) {
-            Log.w(TAG, "Refresh request failed with network error: login=${currentUser.login}", e)
+            Log.w(TAG, "$requestName request failed with network error${failureLog.suffix()}", e)
             Result.failure(AuthError.Network)
         } catch (e: Throwable) {
-            Log.e(TAG, "Refresh request failed with unexpected error: login=${currentUser.login}", e)
+            Log.e(TAG, "$requestName request failed with unexpected error${failureLog.suffix()}", e)
             Result.failure(AuthError.Unknown)
         }
     }
+
+    private fun String?.suffix(): String =
+        this?.let { ": $it" }.orEmpty()
 
     private companion object {
         const val TAG = "AuthRepositoryImpl"

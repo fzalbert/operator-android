@@ -6,8 +6,10 @@ import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.serialization.SerializationException
+import kotlinx.serialization.encodeToString
+import kotlinx.serialization.json.Json
 import ru.profikrol.operator.domain.model.User
-import ru.profikrol.operator.domain.model.UserRole
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -21,6 +23,7 @@ import javax.inject.Singleton
 @Singleton
 class SessionStore @Inject constructor(
     @ApplicationContext context: Context,
+    private val json: Json,
 ) {
 
     private val preferences = context.getSharedPreferences(PREFERENCES_NAME, Context.MODE_PRIVATE)
@@ -35,14 +38,7 @@ class SessionStore @Inject constructor(
 
     fun save(user: User) {
         preferences.edit {
-            putString(KEY_ID, user.id)
-            putString(KEY_LOGIN, user.login)
-            putString(KEY_DISPLAY_NAME, user.displayName)
-            putString(KEY_TOKEN, user.token)
-            putString(KEY_REFRESH_TOKEN, user.refreshToken)
-            putString(KEY_ROLE, user.role.name)
-            putString(KEY_EMAIL, user.email)
-            putString(KEY_PHONE, user.phone)
+            putString(KEY_USER, json.encodeToString(user))
         }
         _user.value = user
     }
@@ -55,35 +51,21 @@ class SessionStore @Inject constructor(
     }
 
     private fun readUser(): User? {
-        val id = preferences.getString(KEY_ID, null) ?: return null
-        val login = preferences.getString(KEY_LOGIN, null) ?: return null
-        val displayName = preferences.getString(KEY_DISPLAY_NAME, null) ?: return null
-        val token = preferences.getString(KEY_TOKEN, null) ?: return null
-        val role = preferences.getString(KEY_ROLE, null)
-            ?.let { runCatching { UserRole.valueOf(it) }.getOrNull() }
-            ?: return null
+        val savedUser = preferences.getString(KEY_USER, null) ?: return null
 
-        return User(
-            id = id,
-            login = login,
-            displayName = displayName,
-            token = token,
-            refreshToken = preferences.getString(KEY_REFRESH_TOKEN, null),
-            role = role,
-            email = preferences.getString(KEY_EMAIL, null),
-            phone = preferences.getString(KEY_PHONE, null),
-        )
+        return try {
+            json.decodeFromString<User>(savedUser)
+        } catch (e: SerializationException) {
+            preferences.edit { clear() }
+            null
+        } catch (e: IllegalArgumentException) {
+            preferences.edit { clear() }
+            null
+        }
     }
 
     private companion object {
         const val PREFERENCES_NAME = "session"
-        const val KEY_ID = "id"
-        const val KEY_LOGIN = "login"
-        const val KEY_DISPLAY_NAME = "display_name"
-        const val KEY_TOKEN = "token"
-        const val KEY_REFRESH_TOKEN = "refresh_token"
-        const val KEY_ROLE = "role"
-        const val KEY_EMAIL = "email"
-        const val KEY_PHONE = "phone"
+        const val KEY_USER = "user"
     }
 }
