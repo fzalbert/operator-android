@@ -14,15 +14,17 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import ru.profikrol.operator.R
 import ru.profikrol.operator.uikit.components.ActionButton
 import ru.profikrol.operator.uikit.components.ActionButtonIcon
@@ -30,15 +32,22 @@ import ru.profikrol.operator.uikit.components.ActionButtonVariant
 import ru.profikrol.operator.uikit.components.AppTopBar
 import ru.profikrol.operator.uikit.components.StatusBanner
 import ru.profikrol.operator.uikit.components.StatusBannerStatus
+import ru.profikrol.operator.uikit.tokens.Spacing
 
 @Composable
 fun RfidInstallationScreen(
+    scannedRfidResult: String? = null,
     onScanRfid: () -> Unit,
     onBack: () -> Unit,
     viewModel: RfidInstallationViewModel = hiltViewModel()
 ) {
+    LaunchedEffect(scannedRfidResult) {
+        scannedRfidResult
+            ?.takeIf(String::isNotBlank)
+            ?.let(viewModel::setRfid)
+    }
 
-    val scannedRfid by viewModel.scannedRfid.collectAsState()
+    val scannedRfid by viewModel.scannedRfid.collectAsStateWithLifecycle()
 
     var hangar by rememberSaveable { mutableStateOf("") }
     var breed by rememberSaveable { mutableStateOf("") }
@@ -64,7 +73,7 @@ fun RfidInstallationScreen(
                 .verticalScroll(rememberScrollState())
                 .padding(padding)
                 .padding(12.dp),
-            verticalArrangement = Arrangement.spacedBy(16.dp),
+            verticalArrangement = Arrangement.spacedBy(Spacing.lg),
         ) {
 
             ActionButton(
@@ -72,29 +81,22 @@ fun RfidInstallationScreen(
                 icon = ActionButtonIcon.Scan,
                 onClick = onScanRfid,
             )
-            scannedRfid?.let { code ->
-                Card(
-                    modifier = Modifier.fillMaxWidth(),
-                    elevation = CardDefaults.cardElevation(2.dp),
-                ) {
-                    Column(
-                        modifier = Modifier.padding(16.dp),
-                        verticalArrangement = Arrangement.spacedBy(8.dp),
-                    ) {
-                        Text(
-                            text = code,
-                            style = MaterialTheme.typography.titleLarge,
-                        )
 
-                        Text(
-                            text = "RFID-метка считана",
-                            style = MaterialTheme.typography.bodySmall,
-                        )
-                    }
-                }
+            if (scannedRfid.isNullOrBlank()) {
+                StatusBanner(
+                    status = StatusBannerStatus.Warning,
+                    title = "RFID-метка не выбрана",
+                    text = "Сначала отсканируйте RFID-метку для регистрации нового кролика."
+                )
+            } else {
+                ScannedRfidCard(rfidCode = scannedRfid.orEmpty())
             }
 
-            Text("Расположение")
+            Text(
+                text = "Расположение",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.SemiBold,
+            )
 
             OutlinedTextField(
                 value = hangar,
@@ -104,7 +106,11 @@ fun RfidInstallationScreen(
                 singleLine = true,
             )
 
-            Text("Информация о кролике")
+            Text(
+                text = "Информация о кролике",
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.SemiBold,
+            )
 
             OutlinedTextField(
                 value = breed,
@@ -113,13 +119,6 @@ fun RfidInstallationScreen(
                 label = { Text("Порода") },
                 singleLine = true,
             )
-
-            if (scannedRfid == null) {
-                StatusBanner(
-                    status = StatusBannerStatus.Warning,
-                    text = "Сначала отсканируйте RFID-метку"
-                )
-            }
 
             ActionButton(
                 text = if (installed) "Метка установлена!" else "Зарегистрировать",
@@ -136,6 +135,43 @@ fun RfidInstallationScreen(
                 text = "Отмена",
                 variant = ActionButtonVariant.Secondary,
                 onClick = onBack,
+            )
+        }
+    }
+}
+
+@Composable
+private fun ScannedRfidCard(
+    rfidCode: String,
+    modifier: Modifier = Modifier,
+) {
+    Card(
+        modifier = modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.primaryContainer,
+            contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
+        ),
+        elevation = CardDefaults.cardElevation(2.dp),
+    ) {
+        Column(
+            modifier = Modifier.padding(Spacing.lg),
+            verticalArrangement = Arrangement.spacedBy(Spacing.sm),
+        ) {
+            Text(
+                text = "RFID-метка считана",
+                style = MaterialTheme.typography.labelLarge,
+                color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.72f),
+            )
+
+            Text(
+                text = rfidCode,
+                style = MaterialTheme.typography.headlineSmall,
+                fontWeight = FontWeight.SemiBold,
+            )
+
+            Text(
+                text = "Номер закрепится за кроликом после регистрации.",
+                style = MaterialTheme.typography.bodyMedium,
             )
         }
     }

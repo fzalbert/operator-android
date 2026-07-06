@@ -1,7 +1,7 @@
 package ru.profikrol.operator.navigation
 
 import androidx.compose.runtime.Composable
-import androidx.hilt.navigation.compose.hiltViewModel
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
@@ -17,11 +17,12 @@ import ru.profikrol.operator.feature.moving.MovingScreen
 import ru.profikrol.operator.feature.rabbitculling.RabbitCullingScreen
 import ru.profikrol.operator.feature.rabbitprofile.RabbitProfileScreen
 import ru.profikrol.operator.feature.rfidinstallation.RfidInstallationScreen
-import ru.profikrol.operator.feature.rfidinstallation.RfidInstallationViewModel
 import ru.profikrol.operator.feature.rfidscan.RfidScanScreen
 import ru.profikrol.operator.feature.rfidscanresult.RfidScanResultScreen
 import ru.profikrol.operator.feature.settings.SettingsScreen
 import ru.profikrol.operator.feature.weighing.WeighingScreen
+
+private const val RfidInstallationScannedCodeKey = "rfidInstallationScannedCode"
 
 @Composable
 fun AppNavGraph() {
@@ -197,8 +198,13 @@ fun AppNavGraph() {
         composable<Route.NestAlignment> {
             NestAlignmentScreen(onBack = { navController.popBackStack() })
         }
-        composable<Route.RfidInstallation> {
+        composable<Route.RfidInstallation> { backStackEntry ->
+            val scannedCode = backStackEntry.savedStateHandle
+                .getStateFlow<String?>(RfidInstallationScannedCodeKey, null)
+                .collectAsStateWithLifecycle()
+
             RfidInstallationScreen(
+                scannedRfidResult = scannedCode.value,
                 onScanRfid = {
                     navController.navigate(Route.RfidInstallationScan)
                 },
@@ -235,16 +241,11 @@ fun AppNavGraph() {
                     navController.popBackStack()
                 },
                 onScanned = { code ->
-
-                    // 1. возвращаемся назад
-                    navController.popBackStack()
-
-                    // 2. передаём результат в ViewModel предыдущего экрана
                     navController.previousBackStackEntry
-                        ?.let { backStackEntry ->
-                            val vm = hiltViewModel<RfidInstallationViewModel>(backStackEntry)
-                            vm.setRfid(code)
-                        }
+                        ?.savedStateHandle
+                        ?.set(RfidInstallationScannedCodeKey, code)
+
+                    navController.popBackStack()
                 }
             )
         }
