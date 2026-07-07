@@ -51,6 +51,22 @@
 
     <!-- Nest Alignment -->
     <string name="nest_alignment_title">Выравнивание гнёзд</string>
+    <string name="nest_alignment_hint">Отсканируйте метки крольчих для перемещения крольчат между гнёздами</string>
+    <string name="nest_alignment_from">Откуда взять</string>
+    <string name="nest_alignment_to">Куда переместить</string>
+    <string name="nest_alignment_scan_donor">Сканировать метку донора</string>
+    <string name="nest_alignment_scan_recipient">Сканировать метку реципиента</string>
+    <string name="nest_alignment_clear_nest">Очистить выбранное гнездо</string>
+    <string name="nest_alignment_loading">Загрузка данных гнезда…</string>
+    <string name="nest_alignment_load_error">Не удалось загрузить данные по метке</string>
+    <string name="nest_alignment_rabbits_in_nest">Крольчат в гнезде</string>
+    <string name="nest_alignment_count">Количество крольчат</string>
+    <string name="nest_alignment_move">переместить</string>
+    <string name="nest_alignment_remaining">Останется</string>
+    <string name="nest_alignment_will_be">Будет</string>
+    <string name="nest_alignment_confirm">Подтвердить перемещение</string>
+    <string name="nest_alignment_confirm_placeholder">Черновик перемещения подготовлен</string>
+    <string name="nest_alignment_restart">Начать новое перемещение</string>
 
     <!-- RFID Installation -->
     <string name="rfid_installation_title">Установка RFID</string>

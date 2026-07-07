@@ -41,6 +41,9 @@ sealed interface Route {
     data object NestAlignment : Route
 
     @Serializable
+    data class NestAlignmentScan(val target: String) : Route
+
+    @Serializable
     data object RfidInstallation : Route
 
     @Serializable

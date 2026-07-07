@@ -13,7 +13,6 @@ import javax.inject.Inject
 import javax.inject.Singleton
 import kotlin.coroutines.cancellation.CancellationException
 
-
 @Singleton
 class InMemoryRabbitRepository @Inject constructor() : RabbitRepository {
 
@@ -34,9 +33,10 @@ class InMemoryRabbitRepository @Inject constructor() : RabbitRepository {
                     rfidCode = rfidCode,
                     status = "Здорова",
                     age = "8 мес",
-                    cage = "A-12",
+                    cage = demoCage(rfidCode),
                     weight = "3.2 кг",
                     diagnosis = "Здорова",
+                    rabbitsInNest = demoRabbitsInNest(rfidCode),
                 ),
             )
         } catch (e: CancellationException) {
@@ -135,6 +135,20 @@ class InMemoryRabbitRepository @Inject constructor() : RabbitRepository {
             cage = firstValue("cage", "клетка") ?: DefaultRabbitCage,
             weight = firstValue("weight", "вес") ?: DefaultRabbitWeight,
             diagnosis = firstValue("diagnosis", "диагноз") ?: DefaultRabbitDiagnosis,
+            rabbitsInNest = firstIntValue(
+                "rabbitsInNest",
+                "rabbits_in_nest",
+                "rabbitsCount",
+                "rabbits_count",
+                "nestCount",
+                "nest_count",
+                "kitsCount",
+                "kits_count",
+                "count",
+                "крольчат",
+                "крольчат в гнезде",
+                "количество крольчат",
+            ),
         )
     }
 
@@ -152,6 +166,11 @@ class InMemoryRabbitRepository @Inject constructor() : RabbitRepository {
         }
         return null
     }
+
+    private fun Map<String, String>.firstIntValue(vararg keys: String): Int? =
+        firstValue(*keys)
+            ?.filter(Char::isDigit)
+            ?.toIntOrNull()
 
     private fun String.splitKeyValue(): List<String> {
         val equalsIndex = indexOf('=')
@@ -182,6 +201,19 @@ class InMemoryRabbitRepository @Inject constructor() : RabbitRepository {
             Result.failure(RabbitError.Unknown)
         }
     }
+}
+
+private fun demoRabbitsInNest(rfidCode: String): Int {
+    val numericTail = rfidCode.filter(Char::isDigit).takeLast(2).toIntOrNull()
+    return numericTail?.let { 4 + (it % 6) } ?: 6
+}
+
+private fun demoCage(rfidCode: String): String {
+    val numericTail = rfidCode.filter(Char::isDigit).takeLast(2).toIntOrNull()
+        ?: return DefaultRabbitCage
+    val row = if (numericTail % 2 == 0) "A" else "Б"
+    val cageNumber = (numericTail % 24 + 1).toString().padStart(2, '0')
+    return "$row-$cageNumber"
 }
 
 private const val DefaultRabbitRfidCode = "NFC-метка"
