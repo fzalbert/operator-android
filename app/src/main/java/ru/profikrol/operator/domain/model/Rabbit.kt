@@ -7,4 +7,5 @@ data class Rabbit(
     val cage: String,
     val weight: String,
     val diagnosis: String,
+    val rabbitsInNest: Int? = null,
 )

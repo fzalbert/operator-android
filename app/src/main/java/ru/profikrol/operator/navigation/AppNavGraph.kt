@@ -1,6 +1,8 @@
 package ru.profikrol.operator.navigation
 
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
@@ -9,6 +11,7 @@ import ru.profikrol.operator.domain.model.Rabbit
 import ru.profikrol.operator.feature.auth.AuthScreen
 import ru.profikrol.operator.feature.home.HomeActionId
 import ru.profikrol.operator.feature.home.HomeScreen
+import ru.profikrol.operator.feature.nestalignment.NestAlignmentScanTarget
 import ru.profikrol.operator.feature.nestalignment.NestAlignmentScreen
 import ru.profikrol.operator.feature.nestpreparation.NestPreparationScreen
 import ru.profikrol.operator.feature.notifications.NotificationsScreen
@@ -192,8 +195,45 @@ fun AppNavGraph() {
         composable<Route.NestPreparation> {
             NestPreparationScreen(onBack = { navController.popBackStack() })
         }
-        composable<Route.NestAlignment> {
-            NestAlignmentScreen(onBack = { navController.popBackStack() })
+        composable<Route.NestAlignment> { backStackEntry ->
+            val scannedTargetValue by backStackEntry.savedStateHandle
+                .getStateFlow<String?>(NestAlignmentScanTargetKey, null)
+                .collectAsStateWithLifecycle()
+            val scannedCode by backStackEntry.savedStateHandle
+                .getStateFlow<String?>(NestAlignmentScanCodeKey, null)
+                .collectAsStateWithLifecycle()
+
+            NestAlignmentScreen(
+                onBack = { navController.popBackStack() },
+                onScanRfid = { target ->
+                    navController.navigate(Route.NestAlignmentScan(target.routeValue))
+                },
+                scannedTarget = NestAlignmentScanTarget.fromRouteValue(scannedTargetValue),
+                scannedCode = scannedCode,
+                onScannedConsumed = {
+                    backStackEntry.savedStateHandle[NestAlignmentScanTargetKey] = null
+                    backStackEntry.savedStateHandle[NestAlignmentScanCodeKey] = null
+                },
+            )
+        }
+        composable<Route.NestAlignmentScan> { backStackEntry ->
+            val route = backStackEntry.toRoute<Route.NestAlignmentScan>()
+            val target = NestAlignmentScanTarget.fromRouteValue(route.target)
+
+            RfidScanScreen(
+                onBack = { navController.popBackStack() },
+                onScanned = { code ->
+                    if (target != null) {
+                        navController.previousBackStackEntry
+                            ?.savedStateHandle
+                            ?.set(NestAlignmentScanTargetKey, target.routeValue)
+                        navController.previousBackStackEntry
+                            ?.savedStateHandle
+                            ?.set(NestAlignmentScanCodeKey, code)
+                    }
+                    navController.popBackStack()
+                },
+            )
         }
         composable<Route.RfidInstallation> {
             RfidInstallationScreen(onBack = { navController.popBackStack() })
@@ -228,3 +268,6 @@ private fun ru.profikrol.operator.feature.rabbitprofile.RabbitProfileUiModel.fie
 ): String = sections
     .firstNotNullOfOrNull { section -> section.fields[label] }
     .orEmpty()
+
+private const val NestAlignmentScanTargetKey = "nestAlignmentScanTarget"
+private const val NestAlignmentScanCodeKey = "nestAlignmentScanCode"
