@@ -30,7 +30,7 @@ fun RabbitMesApp(vm: MobileMesViewModel) {
             OperationScreenFactory(
                 task = task,
                 definition = vm.definition(task.operationType),
-                scannedRfid = vm.lastScannedRfid,
+                scannedRfid = vm.scannedRfidForTask(task.id),
                 onBack = { vm.navigate(AppScreen.Tasks) },
                 onBegin = { vm.beginTask(task.id) },
                 onScan = { rfid, values -> vm.scanRfidAndCompleteItem(task.id, rfid, values) },
@@ -55,12 +55,8 @@ fun RabbitMesApp(vm: MobileMesViewModel) {
                     vm.navigate(AppScreen.TaskExecution(screen.taskId))
                 },
                 onScanned = { code ->
-
-                    vm.lastScannedRfid = code
-
-                    vm.navigate(
-                        AppScreen.TaskExecution(screen.taskId)
-                    )
+                    vm.rememberScannedRfid(screen.taskId, code)
+                    vm.navigate(AppScreen.TaskExecution(screen.taskId))
                 },
                 demoRfidCode = vm.nextPendingRfid(screen.taskId),
             )

@@ -127,7 +127,7 @@ fun ScanPanel(
     }
     MesCard {
         Text(title, fontWeight = FontWeight.Bold)
-        Text("Сначала отсканируйте RFID. После успешного скана рядом появится кнопка «Выполнено», которая закрывает конкретного кролика в чек-листе.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text("Сначала отсканируйте RFID. После успешного скана рядом появится кнопка «Выполнено».", color = MaterialTheme.colorScheme.onSurfaceVariant)
         OutlinedTextField(rfid, { rfid = it; scannedRfid = null }, Modifier.fillMaxWidth(), label = { Text(placeholder) })
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
             Button(onClick = { onOpenScanner?.invoke() ?: run { scannedRfid = rfid } }, modifier = Modifier.weight(1f)) { Icon(Icons.Default.QrCodeScanner, null); Spacer(Modifier.width(6.dp)); Text("Скан") }
@@ -144,10 +144,13 @@ fun ScanPanel(
         if (rabbit != null) {
             Spacer(Modifier.height(10.dp))
             RabbitMiniCard(rabbit, onOpenAnimal)
-            Button(onClick = { onScan(scannedRfid!!) ; scannedRfid = null; rfid = "" }, Modifier.fillMaxWidth()) { Text("Выполнено") }
         } else if (scannedRfid != null) {
             Spacer(Modifier.height(8.dp))
-            Text("RFID не найден. Проверьте метку или используйте другой скан.", color = MaterialTheme.colorScheme.error)
+            Text("RFID отсканирован: $scannedRfid", color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+        if (scannedRfid != null) {
+            Spacer(Modifier.height(10.dp))
+            Button(onClick = { onScan(scannedRfid!!) }, Modifier.fillMaxWidth()) { Text("Выполнено") }
         }
     }
 }
@@ -171,7 +174,7 @@ fun CageScanPanel(
 
     MesCard {
         Text(title, fontWeight = FontWeight.Bold)
-        Text("Сначала скан клетки. После скана кнопка «Выполнено» закрывает конкретную клетку в чек-листе. Номер клетки не редактируется вручную.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text("Сначала скан клетки. После скана кнопка «Выполнено» сохраняет RFID.", color = MaterialTheme.colorScheme.onSurfaceVariant)
         OutlinedTextField(rfid, { rfid = it; scannedRfid = null }, Modifier.fillMaxWidth(), label = { Text("RFID клетки") })
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
             Button(onClick = { onOpenScanner?.invoke() ?: run { scannedRfid = rfid } }, Modifier.weight(1f)) { Text("Скан клетки") }
@@ -193,10 +196,13 @@ fun CageScanPanel(
                     Text("Ряд ${cage.rowNumber}, клетка ${cage.number}")
                 }
             }
-            Button(onClick = { onScan(scannedRfid!!); scannedRfid = null; rfid = "" }, Modifier.fillMaxWidth()) { Text("Выполнено") }
         } else if (scannedRfid != null) {
             Spacer(Modifier.height(8.dp))
-            Text("Клетка с таким RFID не найдена.", color = MaterialTheme.colorScheme.error)
+            Text("RFID отсканирован: $scannedRfid", color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+        if (scannedRfid != null) {
+            Spacer(Modifier.height(10.dp))
+            Button(onClick = { onScan(scannedRfid!!) }, Modifier.fillMaxWidth()) { Text("Выполнено") }
         }
     }
 }

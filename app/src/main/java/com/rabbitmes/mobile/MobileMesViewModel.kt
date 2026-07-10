@@ -3,6 +3,7 @@ package com.rabbitmes.mobile
 import android.util.Log
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
+import androidx.compose.runtime.mutableStateMapOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.ViewModel
@@ -47,6 +48,7 @@ class MobileMesViewModel @Inject constructor(
         private set
 
     var lastScannedRfid: String? by mutableStateOf(null)
+    private val scannedRfidByTaskId = mutableStateMapOf<String, String>()
     var lastMessage: String? by mutableStateOf(null)
         private set
     var authLogin: String by mutableStateOf("")
@@ -166,6 +168,11 @@ class MobileMesViewModel @Inject constructor(
 
     fun task(id: String) = tasks.first { it.id == id }
     fun taskOrNull(id: String) = tasks.firstOrNull { it.id == id }
+    fun scannedRfidForTask(taskId: String): String? = scannedRfidByTaskId[taskId] ?: task(taskId).result.scannedRfid
+    fun rememberScannedRfid(taskId: String, rfid: String) {
+        lastScannedRfid = rfid
+        scannedRfidByTaskId[taskId] = rfid
+    }
     fun nextPendingRfid(taskId: String): String? {
         val item = task(taskId).checklist.firstOrNull { it.status == ChecklistStatus.PENDING } ?: return null
         return when (item.targetType) {
@@ -207,15 +214,39 @@ class MobileMesViewModel @Inject constructor(
 
     fun scanRfidAndCompleteItem(taskId: String, rfid: String, values: Map<String, String> = emptyMap()) {
         Log.d("RFID_TEST", "MobileMesViewModel получил: $rfid")
+        rememberScannedRfid(taskId, rfid)
 
         val rabbit = MockRepository.rabbitByRfid(rfid)
         val cage = MockRepository.cageByRfid(rfid)
         val targetId = rabbit?.id ?: cage?.id
-        if (targetId == null) { lastMessage = "RFID не найден: $rfid"; return }
         val currentTask = tasks.first { it.id == taskId }
+
+        if (targetId == null) {
+            updateTask(taskId) { task ->
+                task.copy(
+                    status = TaskStatus.IN_PROGRESS,
+                    result = task.result.copy(
+                        scannedRfid = rfid,
+                        values = task.result.values + values + ("lastScan" to rfid),
+                    ),
+                ).markOffline()
+            }
+            lastMessage = "RFID сохранен: $rfid"
+            return
+        }
+
         val matchingItem = currentTask.checklist.firstOrNull { it.targetId == targetId }
         if (matchingItem == null) {
-            lastMessage = "RFID $rfid найден, но этого объекта нет в чек-листе задачи"
+            updateTask(taskId) { task ->
+                task.copy(
+                    status = TaskStatus.IN_PROGRESS,
+                    result = task.result.copy(
+                        scannedRfid = rfid,
+                        values = task.result.values + values + ("lastScan" to rfid),
+                    ),
+                ).markOffline()
+            }
+            lastMessage = "RFID сохранен: $rfid"
             return
         }
         if (matchingItem.status != ChecklistStatus.PENDING) {
