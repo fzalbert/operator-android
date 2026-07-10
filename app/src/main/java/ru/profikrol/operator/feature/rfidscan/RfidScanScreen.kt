@@ -65,6 +65,7 @@ private const val RfidScanBandAlpha = 0.18f
 fun RfidScanScreen(
     onBack: () -> Unit,
     onScanned: (code: String) -> Unit,
+    demoRfidCode: String? = null,
     viewModel: RfidScanViewModel = hiltViewModel(),
 ) {
     val state by viewModel.uiState.collectAsStateWithLifecycle()
@@ -92,7 +93,7 @@ fun RfidScanScreen(
     ) { innerPadding ->
         RfidScanContent(
             isDemoScanInProgress = state.isDemoScanInProgress,
-            onDemoScanClick = viewModel::onDemoScanClick,
+            onDemoScanClick = { viewModel.onDemoScanClick(demoRfidCode) },
             modifier = Modifier
                 .fillMaxSize()
                 .padding(innerPadding)

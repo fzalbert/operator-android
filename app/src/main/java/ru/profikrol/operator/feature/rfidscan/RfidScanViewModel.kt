@@ -28,12 +28,12 @@ class RfidScanViewModel @Inject constructor(
     val events = _events.receiveAsFlow()
 
     /** Демо-сканирование: генерим случайный код вида RF-00247. */
-    fun onDemoScanClick() {
+    fun onDemoScanClick(demoRfidCode: String? = null) {
         if (_uiState.value.isDemoScanInProgress) return
         viewModelScope.launch {
             _uiState.update { it.copy(isDemoScanInProgress = true) }
             delay(RfidScanDemoDurationMillis)
-            val code = generateDemoRfidCode()
+            val code = demoRfidCode?.takeIf { it.isNotBlank() } ?: generateDemoRfidCode()
             _uiState.update { it.copy(isDemoScanInProgress = false) }
             _events.send(RfidScanEvent.Scanned(code))
         }

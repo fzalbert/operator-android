@@ -1,0 +1,283 @@
+package com.rabbitmes.mobile
+
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateListOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import androidx.lifecycle.ViewModel
+import dagger.hilt.android.lifecycle.HiltViewModel
+import ru.profikrol.operator.data.local.SessionStore
+import ru.profikrol.operator.domain.model.UserRole
+import javax.inject.Inject
+import com.rabbitmes.mobile.data.MockRepository
+import com.rabbitmes.mobile.domain.*
+
+sealed class AppScreen {
+    data object Login : AppScreen()
+    data object Shift : AppScreen()
+    data object Tasks : AppScreen()
+    data object Map : AppScreen()
+    data object Sync : AppScreen()
+    data object Profile : AppScreen()
+    data object Notifications : AppScreen()
+    data object AcceptanceQueue : AppScreen()
+    data class TaskExecution(val taskId: String) : AppScreen()
+    data class RfidScan(
+        val taskId: String,
+        val values: kotlin.collections.Map<String, String> = emptyMap(),
+    ) : AppScreen()
+    data class Acceptance(val taskId: String) : AppScreen()
+    data class AnimalHistory(val rabbitId: String) : AppScreen()
+}
+
+@HiltViewModel
+class MobileMesViewModel @Inject constructor(
+    private val sessionStore: SessionStore,
+) : ViewModel() {
+    var screen: AppScreen by mutableStateOf(AppScreen.Login)
+        private set
+    var currentEmployee: Employee by mutableStateOf(MockRepository.employees.first())
+        private set
+    var shift: ShiftState by mutableStateOf(ShiftState(currentEmployee.id))
+        private set
+    var tasks: List<MobileTask> by mutableStateOf(MockRepository.initialTasks())
+        private set
+    var remarks: List<AcceptanceRemark> by mutableStateOf(emptyList())
+        private set
+    var lastMessage: String? by mutableStateOf(null)
+        private set
+    var authLogin: String by mutableStateOf("")
+        private set
+    var authPassword: String by mutableStateOf("")
+        private set
+    var authError: String? by mutableStateOf(null)
+        private set
+    var isAuthLoading: Boolean by mutableStateOf(false)
+        private set
+
+    val notifications = mutableStateListOf(
+        NotificationUi(
+            id = 1,
+            title = "Критическая задача",
+            description = "Требуется пальпация 24 особей",
+            time = "5 мин назад",
+            isUnread = true,
+            type = NotificationType.CRITICAL,
+        ),
+        NotificationUi(
+            id = 2,
+            title = "Завершена задача",
+            description = "Осеменение в Ангаре 2 завершено",
+            time = "1 час назад",
+            isUnread = true,
+            type = NotificationType.SUCCESS,
+        ),
+        NotificationUi(
+            id = 3,
+            title = "Новое уведомление",
+            description = "Добавлены 12 новых кроликов в базу данных",
+            time = "2 часа назад",
+            isUnread = false,
+            type = NotificationType.SUCCESS,
+        ),
+        NotificationUi(
+            id = 4,
+            title = "Напоминание",
+            description = "Плановое взвешивание в 15:00",
+            time = "3 часа назад",
+            isUnread = false,
+            type = NotificationType.SUCCESS,
+        ),
+        NotificationUi(
+            id = 5,
+            title = "Обновление системы",
+            description = "Доступна новая версия приложения",
+            time = "5 часов назад",
+            isUnread = false,
+            type = NotificationType.DEFAULT,
+        ),
+    )
+
+    val employees = MockRepository.employees
+    val workshop = MockRepository.workshop
+    val rabbits = MockRepository.rabbits
+    val allCages = MockRepository.allCages
+    val operations = MockRepository.operationDefinitions
+
+    fun navigate(target: AppScreen) { screen = target; lastMessage = null }
+    fun onLoggedInFromSession() {
+        val role = sessionStore.currentUser?.role
+        currentEmployee = when (role) {
+            UserRole.Technologist -> employees.first { it.role == RoleId.CHIEF_TECHNOLOGIST }
+            UserRole.Operator, null -> employees.first { it.role == RoleId.OPERATOR }
+        }
+        shift = ShiftState(currentEmployee.id)
+        screen = defaultScreenForRole()
+        lastMessage = null
+    }
+    fun onAuthLoginChange(value: String) {
+        authLogin = value
+        authError = null
+    }
+    fun onAuthPasswordChange(value: String) {
+        authPassword = value
+        authError = null
+    }
+    fun login() {
+        if (authLogin.isBlank() || authPassword.isBlank() || isAuthLoading) return
+
+        isAuthLoading = true
+        if (authLogin.equals("fail", ignoreCase = true)) {
+            authError = "Неверный логин или пароль"
+            isAuthLoading = false
+            return
+        }
+
+        currentEmployee = when {
+            authLogin.startsWith("tech", ignoreCase = true) -> employees.first { it.role == RoleId.CHIEF_TECHNOLOGIST }
+            authLogin.startsWith("mech", ignoreCase = true) -> employees.first { it.role == RoleId.CHIEF_MECHANIC }
+            else -> employees.first { it.role == RoleId.OPERATOR }
+        }
+        shift = ShiftState(currentEmployee.id)
+        screen = defaultScreenForRole()
+        authError = null
+        isAuthLoading = false
+    }
+    fun logout() {
+        sessionStore.clear()
+        authPassword = ""
+        authError = null
+        screen = AppScreen.Login
+    }
+    fun startShift() { shift = shift.copy(startedAt = "08:00", finishedAt = null); screen = AppScreen.Tasks }
+    fun finishShift(reason: String) { shift = shift.copy(finishedAt = "18:00"); lastMessage = "Смена завершена: $reason" }
+    fun toggleOnline() { shift = shift.copy(isOnline = !shift.isOnline) }
+    fun syncNow() { shift = shift.copy(pendingSyncEvents = 0); tasks = tasks.map { it.copy(offlineEvents = 0) }; lastMessage = "Очередь синхронизации отправлена" }
+    fun markNotificationAsRead(id: Long) {
+        val index = notifications.indexOfFirst { it.id == id }
+        if (index != -1) notifications[index] = notifications[index].copy(isUnread = false)
+    }
+    fun markAllNotificationsAsRead() {
+        notifications.replaceAll { it.copy(isUnread = false) }
+    }
+
+    fun task(id: String) = tasks.first { it.id == id }
+    fun taskOrNull(id: String) = tasks.firstOrNull { it.id == id }
+    fun nextPendingRfid(taskId: String): String? {
+        val item = task(taskId).checklist.firstOrNull { it.status == ChecklistStatus.PENDING } ?: return null
+        return when (item.targetType) {
+            TargetType.RABBIT -> rabbits.firstOrNull { it.id == item.targetId }?.rfid
+            TargetType.CAGE -> allCages.firstOrNull { it.id == item.targetId }?.rfid
+            TargetType.HANGAR -> null
+        }
+    }
+    fun canReviewAcceptance() = tasks.any { it.acceptanceRole == currentEmployee.role }
+    fun tasksForCurrentEmployee() = tasks.filter { task ->
+        task.assignedEmployeeId == currentEmployee.id &&
+            definition(task.operationType).allowedRoles.contains(currentEmployee.role)
+    }
+    fun tasksForAcceptance() = tasks.filter { it.requiresAcceptance && it.status == TaskStatus.DONE && it.acceptanceStatus == AcceptanceStatus.WAITING && it.acceptanceRole == currentEmployee.role }
+    fun nextTask() = tasksForCurrentEmployee().filter { it.status != TaskStatus.DONE && it.status != TaskStatus.SENT && it.status != TaskStatus.SKIPPED }.minWithOrNull(compareBy<MobileTask> { it.priority.weight }.thenBy { it.plannedStart })
+    fun definition(type: OperationType) = MockRepository.operation(type)
+    private fun defaultScreenForRole(): AppScreen = when {
+        currentEmployee.role == RoleId.CHIEF_TECHNOLOGIST && tasksForAcceptance().isNotEmpty() -> AppScreen.AcceptanceQueue
+        else -> AppScreen.Shift
+    }
+
+    private fun pushOffline(): ShiftState = shift.copy(pendingSyncEvents = shift.pendingSyncEvents + 1)
+    private fun updateTask(taskId: String, transform: (MobileTask) -> MobileTask) { tasks = tasks.map { if (it.id == taskId) transform(it) else it }; shift = pushOffline() }
+    fun beginTask(taskId: String) = updateTask(taskId) { it.copy(status = TaskStatus.IN_PROGRESS).markOffline() }
+
+    fun updateTaskValue(taskId: String, key: String, value: String) = updateTask(taskId) { it.copy(result = it.result.copy(values = it.result.values + (key to value))).markOffline() }
+    private fun media(type: AttachmentType, label: String) = MediaAttachment(
+        id = "media-${System.currentTimeMillis()}",
+        type = type,
+        name = label,
+        localUri = "mock://$label",
+        createdAt = "now",
+        uploaded = false
+    )
+    fun addPhoto(taskId: String, label: String) = updateTask(taskId) { val attachment = media(AttachmentType.PHOTO, label); it.copy(result = it.result.copy(photos = it.result.photos + label, attachments = it.result.attachments + attachment)).markOffline() }
+    fun addVideo(taskId: String, label: String) = updateTask(taskId) { val attachment = media(AttachmentType.VIDEO, label); it.copy(result = it.result.copy(videos = it.result.videos + label, attachments = it.result.attachments + attachment)).markOffline() }
+    fun addVoice(taskId: String, label: String) = updateTask(taskId) { val attachment = media(AttachmentType.VOICE, label); it.copy(result = it.result.copy(voiceNotes = it.result.voiceNotes + label, attachments = it.result.attachments + attachment)).markOffline() }
+    fun addComment(taskId: String, comment: String) = updateTask(taskId) { it.copy(result = it.result.copy(comment = comment)).markOffline() }
+
+    fun scanRfidAndCompleteItem(taskId: String, rfid: String, values: Map<String, String> = emptyMap()) {
+        val rabbit = MockRepository.rabbitByRfid(rfid)
+        val cage = MockRepository.cageByRfid(rfid)
+        val targetId = rabbit?.id ?: cage?.id
+        if (targetId == null) { lastMessage = "RFID не найден: $rfid"; return }
+        val currentTask = tasks.first { it.id == taskId }
+        val matchingItem = currentTask.checklist.firstOrNull { it.targetId == targetId }
+        if (matchingItem == null) {
+            lastMessage = "RFID $rfid найден, но этого объекта нет в чек-листе задачи"
+            return
+        }
+        if (matchingItem.status != ChecklistStatus.PENDING) {
+            lastMessage = "Пункт чек-листа уже обработан: ${matchingItem.label}"
+            return
+        }
+        updateTask(taskId) { task ->
+            val checklist = task.checklist.map { item ->
+                if (item.targetId == targetId) item.copy(status = ChecklistStatus.DONE, result = item.result.copy(values = item.result.values + values, scannedRfid = rfid, completedAt = "now")) else item
+            }
+            task.copy(status = TaskStatus.IN_PROGRESS, checklist = checklist, result = task.result.copy(scannedRfid = rfid, values = task.result.values + ("lastScan" to rfid))).markOffline()
+        }
+        lastMessage = "Скан принят: $rfid. Пункт чек-листа закрыт автоматически."
+    }
+
+    fun markChecklistItem(taskId: String, itemId: String, status: ChecklistStatus, reason: String = "", comment: String = "") = updateTask(taskId) { task ->
+        task.copy(checklist = task.checklist.map { if (it.id == itemId) it.copy(status = status, result = it.result.copy(problemReason = reason, comment = comment)) else it }).markOffline()
+    }
+
+    fun completeTask(taskId: String) {
+        val currentTask = tasks.first { it.id == taskId }
+        val operation = MockRepository.operation(currentTask.operationType)
+        val shouldFillChecklistFromResult = !operation.requiresScan && operation.targetType == TargetType.HANGAR
+        val checklist = if (shouldFillChecklistFromResult) {
+            currentTask.checklist.map { item ->
+                if (item.status == ChecklistStatus.PENDING) {
+                    item.copy(
+                        status = ChecklistStatus.DONE,
+                        result = item.result.copy(
+                            values = item.result.values + currentTask.result.values,
+                            comment = currentTask.result.comment,
+                            completedAt = "now"
+                        )
+                    )
+                } else {
+                    item
+                }
+            }
+        } else {
+            currentTask.checklist
+        }
+        val pending = checklist.count { it.status == ChecklistStatus.PENDING }
+        if (pending > 0) {
+            lastMessage = "Нельзя завершить задачу: осталось $pending необработанных пунктов чек-листа"
+            return
+        }
+        updateTask(taskId) { current ->
+            val acceptance = if (current.requiresAcceptance) AcceptanceStatus.WAITING else AcceptanceStatus.NOT_REQUIRED
+            current.copy(
+                status = if (current.requiresAcceptance) TaskStatus.DONE else TaskStatus.SENT,
+                acceptanceStatus = acceptance,
+                checklist = checklist,
+                result = current.result.copy(completedAt = "now")
+            ).markOffline()
+        }
+    }
+
+    fun skipTask(taskId: String, reason: String) = updateTask(taskId) { it.copy(status = TaskStatus.SKIPPED, result = it.result.copy(problemReason = reason, comment = reason)).markOffline() }
+
+    fun addRemark(taskId: String, itemId: String?, reason: String, comment: String, attachments: List<MediaAttachment>) {
+        remarks = listOf(AcceptanceRemark("remark-${System.currentTimeMillis()}", taskId, itemId, reason, comment, attachments, "now")) + remarks
+        if (itemId != null) updateTask(taskId) { task -> task.copy(checklist = task.checklist.map { if (it.id == itemId) it.copy(reviewStatus = ReviewStatus.REJECTED, reviewerComment = comment) else it }).markOffline() }
+        else shift = pushOffline()
+    }
+
+    fun acceptTask(taskId: String, comment: String = "") = updateTask(taskId) { task ->
+        task.copy(status = TaskStatus.SENT, acceptanceStatus = AcceptanceStatus.ACCEPTED, acceptedByEmployeeId = currentEmployee.id, acceptanceComment = comment, checklist = task.checklist.map { it.copy(reviewStatus = if (it.reviewStatus == ReviewStatus.REJECTED) ReviewStatus.REJECTED else ReviewStatus.ACCEPTED) }).markOffline()
+    }
+    fun rejectTask(taskId: String, comment: String) = updateTask(taskId) { it.copy(status = TaskStatus.BLOCKED, acceptanceStatus = AcceptanceStatus.REJECTED, acceptedByEmployeeId = currentEmployee.id, acceptanceComment = comment).markOffline() }
+}
