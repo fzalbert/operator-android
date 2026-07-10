@@ -1,5 +1,6 @@
 package com.rabbitmes.mobile
 
+import android.util.Log
 import androidx.compose.runtime.Composable
 import com.rabbitmes.mobile.data.MockRepository
 import com.rabbitmes.mobile.domain.ChecklistStatus
@@ -29,6 +30,7 @@ fun RabbitMesApp(vm: MobileMesViewModel) {
             OperationScreenFactory(
                 task = task,
                 definition = vm.definition(task.operationType),
+                scannedRfid = vm.lastScannedRfid,
                 onBack = { vm.navigate(AppScreen.Tasks) },
                 onBegin = { vm.beginTask(task.id) },
                 onScan = { rfid, values -> vm.scanRfidAndCompleteItem(task.id, rfid, values) },
@@ -49,10 +51,16 @@ fun RabbitMesApp(vm: MobileMesViewModel) {
         }
         is AppScreen.RfidScan -> {
             RfidScanScreen(
-                onBack = { vm.navigate(AppScreen.TaskExecution(screen.taskId)) },
-                onScanned = { code ->
-                    vm.scanRfidAndCompleteItem(screen.taskId, code, screen.values)
+                onBack = {
                     vm.navigate(AppScreen.TaskExecution(screen.taskId))
+                },
+                onScanned = { code ->
+
+                    vm.lastScannedRfid = code
+
+                    vm.navigate(
+                        AppScreen.TaskExecution(screen.taskId)
+                    )
                 },
                 demoRfidCode = vm.nextPendingRfid(screen.taskId),
             )

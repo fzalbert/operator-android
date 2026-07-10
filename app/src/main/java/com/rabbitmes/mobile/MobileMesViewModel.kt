@@ -1,5 +1,6 @@
 package com.rabbitmes.mobile
 
+import android.util.Log
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
@@ -44,6 +45,8 @@ class MobileMesViewModel @Inject constructor(
         private set
     var remarks: List<AcceptanceRemark> by mutableStateOf(emptyList())
         private set
+
+    var lastScannedRfid: String? by mutableStateOf(null)
     var lastMessage: String? by mutableStateOf(null)
         private set
     var authLogin: String by mutableStateOf("")
@@ -203,6 +206,8 @@ class MobileMesViewModel @Inject constructor(
     fun addComment(taskId: String, comment: String) = updateTask(taskId) { it.copy(result = it.result.copy(comment = comment)).markOffline() }
 
     fun scanRfidAndCompleteItem(taskId: String, rfid: String, values: Map<String, String> = emptyMap()) {
+        Log.d("RFID_TEST", "MobileMesViewModel получил: $rfid")
+
         val rabbit = MockRepository.rabbitByRfid(rfid)
         val cage = MockRepository.cageByRfid(rfid)
         val targetId = rabbit?.id ?: cage?.id

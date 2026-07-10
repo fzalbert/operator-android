@@ -114,9 +114,23 @@ fun ScanPanel(
     onScan: (String) -> Unit,
     onOpenAnimal: ((String) -> Unit)? = null,
     onOpenScanner: (() -> Unit)? = null,
-) {
-    var rfid by remember { mutableStateOf("") }
-    var scannedRfid by remember { mutableStateOf<String?>(null) }
+    initialRfid: String? = null,
+
+    ) {
+    var rfid by remember {
+        mutableStateOf("")
+    }
+
+    var scannedRfid by remember {
+        mutableStateOf<String?>(null)
+    }
+
+    LaunchedEffect(initialRfid) {
+        if (!initialRfid.isNullOrBlank()) {
+            rfid = initialRfid
+            scannedRfid = initialRfid
+        }
+    }
     MesCard {
         Text(title, fontWeight = FontWeight.Bold)
         Text("Сначала отсканируйте RFID. После успешного скана рядом появится кнопка «Выполнено», которая закрывает конкретного кролика в чек-листе.", color = MaterialTheme.colorScheme.onSurfaceVariant)

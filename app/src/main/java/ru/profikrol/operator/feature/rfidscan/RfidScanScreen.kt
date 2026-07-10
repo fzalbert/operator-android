@@ -1,5 +1,6 @@
 package ru.profikrol.operator.feature.rfidscan
 
+import android.util.Log
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
@@ -78,7 +79,10 @@ fun RfidScanScreen(
     LaunchedEffect(Unit) {
         viewModel.events.collectLatest { event ->
             when (event) {
-                is RfidScanEvent.Scanned -> onScanned(event.code)
+                is RfidScanEvent.Scanned -> {
+                    Log.d("RFID_TEST", "RfidScanScreen получил: ${event.code}")
+                    onScanned(event.code)
+                }
             }
         }
     }

@@ -26,7 +26,6 @@ class FakeAuthRepository @Inject constructor(
 
     override suspend fun login(login: String, password: String): Result<User> {
         return try {
-            // Имитация сетевой задержки.
             delay(1200)
 
             if (login.equals("fail", ignoreCase = true)) {
@@ -34,7 +33,7 @@ class FakeAuthRepository @Inject constructor(
             }
 
             val normalizedLogin = login.trim().lowercase()
-            val role = if (normalizedLogin.startsWith("tech") ||
+            val role = if (normalizedLogin.startsWith("c") ||
                 normalizedLogin.startsWith("technolog") ||
                 normalizedLogin.startsWith("тех") ||
                 normalizedLogin.contains("технолог")

@@ -11,7 +11,7 @@
     <string name="auth_logo">🐰</string>
     <string name="auth_brand_title">РаббитФарм</string>
     <string name="auth_brand_subtitle">Система управления кролиководческой фермой</string>
-    <string name="auth_title">Вход</string>
+    <string name="auth_title">Вход</string>F
     <string name="auth_login_label">Логин</string>
     <string name="auth_password_label">Пароль</string>
     <string name="auth_submit">Авторизоваться</string>
