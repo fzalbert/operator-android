@@ -115,15 +115,9 @@ fun ScanPanel(
     onOpenAnimal: ((String) -> Unit)? = null,
     onOpenScanner: (() -> Unit)? = null,
     initialRfid: String? = null,
-
-    ) {
-    var rfid by remember {
-        mutableStateOf("")
-    }
-
-    var scannedRfid by remember {
-        mutableStateOf<String?>(null)
-    }
+) {
+    var rfid by remember { mutableStateOf("") }
+    var scannedRfid by remember { mutableStateOf<String?>(null) }
 
     LaunchedEffect(initialRfid) {
         if (!initialRfid.isNullOrBlank()) {
@@ -159,9 +153,22 @@ fun ScanPanel(
 }
 
 @Composable
-fun CageScanPanel(title: String, onScan: (String) -> Unit, onOpenScanner: (() -> Unit)? = null) {
+fun CageScanPanel(
+    title: String,
+    onScan: (String) -> Unit,
+    onOpenScanner: (() -> Unit)? = null,
+    initialRfid: String? = null,
+) {
     var rfid by remember { mutableStateOf("") }
     var scannedRfid by remember { mutableStateOf<String?>(null) }
+
+    LaunchedEffect(initialRfid) {
+        if (!initialRfid.isNullOrBlank()) {
+            rfid = initialRfid
+            scannedRfid = initialRfid
+        }
+    }
+
     MesCard {
         Text(title, fontWeight = FontWeight.Bold)
         Text("Сначала скан клетки. После скана кнопка «Выполнено» закрывает конкретную клетку в чек-листе. Номер клетки не редактируется вручную.", color = MaterialTheme.colorScheme.onSurfaceVariant)

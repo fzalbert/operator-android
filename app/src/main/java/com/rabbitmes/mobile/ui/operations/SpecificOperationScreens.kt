@@ -15,7 +15,7 @@ fun InseminationScreen(task: MobileTask, onBack: () -> Unit, onBegin: () -> Unit
     var seedBatch by remember { mutableStateOf("S-26-07") }
     TaskExecutionScaffold(task, onBack, onBegin, onComplete, onSkip, onChecklistDone, onChecklistProblem, onChecklistSkip, allowRootComplete = false, canEdit = canEdit) {
         MesCard { Text("Осеменение", fontWeight = FontWeight.Bold); OutlinedTextField(seedBatch, { seedBatch = it; onValue("seedBatch", it) }, Modifier.fillMaxWidth(), label = { Text("Партия семени") }); Text("Сканируйте RFID самки. После подтверждения пункт чек-листа закрывается автоматически.") }
-        ScanPanel("RFID самки", "RFID самки", onScan = { rfid -> onScan(rfid, mapOf("inseminated" to "true", "seedBatch" to seedBatch)) }, onOpenScanner = { onOpenRfidScanner(mapOf("inseminated" to "true", "seedBatch" to seedBatch)) })
+        ScanPanel("RFID самки", "RFID самки", onScan = { rfid -> onScan(rfid, mapOf("inseminated" to "true", "seedBatch" to seedBatch)) }, onOpenScanner = { onOpenRfidScanner(mapOf("inseminated" to "true", "seedBatch" to seedBatch)) }, initialRfid = task.result.scannedRfid)
         ProblemAndMediaControls(onPhoto, onVideo, onVoice, onComment, task.result.attachments)
         ExecutionEvidencePanel(task)
     }
@@ -26,7 +26,7 @@ fun PalpationScreen(task: MobileTask, onBack: () -> Unit, onBegin: () -> Unit, o
     var result by remember { mutableStateOf("Сукрольная") }
     TaskExecutionScaffold(task, onBack, onBegin, onComplete, onSkip, onChecklistDone, onChecklistProblem, onChecklistSkip, allowRootComplete = false, canEdit = canEdit) {
         MesCard { Text("Результат пальпации", fontWeight = FontWeight.Bold); Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) { listOf("Сукрольная", "Не сукрольная", "Сомнительно").forEach { FilterChip(selected = result == it, onClick = { result = it; onValue("palpationResult", it) }, label = { Text(it) }) } } }
-        ScanPanel("RFID самки", "RFID", onScan = { rfid -> onScan(rfid, mapOf("palpationResult" to result)) }, onOpenScanner = { onOpenRfidScanner(mapOf("palpationResult" to result)) })
+        ScanPanel("RFID самки", "RFID", onScan = { rfid -> onScan(rfid, mapOf("palpationResult" to result)) }, onOpenScanner = { onOpenRfidScanner(mapOf("palpationResult" to result)) }, initialRfid = task.result.scannedRfid)
         ProblemAndMediaControls(onPhoto, onVideo, onVoice, onComment, task.result.attachments)
         ExecutionEvidencePanel(task)
     }
@@ -37,7 +37,7 @@ fun WeighingScreen(task: MobileTask, onBack: () -> Unit, onBegin: () -> Unit, on
     var weight by remember { mutableStateOf("3.45") }
     TaskExecutionScaffold(task, onBack, onBegin, onComplete, onSkip, onChecklistDone, onChecklistProblem, onChecklistSkip, allowRootComplete = false, canEdit = canEdit) {
         MesCard { Text("Взвешивание", fontWeight = FontWeight.Bold); OutlinedTextField(weight, { weight = it; onValue("weight", it) }, Modifier.fillMaxWidth(), label = { Text("Вес, кг") }); OutlinedButton(onClick = { weight = "3.${(10..90).random()}"; onValue("weight", weight) }, Modifier.fillMaxWidth()) { Text("Mock Bluetooth-весы") } }
-        ScanPanel("RFID кролика", "RFID", onScan = { rfid -> onScan(rfid, mapOf("weight" to weight)) }, onOpenScanner = { onOpenRfidScanner(mapOf("weight" to weight)) })
+        ScanPanel("RFID кролика", "RFID", onScan = { rfid -> onScan(rfid, mapOf("weight" to weight)) }, onOpenScanner = { onOpenRfidScanner(mapOf("weight" to weight)) }, initialRfid = task.result.scannedRfid)
         ProblemAndMediaControls(onPhoto, onVideo, onVoice, onComment, task.result.attachments)
         ExecutionEvidencePanel(task)
     }
@@ -49,7 +49,7 @@ fun CageOperationScreen(title: String, task: MobileTask, fieldsTitle: String, on
     var number by remember { mutableStateOf("0") }
     TaskExecutionScaffold(task, onBack, onBegin, onComplete, onSkip, onChecklistDone, onChecklistProblem, onChecklistSkip, allowRootComplete = false, canEdit = canEdit) {
         MesCard { Text(fieldsTitle, fontWeight = FontWeight.Bold); Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) { Text("Готово / норма"); Switch(ok, { ok = it; onValue("ok", it.toString()) }) }; OutlinedTextField(number, { number = it; onValue("count", it) }, Modifier.fillMaxWidth(), label = { Text("Количество / показатель") }) }
-        CageScanPanel(title, onScan = { rfid -> onScan(rfid, mapOf("ok" to ok.toString(), "count" to number)) }, onOpenScanner = { onOpenRfidScanner(mapOf("ok" to ok.toString(), "count" to number)) })
+        CageScanPanel(title, onScan = { rfid -> onScan(rfid, mapOf("ok" to ok.toString(), "count" to number)) }, onOpenScanner = { onOpenRfidScanner(mapOf("ok" to ok.toString(), "count" to number)) }, initialRfid = task.result.scannedRfid)
         ProblemAndMediaControls(onPhoto, onVideo, onVoice, onComment, task.result.attachments)
         ExecutionEvidencePanel(task)
     }
