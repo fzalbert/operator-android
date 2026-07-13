@@ -11,6 +11,7 @@ import androidx.compose.material.icons.automirrored.filled.Assignment
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -21,15 +22,21 @@ import com.rabbitmes.mobile.domain.*
 import ru.profikrol.operator.uikit.theme.mobileSuccessGreen
 
 private val MesWarning = Color(0xFFE98500)
+val LocalMesCardBorderEnabled = compositionLocalOf { true }
 
 @Composable
-fun MesCard(modifier: Modifier = Modifier, onClick: (() -> Unit)? = null, content: @Composable ColumnScope.() -> Unit) {
+fun MesCard(
+    modifier: Modifier = Modifier,
+    onClick: (() -> Unit)? = null,
+    showBorder: Boolean = LocalMesCardBorderEnabled.current,
+    content: @Composable ColumnScope.() -> Unit,
+) {
     val clickable = if (onClick != null) modifier.clickable { onClick() } else modifier
     Card(
         clickable.padding(horizontal = 14.dp, vertical = 8.dp).fillMaxWidth(),
         shape = RoundedCornerShape(20.dp),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
+        border = if (showBorder) BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant) else null,
     ) {
         Column(Modifier.padding(16.dp), content = content)
     }

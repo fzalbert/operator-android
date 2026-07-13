@@ -78,7 +78,9 @@ fun TaskExecutionScaffold(
                     Spacer(Modifier.height(10.dp))
                 }
                 if (canEdit) {
-                    bottom()
+                    CompositionLocalProvider(LocalMesCardBorderEnabled provides false) {
+                        bottom()
+                    }
                     Spacer(Modifier.height(10.dp))
                     val pendingItems = task.checklist.count { it.status == ChecklistStatus.PENDING }
                     if (allowRootComplete) {
