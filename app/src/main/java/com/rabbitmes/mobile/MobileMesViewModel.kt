@@ -113,7 +113,8 @@ class MobileMesViewModel @Inject constructor(
     fun onLoggedInFromSession() {
         val role = sessionStore.currentUser?.role
         currentEmployee = when (role) {
-            UserRole.Technologist -> employees.first { it.role == RoleId.CHIEF_TECHNOLOGIST }
+            UserRole.Technologist,
+            UserRole.SuperAdmin -> employees.first { it.role == RoleId.CHIEF_TECHNOLOGIST }
             UserRole.Operator, null -> employees.first { it.role == RoleId.OPERATOR }
         }
         shift = ShiftState(currentEmployee.id)
@@ -139,6 +140,8 @@ class MobileMesViewModel @Inject constructor(
         }
 
         currentEmployee = when {
+            authLogin.startsWith("admin", ignoreCase = true) -> employees.first { it.role == RoleId.CHIEF_TECHNOLOGIST }
+            authLogin.startsWith("super", ignoreCase = true) -> employees.first { it.role == RoleId.CHIEF_TECHNOLOGIST }
             authLogin.startsWith("tech", ignoreCase = true) -> employees.first { it.role == RoleId.CHIEF_TECHNOLOGIST }
             authLogin.startsWith("mech", ignoreCase = true) -> employees.first { it.role == RoleId.CHIEF_MECHANIC }
             else -> employees.first { it.role == RoleId.OPERATOR }

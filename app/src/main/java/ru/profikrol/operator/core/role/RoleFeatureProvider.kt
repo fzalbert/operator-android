@@ -27,7 +27,8 @@ class RoleFeatureProvider @Inject constructor(
 ) {
     fun current(): RoleFeatureFactory = when (sessionStore.currentUser?.role) {
         UserRole.Operator -> operator
-        UserRole.Technologist -> technologist
+        UserRole.Technologist,
+        UserRole.SuperAdmin -> technologist
         null -> EmptyFeatureFactory
     }
 }

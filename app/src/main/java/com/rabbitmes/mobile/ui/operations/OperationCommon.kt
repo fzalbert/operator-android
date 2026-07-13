@@ -269,13 +269,12 @@ fun ProblemAndMediaControls(
     onPhoto: (String) -> Unit,
     onVideo: (String) -> Unit,
     onVoice: (String) -> Unit,
-    onComment: (String) -> Unit,
-    existingAttachments: List<MediaAttachment> = emptyList()
+    onComment: (String) -> Unit
 ) {
     val context = LocalContext.current
     var comment by remember { mutableStateOf("") }
     MesCard {
-        Text("Замечания и вложения", fontWeight = FontWeight.Bold)
+        Text("Замечания", fontWeight = FontWeight.Bold)
         Spacer(Modifier.height(12.dp))
         OutlinedTextField(comment, { comment = it; onComment(it) }, Modifier.fillMaxWidth(), label = { Text("Комментарий исполнителя") })
         Spacer(Modifier.height(12.dp))
@@ -283,16 +282,6 @@ fun ProblemAndMediaControls(
             OutlinedButton(onClick = { openCaptureIntent(context, AttachmentType.PHOTO); onPhoto("photo-${System.currentTimeMillis()}.jpg") }, Modifier.weight(1f)) { Text("📷 Фото") }
             OutlinedButton(onClick = { openCaptureIntent(context, AttachmentType.VIDEO); onVideo("video-${System.currentTimeMillis()}.mp4") }, Modifier.weight(1f)) { Text("🎥 Видео") }
             OutlinedButton(onClick = { openCaptureIntent(context, AttachmentType.VOICE); onVoice("voice-${System.currentTimeMillis()}.m4a") }, Modifier.weight(1f)) { Text("🎤 Голос") }
-        }
-        if (existingAttachments.isNotEmpty()) {
-            Spacer(Modifier.height(10.dp))
-            Text("Вложения", fontWeight = FontWeight.SemiBold)
-            existingAttachments.forEach { attachment ->
-                Row(Modifier.fillMaxWidth().padding(vertical = 4.dp), horizontalArrangement = Arrangement.SpaceBetween) {
-                    Text("${attachment.type.emoji} ${attachment.name}")
-                    StatusBadge(if (attachment.uploaded) "Загружено" else "Оффлайн", if (attachment.uploaded) mobileSuccessGreen else Color(0xFFE98500))
-                }
-            }
         }
     }
 }

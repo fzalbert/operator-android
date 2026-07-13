@@ -15,6 +15,7 @@ import kotlin.coroutines.cancellation.CancellationException
  * Заглушка для авторизации. Имитирует сетевой запрос с задержкой.
  *
  * Правила демо:
+ *  - логин похож на супер-админа → роль SuperAdmin
  *  - логин похож на технолога → роль Technologist
  *  - всё остальное непустое → роль Operator
  *  - логин == "fail" → ошибка InvalidCredentials (для проверки UI ошибки)
@@ -33,14 +34,16 @@ class FakeAuthRepository @Inject constructor(
             }
 
             val normalizedLogin = login.trim().lowercase()
-            val role = if (normalizedLogin.startsWith("c") ||
-                normalizedLogin.startsWith("technolog") ||
-                normalizedLogin.startsWith("тех") ||
-                normalizedLogin.contains("технолог")
-            ) {
-                UserRole.Technologist
-            } else {
-                UserRole.Operator
+            val role = when {
+                normalizedLogin.startsWith("admin") ||
+                    normalizedLogin.startsWith("super") ||
+                    normalizedLogin.startsWith("root") ||
+                    normalizedLogin.contains("админ") -> UserRole.SuperAdmin
+                normalizedLogin.startsWith("c") ||
+                    normalizedLogin.startsWith("technolog") ||
+                    normalizedLogin.startsWith("тех") ||
+                    normalizedLogin.contains("технолог") -> UserRole.Technologist
+                else -> UserRole.Operator
             }
 
             val user = User(

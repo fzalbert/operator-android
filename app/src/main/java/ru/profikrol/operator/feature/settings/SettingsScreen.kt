@@ -105,6 +105,7 @@ private fun SettingsContent(
 private fun UserRole.displayString(): String = when (this) {
     UserRole.Operator -> stringResource(R.string.role_operator)
     UserRole.Technologist -> stringResource(R.string.role_technologist)
+    UserRole.SuperAdmin -> stringResource(R.string.role_super_admin)
 }
 
 // ---------- Previews ----------

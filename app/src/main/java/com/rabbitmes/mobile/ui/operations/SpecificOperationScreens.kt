@@ -16,7 +16,7 @@ fun InseminationScreen(task: MobileTask, scannedRfid: String?, onBack: () -> Uni
     TaskExecutionScaffold(task, onBack, onBegin, onComplete, onSkip, onChecklistDone, onChecklistProblem, onChecklistSkip, allowRootComplete = false, canEdit = canEdit) {
         MesCard { Text("Осеменение", fontWeight = FontWeight.Bold); OutlinedTextField(seedBatch, { seedBatch = it; onValue("seedBatch", it) }, Modifier.fillMaxWidth(), label = { Text("Партия семени") }); Text("Сканируйте RFID самки. После подтверждения пункт чек-листа закрывается автоматически.") }
         ScanPanel("RFID самки", "RFID самки", onScan = { rfid -> onScan(rfid, mapOf("inseminated" to "true", "seedBatch" to seedBatch)) }, onOpenScanner = { onOpenRfidScanner(mapOf("inseminated" to "true", "seedBatch" to seedBatch)) }, initialRfid = scannedRfid)
-        ProblemAndMediaControls(onPhoto, onVideo, onVoice, onComment, task.result.attachments)
+        ProblemAndMediaControls(onPhoto, onVideo, onVoice, onComment)
         ExecutionEvidencePanel(task)
     }
 }
@@ -27,7 +27,7 @@ fun PalpationScreen(task: MobileTask, scannedRfid: String?, onBack: () -> Unit, 
     TaskExecutionScaffold(task, onBack, onBegin, onComplete, onSkip, onChecklistDone, onChecklistProblem, onChecklistSkip, allowRootComplete = false, canEdit = canEdit) {
         MesCard { Text("Результат пальпации", fontWeight = FontWeight.Bold); Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) { listOf("Сукрольная", "Не сукрольная", "Сомнительно").forEach { FilterChip(selected = result == it, onClick = { result = it; onValue("palpationResult", it) }, label = { Text(it) }) } } }
         ScanPanel("RFID самки", "RFID", onScan = { rfid -> onScan(rfid, mapOf("palpationResult" to result)) }, onOpenScanner = { onOpenRfidScanner(mapOf("palpationResult" to result)) }, initialRfid = scannedRfid)
-        ProblemAndMediaControls(onPhoto, onVideo, onVoice, onComment, task.result.attachments)
+        ProblemAndMediaControls(onPhoto, onVideo, onVoice, onComment)
         ExecutionEvidencePanel(task)
     }
 }
@@ -38,7 +38,7 @@ fun WeighingScreen(task: MobileTask, scannedRfid: String?, onBack: () -> Unit, o
     TaskExecutionScaffold(task, onBack, onBegin, onComplete, onSkip, onChecklistDone, onChecklistProblem, onChecklistSkip, allowRootComplete = false, canEdit = canEdit) {
         MesCard { Text("Взвешивание", fontWeight = FontWeight.Bold); OutlinedTextField(weight, { weight = it; onValue("weight", it) }, Modifier.fillMaxWidth(), label = { Text("Вес, кг") }); OutlinedButton(onClick = { weight = "3.${(10..90).random()}"; onValue("weight", weight) }, Modifier.fillMaxWidth()) { Text("Mock Bluetooth-весы") } }
         ScanPanel("RFID кролика", "RFID", onScan = { rfid -> onScan(rfid, mapOf("weight" to weight)) }, onOpenScanner = { onOpenRfidScanner(mapOf("weight" to weight)) }, initialRfid = scannedRfid)
-        ProblemAndMediaControls(onPhoto, onVideo, onVoice, onComment, task.result.attachments)
+        ProblemAndMediaControls(onPhoto, onVideo, onVoice, onComment)
         ExecutionEvidencePanel(task)
     }
 }
@@ -50,7 +50,7 @@ fun CageOperationScreen(title: String, task: MobileTask, scannedRfid: String?, f
     TaskExecutionScaffold(task, onBack, onBegin, onComplete, onSkip, onChecklistDone, onChecklistProblem, onChecklistSkip, allowRootComplete = false, canEdit = canEdit) {
         MesCard { Text(fieldsTitle, fontWeight = FontWeight.Bold); Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) { Text("Готово / норма"); Switch(ok, { ok = it; onValue("ok", it.toString()) }) }; OutlinedTextField(number, { number = it; onValue("count", it) }, Modifier.fillMaxWidth(), label = { Text("Количество / показатель") }) }
         CageScanPanel(title, onScan = { rfid -> onScan(rfid, mapOf("ok" to ok.toString(), "count" to number)) }, onOpenScanner = { onOpenRfidScanner(mapOf("ok" to ok.toString(), "count" to number)) }, initialRfid = scannedRfid)
-        ProblemAndMediaControls(onPhoto, onVideo, onVoice, onComment, task.result.attachments)
+        ProblemAndMediaControls(onPhoto, onVideo, onVoice, onComment)
         ExecutionEvidencePanel(task)
     }
 }
@@ -59,7 +59,7 @@ fun CageOperationScreen(title: String, task: MobileTask, scannedRfid: String?, f
 fun HangarGenericOperationScreen(task: MobileTask, definition: OperationDefinition, onBack: () -> Unit, onBegin: () -> Unit, onValue: (String,String) -> Unit, onPhoto: (String)->Unit, onVideo: (String)->Unit, onVoice: (String)->Unit, onComment: (String)->Unit, onChecklistDone: (String)->Unit, onChecklistProblem: (String,String,String)->Unit, onChecklistSkip: (String,String)->Unit, onComplete: () -> Unit, onSkip: (String)->Unit, canEdit: Boolean = true) {
     TaskExecutionScaffold(task, onBack, onBegin, onComplete, onSkip, onChecklistDone, onChecklistProblem, onChecklistSkip, canEdit = canEdit) {
         MesCard { Text(definition.type.title, fontWeight = FontWeight.Bold); Text("Заполните обязательные данные по операции."); GenericFields(definition, onValue) }
-        ProblemAndMediaControls(onPhoto, onVideo, onVoice, onComment, task.result.attachments)
+        ProblemAndMediaControls(onPhoto, onVideo, onVoice, onComment)
         ExecutionEvidencePanel(task)
     }
 }
@@ -70,7 +70,7 @@ fun LightAutomationTaskScreen(task: MobileTask, onBack: () -> Unit, onBegin: () 
     var mode by remember { mutableStateOf("База 14:00") }
     TaskExecutionScaffold(task, onBack, onBegin, onComplete, onSkip, onChecklistDone, onChecklistProblem, onChecklistSkip, canEdit = canEdit) {
         MesCard { Text("Управление освещением", fontWeight = FontWeight.Bold); OutlinedTextField(hours, { hours = it; onValue("lightHours", it) }, Modifier.fillMaxWidth(), label = { Text("Длительность светового дня, ч") }); Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) { listOf("База 14:00", "Стимуляция 22:00").forEach { FilterChip(selected = mode == it, onClick = { mode = it; onValue("mode", it) }, label = { Text(it) }) } } }
-        ProblemAndMediaControls(onPhoto, onVideo, onVoice, onComment, task.result.attachments)
+        ProblemAndMediaControls(onPhoto, onVideo, onVoice, onComment)
         ExecutionEvidencePanel(task)
     }
 }
@@ -80,7 +80,7 @@ fun FeedOperationScreen(task: MobileTask, onBack: () -> Unit, onBegin: () -> Uni
     var feed by remember { mutableStateOf("Лактация") }
     TaskExecutionScaffold(task, onBack, onBegin, onComplete, onSkip, onChecklistDone, onChecklistProblem, onChecklistSkip, canEdit = canEdit) {
         MesCard { Text("Подача / проверка корма", fontWeight = FontWeight.Bold); Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) { listOf("Откорм", "Отъем", "Лактация").forEach { FilterChip(selected = feed == it, onClick = { feed = it; onValue("feedType", it) }, label = { Text(it) }) } }; Text("Уставка применяется к ангару задачи, не к справочнику оборудования.") }
-        ProblemAndMediaControls(onPhoto, onVideo, onVoice, onComment, task.result.attachments)
+        ProblemAndMediaControls(onPhoto, onVideo, onVoice, onComment)
         ExecutionEvidencePanel(task)
     }
 }
