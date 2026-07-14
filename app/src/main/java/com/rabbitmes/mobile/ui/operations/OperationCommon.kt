@@ -64,6 +64,14 @@ fun TaskExecutionScaffold(
             }
         }
         item {
+            ChecklistExecutionBlock(
+                items = task.checklist,
+                onDone = onChecklistDone,
+                onProblem = onChecklistProblem,
+                onSkip = onChecklistSkip
+            )
+        }
+        item {
             MesCard {
                 if (!canEdit) {
                     StatusBadge("Только просмотр", MaterialTheme.colorScheme.onSurfaceVariant)
@@ -97,14 +105,6 @@ fun TaskExecutionScaffold(
                     OutlinedButton(onClick = { onSkip(skipReason) }, Modifier.fillMaxWidth()) { Text("Невозможно выполнить всю задачу") }
                 }
             }
-        }
-        item {
-            ChecklistExecutionBlock(
-                items = task.checklist,
-                onDone = onChecklistDone,
-                onProblem = onChecklistProblem,
-                onSkip = onChecklistSkip
-            )
         }
     }
 }
