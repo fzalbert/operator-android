@@ -51,8 +51,12 @@ data class CageRow(val id: String, val number: Int, val cages: List<Cage>)
 data class Cage(val id: String, val rowNumber: Int, val number: Int, val code: String, val rfid: String, val hasNest: Boolean, val occupied: Boolean)
 data class Rabbit(val id: String, val rfid: String, val earNumber: String, val cageId: String, val sex: String, val ageDays: Int, val lastWeightKg: Double, val lastInseminationDaysAgo: Int?, val lastPalpation: String?, val lactationStatus: String, val healthStatus: String)
 
-enum class FieldType { TEXT, NUMBER, BOOLEAN, SELECT, PHOTO, VIDEO, VOICE, TEMPERATURE, HOURS, FEED_TYPE }
-enum class AttachmentType(val title: String, val emoji: String) { PHOTO("Фото", "📷"), VIDEO("Видео", "🎥"), VOICE("Голос", "🎤") }
+enum class FieldType { TEXT, NUMBER, BOOLEAN, SELECT, PHOTO, VIDEO, FILE, TEMPERATURE, HOURS, FEED_TYPE }
+enum class AttachmentType(val title: String, val emoji: String) {
+    PHOTO("Фото", "📷"),
+    VIDEO("Видео", "🎥"),
+    FILE("Файл", "📎"),
+}
 data class MediaAttachment(val id: String, val type: AttachmentType, val name: String, val localUri: String, val createdAt: String, val uploaded: Boolean = false)
 data class OperationField(val id: String, val title: String, val type: FieldType, val required: Boolean = false, val unit: String? = null, val options: List<String> = emptyList(), val placeholder: String = "")
 data class OperationDefinition(val type: OperationType, val targetType: TargetType, val requiresScan: Boolean, val completionLabel: String, val fields: List<OperationField>, val allowedRoles: List<RoleId>, val requiresAcceptanceDefault: Boolean = false)
@@ -61,7 +65,6 @@ data class ExecutionResult(
     val values: Map<String, String> = emptyMap(),
     val photos: List<String> = emptyList(),
     val videos: List<String> = emptyList(),
-    val voiceNotes: List<String> = emptyList(),
     val attachments: List<MediaAttachment> = emptyList(),
     val comment: String = "",
     val scannedRfid: String? = null,

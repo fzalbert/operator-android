@@ -1,8 +1,5 @@
 package com.rabbitmes.mobile.ui.screens
 
-import android.content.ActivityNotFoundException
-import android.content.Intent
-import android.provider.MediaStore
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -10,7 +7,6 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.rabbitmes.mobile.domain.*
@@ -141,24 +137,19 @@ private fun AcceptanceItemCard(
 
 @Composable
 private fun ReviewAttachmentButtons(attachments: List<MediaAttachment>, onAttachments: (List<MediaAttachment>) -> Unit) {
-    val context = LocalContext.current
-    fun create(type: AttachmentType, ext: String): MediaAttachment {
+    AttachmentPickerButtons(onAttachment = { type, name, uri ->
         val time = System.currentTimeMillis()
-        return MediaAttachment("review-media-$time", type, "review-$time.$ext", "mock://review-$time.$ext", "now", uploaded = false)
-    }
-    fun open(type: AttachmentType) {
-        val intent = when (type) {
-            AttachmentType.PHOTO -> Intent(MediaStore.ACTION_IMAGE_CAPTURE)
-            AttachmentType.VIDEO -> Intent(MediaStore.ACTION_VIDEO_CAPTURE)
-            AttachmentType.VOICE -> Intent(MediaStore.Audio.Media.RECORD_SOUND_ACTION)
-        }
-        try { context.startActivity(intent) } catch (_: ActivityNotFoundException) { }
-    }
-    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
-        OutlinedButton(onClick = { open(AttachmentType.PHOTO); onAttachments(attachments + create(AttachmentType.PHOTO, "jpg")) }, Modifier.weight(1f)) { Text("📷 Фото") }
-        OutlinedButton(onClick = { open(AttachmentType.VIDEO); onAttachments(attachments + create(AttachmentType.VIDEO, "mp4")) }, Modifier.weight(1f)) { Text("🎥 Видео") }
-        OutlinedButton(onClick = { open(AttachmentType.VOICE); onAttachments(attachments + create(AttachmentType.VOICE, "m4a")) }, Modifier.weight(1f)) { Text("🎤 Голос") }
-    }
+        onAttachments(
+            attachments + MediaAttachment(
+                id = "review-media-$time",
+                type = type,
+                name = name,
+                localUri = uri,
+                createdAt = "now",
+                uploaded = false,
+            )
+        )
+    })
     if (attachments.isNotEmpty()) {
         Spacer(Modifier.height(8.dp))
         attachments.forEach { Text("${it.type.emoji} ${it.name}", color = MaterialTheme.colorScheme.onSurfaceVariant) }

@@ -202,17 +202,17 @@ class MobileMesViewModel @Inject constructor(
     fun beginTask(taskId: String) = updateTask(taskId) { it.copy(status = TaskStatus.IN_PROGRESS).markOffline() }
 
     fun updateTaskValue(taskId: String, key: String, value: String) = updateTask(taskId) { it.copy(result = it.result.copy(values = it.result.values + (key to value))).markOffline() }
-    private fun media(type: AttachmentType, label: String) = MediaAttachment(
+    private fun media(type: AttachmentType, label: String, localUri: String) = MediaAttachment(
         id = "media-${System.currentTimeMillis()}",
         type = type,
         name = label,
-        localUri = "mock://$label",
+        localUri = localUri,
         createdAt = "now",
         uploaded = false
     )
-    fun addPhoto(taskId: String, label: String) = updateTask(taskId) { val attachment = media(AttachmentType.PHOTO, label); it.copy(result = it.result.copy(photos = it.result.photos + label, attachments = it.result.attachments + attachment)).markOffline() }
-    fun addVideo(taskId: String, label: String) = updateTask(taskId) { val attachment = media(AttachmentType.VIDEO, label); it.copy(result = it.result.copy(videos = it.result.videos + label, attachments = it.result.attachments + attachment)).markOffline() }
-    fun addVoice(taskId: String, label: String) = updateTask(taskId) { val attachment = media(AttachmentType.VOICE, label); it.copy(result = it.result.copy(voiceNotes = it.result.voiceNotes + label, attachments = it.result.attachments + attachment)).markOffline() }
+    fun addPhoto(taskId: String, label: String, localUri: String) = updateTask(taskId) { val attachment = media(AttachmentType.PHOTO, label, localUri); it.copy(result = it.result.copy(photos = it.result.photos + label, attachments = it.result.attachments + attachment)).markOffline() }
+    fun addVideo(taskId: String, label: String, localUri: String) = updateTask(taskId) { val attachment = media(AttachmentType.VIDEO, label, localUri); it.copy(result = it.result.copy(videos = it.result.videos + label, attachments = it.result.attachments + attachment)).markOffline() }
+    fun addFile(taskId: String, label: String, localUri: String) = updateTask(taskId) { val attachment = media(AttachmentType.FILE, label, localUri); it.copy(result = it.result.copy(attachments = it.result.attachments + attachment)).markOffline() }
     fun addComment(taskId: String, comment: String) = updateTask(taskId) { it.copy(result = it.result.copy(comment = comment)).markOffline() }
 
     fun scanRfidAndCompleteItem(taskId: String, rfid: String, values: Map<String, String> = emptyMap()) {

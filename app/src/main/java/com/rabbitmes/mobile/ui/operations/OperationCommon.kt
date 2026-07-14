@@ -1,8 +1,5 @@
 package com.rabbitmes.mobile.ui.operations
 
-import android.content.ActivityNotFoundException
-import android.content.Intent
-import android.provider.MediaStore
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material.icons.Icons
@@ -18,19 +15,6 @@ import com.rabbitmes.mobile.data.MockRepository
 import com.rabbitmes.mobile.domain.*
 import com.rabbitmes.mobile.ui.components.*
 import ru.profikrol.operator.uikit.theme.mobileSuccessGreen
-
-private fun openCaptureIntent(context: android.content.Context, type: AttachmentType) {
-    val intent = when (type) {
-        AttachmentType.PHOTO -> Intent(MediaStore.ACTION_IMAGE_CAPTURE)
-        AttachmentType.VIDEO -> Intent(MediaStore.ACTION_VIDEO_CAPTURE)
-        AttachmentType.VOICE -> Intent(MediaStore.Audio.Media.RECORD_SOUND_ACTION)
-    }
-    try {
-        context.startActivity(intent)
-    } catch (_: ActivityNotFoundException) {
-        // В mock-прототипе все равно создаем локальное вложение, даже если на эмуляторе нет приложения камеры/диктофона.
-    }
-}
 
 @Composable
 fun TaskExecutionScaffold(
@@ -268,23 +252,24 @@ fun ChecklistExecutionBlock(
 
 @Composable
 fun ProblemAndMediaControls(
-    onPhoto: (String) -> Unit,
-    onVideo: (String) -> Unit,
-    onVoice: (String) -> Unit,
+    onPhoto: (String, String) -> Unit,
+    onVideo: (String, String) -> Unit,
+    onFile: (String, String) -> Unit,
     onComment: (String) -> Unit
 ) {
-    val context = LocalContext.current
     var comment by remember { mutableStateOf("") }
     MesCard {
         Text("Замечания", fontWeight = FontWeight.Bold)
         Spacer(Modifier.height(12.dp))
         OutlinedTextField(comment, { comment = it; onComment(it) }, Modifier.fillMaxWidth(), label = { Text("Комментарий исполнителя") })
         Spacer(Modifier.height(12.dp))
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
-            OutlinedButton(onClick = { openCaptureIntent(context, AttachmentType.PHOTO); onPhoto("photo-${System.currentTimeMillis()}.jpg") }, Modifier.weight(1f)) { Text("📷 Фото") }
-            OutlinedButton(onClick = { openCaptureIntent(context, AttachmentType.VIDEO); onVideo("video-${System.currentTimeMillis()}.mp4") }, Modifier.weight(1f)) { Text("🎥 Видео") }
-            OutlinedButton(onClick = { openCaptureIntent(context, AttachmentType.VOICE); onVoice("voice-${System.currentTimeMillis()}.m4a") }, Modifier.weight(1f)) { Text("🎤 Голос") }
-        }
+        AttachmentPickerButtons(onAttachment = { type, name, uri ->
+            when (type) {
+                AttachmentType.PHOTO -> onPhoto(name, uri)
+                AttachmentType.VIDEO -> onVideo(name, uri)
+                AttachmentType.FILE -> onFile(name, uri)
+            }
+        })
     }
 }
 
