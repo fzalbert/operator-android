@@ -13,6 +13,15 @@ import com.rabbitmes.mobile.domain.*
 import com.rabbitmes.mobile.ui.components.*
 import ru.profikrol.operator.uikit.theme.mobileSuccessGreen
 
+private val acceptanceProblemReasons = listOf(
+    "Работа не выполнена",
+    "Работа выполнена частично",
+    "Нарушено качество выполнения",
+    "Указаны неверные данные",
+    "Требуется повторная проверка",
+    "Другая причина",
+)
+
 @Composable
 fun AcceptanceQueueScreen(tasks: List<MobileTask>, onOpen: (String) -> Unit, onBack: () -> Unit, bottomBar: @Composable () -> Unit) {
     Scaffold(
@@ -102,7 +111,7 @@ private fun AcceptanceItemCard(
     onProblemToggle: (Boolean) -> Unit,
     onRemark: (String, String, List<MediaAttachment>) -> Unit
 ) {
-    var reason by remember { mutableStateOf("Не выполнено / дефект") }
+    var reason by remember { mutableStateOf(acceptanceProblemReasons.first()) }
     var comment by remember { mutableStateOf("") }
     var attachments by remember { mutableStateOf<List<MediaAttachment>>(emptyList()) }
     MesCard {
@@ -125,7 +134,13 @@ private fun AcceptanceItemCard(
             Surface(color = MaterialTheme.colorScheme.errorContainer, shape = MaterialTheme.shapes.medium, modifier = Modifier.fillMaxWidth()) {
                 Column(Modifier.padding(12.dp)) {
                     Text("Карточка проблемы", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onErrorContainer)
-                    OutlinedTextField(reason, { reason = it }, Modifier.fillMaxWidth(), label = { Text("Причина") })
+                    SelectionDropdown(
+                        value = reason,
+                        onValueChange = { reason = it },
+                        options = acceptanceProblemReasons,
+                        label = "Причина",
+                        modifier = Modifier.fillMaxWidth(),
+                    )
                     OutlinedTextField(comment, { comment = it }, Modifier.fillMaxWidth(), label = { Text("Комментарий") })
                     ReviewAttachmentButtons(attachments, onAttachments = { attachments = it })
                     OutlinedButton(onClick = { onRemark(reason, comment, attachments) }, Modifier.fillMaxWidth()) { Text("Сохранить проблему") }

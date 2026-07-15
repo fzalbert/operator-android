@@ -14,6 +14,22 @@ import com.rabbitmes.mobile.domain.*
 import com.rabbitmes.mobile.ui.components.*
 import ru.profikrol.operator.uikit.theme.mobileSuccessGreen
 
+private val taskSkipReasons = listOf(
+    "Нет доступа к объекту",
+    "Неисправно оборудование",
+    "Недостаточно материалов",
+    "Не хватает времени смены",
+    "Другая причина",
+)
+
+private val checklistIssueReasons = listOf(
+    "RFID не считывается",
+    "Животное отсутствует",
+    "Клетка или объект недоступны",
+    "Операцию невозможно выполнить",
+    "Другая причина",
+)
+
 @Composable
 fun TaskExecutionScaffold(
     task: MobileTask,
@@ -31,7 +47,7 @@ fun TaskExecutionScaffold(
     afterChecklist: @Composable ColumnScope.() -> Unit = {},
     bottom: @Composable ColumnScope.() -> Unit
 ) {
-    var skipReason by remember { mutableStateOf("Не удалось выполнить") }
+    var skipReason by remember { mutableStateOf(taskSkipReasons.first()) }
 
     val checklist: @Composable () -> Unit = {
         ChecklistExecutionBlock(
@@ -40,10 +56,11 @@ fun TaskExecutionScaffold(
             onProblem = onChecklistProblem,
             onSkip = onChecklistSkip,
             description = checklistDescription,
+            canEdit = canEdit,
         )
     }
 
-    val accessAndStart: @Composable ColumnScope.() -> Unit = {
+    val readonlyNotice: @Composable ColumnScope.() -> Unit = {
         if (!canEdit) {
             StatusBadge("Только просмотр", MaterialTheme.colorScheme.onSurfaceVariant)
             Spacer(Modifier.height(10.dp))
@@ -51,8 +68,11 @@ fun TaskExecutionScaffold(
                 "Эту задачу можно посмотреть, но взять в работу получится только после завершения предыдущей задачи.",
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
-            Spacer(Modifier.height(10.dp))
-        } else if (task.status == TaskStatus.NEW) {
+        }
+    }
+
+    val startControl: @Composable ColumnScope.() -> Unit = {
+        if (task.status == TaskStatus.NEW) {
             Button(onClick = onBegin, Modifier.fillMaxWidth()) { Text("Приступить") }
             Spacer(Modifier.height(10.dp))
         }
@@ -70,7 +90,13 @@ fun TaskExecutionScaffold(
             }
         }
         Spacer(Modifier.height(10.dp))
-        OutlinedTextField(skipReason, { skipReason = it }, Modifier.fillMaxWidth(), label = { Text("Причина если невозможно выполнить всю задачу") })
+        SelectionDropdown(
+            value = skipReason,
+            onValueChange = { skipReason = it },
+            options = taskSkipReasons,
+            label = "Причина, если невозможно выполнить всю задачу",
+            modifier = Modifier.fillMaxWidth(),
+        )
         OutlinedButton(onClick = { onSkip(skipReason) }, Modifier.fillMaxWidth()) { Text("Невозможно выполнить всю задачу") }
     }
 
@@ -90,13 +116,16 @@ fun TaskExecutionScaffold(
                 }
             }
         }
+        if (!canEdit) {
+            item { MesCard { readonlyNotice() } }
+        }
         if (!checklistAfterContent) {
             item { checklist() }
         }
-        item {
-            MesCard {
-                accessAndStart()
-                if (canEdit) {
+        if (canEdit) {
+            item {
+                MesCard {
+                    startControl()
                     CompositionLocalProvider(LocalMesCardBorderEnabled provides false) {
                         bottom()
                     }
@@ -243,6 +272,7 @@ fun ChecklistExecutionBlock(
     onProblem: (String, String, String) -> Unit,
     onSkip: (String, String) -> Unit,
     description: String? = null,
+    canEdit: Boolean = true,
 ) {
     var openedItemId by remember { mutableStateOf<String?>(null) }
     var showCompleted by remember { mutableStateOf(false) }
@@ -283,7 +313,7 @@ fun ChecklistExecutionBlock(
             }
         }
         if (isExpanded) visibleItems.forEach { item ->
-            var reason by remember(item.id) { mutableStateOf("Не выполнено") }
+            var reason by remember(item.id) { mutableStateOf(checklistIssueReasons.first()) }
             var comment by remember(item.id) { mutableStateOf("") }
             Surface(color = MaterialTheme.colorScheme.background, shape = MaterialTheme.shapes.medium, modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp)) {
                 Column(Modifier.padding(12.dp)) {
@@ -297,12 +327,20 @@ fun ChecklistExecutionBlock(
                         }
                         StatusBadge(item.status.title, when(item.status){ ChecklistStatus.DONE -> mobileSuccessGreen; ChecklistStatus.PROBLEM -> MaterialTheme.colorScheme.error; ChecklistStatus.SKIPPED -> MaterialTheme.colorScheme.onSurfaceVariant; ChecklistStatus.PENDING -> MaterialTheme.colorScheme.primary })
                     }
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
-                        OutlinedButton(onClick = { openedItemId = if (openedItemId == item.id) null else item.id }, modifier = Modifier.weight(1f)) { Text("Детали / проблема") }
+                    if (canEdit) {
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+                            OutlinedButton(onClick = { openedItemId = if (openedItemId == item.id) null else item.id }, modifier = Modifier.weight(1f)) { Text("Детали / проблема") }
+                        }
                     }
-                    if (openedItemId == item.id) {
+                    if (canEdit && openedItemId == item.id) {
                         Spacer(Modifier.height(8.dp))
-                        OutlinedTextField(reason, { reason = it }, Modifier.fillMaxWidth(), label = { Text("Причина проблемы/пропуска") })
+                        SelectionDropdown(
+                            value = reason,
+                            onValueChange = { reason = it },
+                            options = checklistIssueReasons,
+                            label = "Причина проблемы/пропуска",
+                            modifier = Modifier.fillMaxWidth(),
+                        )
                         OutlinedTextField(comment, { comment = it }, Modifier.fillMaxWidth(), label = { Text("Комментарий по объекту") })
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
                             OutlinedButton(onClick = { onProblem(item.id, reason, comment) }, modifier = Modifier.weight(1f)) { Text("Проблема") }
@@ -323,18 +361,27 @@ fun ProblemAndMediaControls(
     onComment: (String) -> Unit
 ) {
     var comment by remember { mutableStateOf("") }
+    var hasRemarks by remember { mutableStateOf(false) }
     MesCard {
-        Text("Замечания", fontWeight = FontWeight.Bold)
-        Spacer(Modifier.height(12.dp))
-        OutlinedTextField(comment, { comment = it; onComment(it) }, Modifier.fillMaxWidth(), label = { Text("Комментарий исполнителя") })
-        Spacer(Modifier.height(12.dp))
-        AttachmentPickerButtons(onAttachment = { type, name, uri ->
-            when (type) {
-                AttachmentType.PHOTO -> onPhoto(name, uri)
-                AttachmentType.VIDEO -> onVideo(name, uri)
-                AttachmentType.FILE -> onFile(name, uri)
-            }
-        })
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
+        ) {
+            Checkbox(checked = hasRemarks, onCheckedChange = { hasRemarks = it })
+            Text("Есть замечания", fontWeight = FontWeight.SemiBold)
+        }
+        if (hasRemarks) {
+            Spacer(Modifier.height(8.dp))
+            OutlinedTextField(comment, { comment = it; onComment(it) }, Modifier.fillMaxWidth(), label = { Text("Комментарий исполнителя") })
+            Spacer(Modifier.height(12.dp))
+            AttachmentPickerButtons(onAttachment = { type, name, uri ->
+                when (type) {
+                    AttachmentType.PHOTO -> onPhoto(name, uri)
+                    AttachmentType.VIDEO -> onVideo(name, uri)
+                    AttachmentType.FILE -> onFile(name, uri)
+                }
+            })
+        }
     }
 }
 
