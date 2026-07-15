@@ -4,11 +4,15 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.rabbitmes.mobile.data.MockRepository
 import com.rabbitmes.mobile.domain.*
 import com.rabbitmes.mobile.ui.components.MesCard
+
+private const val SHOW_BLUETOOTH_SCALE_BUTTON = false
 
 @Composable
 fun InseminationScreen(task: MobileTask, scannedRfid: String?, onBack: () -> Unit, onBegin: () -> Unit, onScan: (String, Map<String,String>) -> Unit, onOpenRfidScanner: (Map<String, String>) -> Unit, onValue: (String,String) -> Unit, onPhoto: (String,String)->Unit, onVideo: (String,String)->Unit, onFile: (String,String)->Unit, onComment: (String)->Unit, onChecklistDone: (String)->Unit, onChecklistProblem: (String,String,String)->Unit, onChecklistSkip: (String,String)->Unit, onComplete: () -> Unit, onSkip: (String)->Unit, onOpenAnimal: (String)->Unit, canEdit: Boolean = true) {
@@ -33,13 +37,114 @@ fun PalpationScreen(task: MobileTask, scannedRfid: String?, onBack: () -> Unit, 
 }
 
 @Composable
-fun WeighingScreen(task: MobileTask, scannedRfid: String?, onBack: () -> Unit, onBegin: () -> Unit, onScan: (String, Map<String,String>) -> Unit, onOpenRfidScanner: (Map<String, String>) -> Unit, onValue: (String,String) -> Unit, onPhoto: (String,String)->Unit, onVideo: (String,String)->Unit, onFile: (String,String)->Unit, onComment: (String)->Unit, onChecklistDone: (String)->Unit, onChecklistProblem: (String,String,String)->Unit, onChecklistSkip: (String,String)->Unit, onComplete: () -> Unit, onSkip: (String)->Unit, onOpenAnimal: (String)->Unit, canEdit: Boolean = true) {
-    var weight by remember { mutableStateOf("3.45") }
-    TaskExecutionScaffold(task, onBack, onBegin, onComplete, onSkip, onChecklistDone, onChecklistProblem, onChecklistSkip, allowRootComplete = false, canEdit = canEdit) {
-        MesCard { Text("Взвешивание", fontWeight = FontWeight.Bold); OutlinedTextField(weight, { weight = it; onValue("weight", it) }, Modifier.fillMaxWidth(), label = { Text("Вес, кг") }); OutlinedButton(onClick = { weight = "3.${(10..90).random()}"; onValue("weight", weight) }, Modifier.fillMaxWidth()) { Text("Mock Bluetooth-весы") } }
-        ScanPanel("RFID кролика", "RFID", onScan = { rfid -> onScan(rfid, mapOf("weight" to weight)) }, onOpenScanner = { onOpenRfidScanner(mapOf("weight" to weight)) }, initialRfid = scannedRfid)
-        ProblemAndMediaControls(onPhoto, onVideo, onFile, onComment)
-        ExecutionEvidencePanel(task)
+fun WeighingScreen(
+    task: MobileTask,
+    onBack: () -> Unit,
+    onBegin: () -> Unit,
+    onWeighingSaved: (String, Map<String, String>) -> Unit,
+    onPhoto: (String, String) -> Unit,
+    onVideo: (String, String) -> Unit,
+    onFile: (String, String) -> Unit,
+    onComment: (String) -> Unit,
+    onChecklistDone: (String) -> Unit,
+    onChecklistProblem: (String, String, String) -> Unit,
+    onChecklistSkip: (String, String) -> Unit,
+    onComplete: () -> Unit,
+    onSkip: (String) -> Unit,
+    canEdit: Boolean = true,
+) {
+    val pendingCages = task.checklist
+        .filter { it.status == ChecklistStatus.PENDING }
+        .mapNotNull { item -> MockRepository.cage(item.targetId)?.let { cage -> item to cage } }
+    var cageNumber by remember(task.id) { mutableStateOf(pendingCages.firstOrNull()?.second?.number?.toString().orEmpty()) }
+    var weightGrams by remember(task.id) { mutableStateOf("") }
+
+    LaunchedEffect(pendingCages.firstOrNull()?.first?.id) {
+        val currentCageStillPending = pendingCages.any { (_, cage) ->
+            cage.number.toString() == cageNumber.trim() || cage.code.equals(cageNumber.trim(), ignoreCase = true)
+        }
+        if (!currentCageStillPending) {
+            cageNumber = pendingCages.firstOrNull()?.second?.number?.toString().orEmpty()
+        }
+    }
+
+    val selected = pendingCages.firstOrNull { (_, cage) ->
+        cage.number.toString() == cageNumber.trim() || cage.code.equals(cageNumber.trim(), ignoreCase = true)
+    }
+    val weightValue = weightGrams.toIntOrNull()
+
+    TaskExecutionScaffold(
+        task = task,
+        onBack = onBack,
+        onBegin = onBegin,
+        onComplete = onComplete,
+        onSkip = onSkip,
+        onChecklistDone = onChecklistDone,
+        onChecklistProblem = onChecklistProblem,
+        onChecklistSkip = onChecklistSkip,
+        allowRootComplete = false,
+        canEdit = canEdit,
+        checklistAfterContent = true,
+        checklistDescription = "В списке указаны клетки контрольной группы. После сохранения веса соответствующая клетка автоматически переходит в статус «Готово».",
+        afterChecklist = {
+            ProblemAndMediaControls(onPhoto, onVideo, onFile, onComment)
+            ExecutionEvidencePanel(task)
+        },
+    ) {
+        MesCard {
+            Text("Взвешивание", fontWeight = FontWeight.Bold)
+            Text("Укажите номер клетки и вес контрольной группы.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+            OutlinedTextField(
+                value = cageNumber,
+                onValueChange = { cageNumber = it.filter(Char::isDigit) },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 4.dp),
+                label = { Text("Номер клетки") },
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                singleLine = true,
+            )
+            selected?.second?.let { cage ->
+                Text("Ряд ${cage.rowNumber} · клетка ${cage.number}", color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+            if (cageNumber.isNotBlank() && selected == null) {
+                Text("Клетки с таким номером нет среди ожидающих взвешивания.", color = MaterialTheme.colorScheme.error)
+            }
+            OutlinedTextField(
+                value = weightGrams,
+                onValueChange = { weightGrams = it.filter(Char::isDigit) },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 8.dp),
+                label = { Text("Вес, г") },
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                singleLine = true,
+            )
+            if (SHOW_BLUETOOTH_SCALE_BUTTON) {
+                OutlinedButton(
+                    onClick = { weightGrams = (3100..3900).random().toString() },
+                    modifier = Modifier.fillMaxWidth(),
+                ) { Text("Mock Bluetooth-весы") }
+            }
+            Button(
+                onClick = {
+                    val (item, cage) = selected ?: return@Button
+                    onWeighingSaved(
+                        item.id,
+                        mapOf(
+                            "Номер клетки" to cage.number.toString(),
+                            "Ряд" to cage.rowNumber.toString(),
+                            "Вес, г" to weightGrams,
+                        ),
+                    )
+                    weightGrams = ""
+                },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 12.dp),
+                enabled = task.status != TaskStatus.NEW && selected != null && weightValue != null && weightValue > 0,
+            ) { Text("Сохранить вес") }
+        }
     }
 }
 
@@ -86,11 +191,11 @@ fun FeedOperationScreen(task: MobileTask, onBack: () -> Unit, onBegin: () -> Uni
 }
 
 @Composable
-fun OperationScreenFactory(task: MobileTask, definition: OperationDefinition, onBack: () -> Unit, onBegin: () -> Unit, scannedRfid: String? = null, onScan: (String, Map<String,String>) -> Unit, onOpenRfidScanner: (Map<String, String>) -> Unit, onValue: (String,String) -> Unit, onPhoto: (String,String)->Unit, onVideo: (String,String)->Unit, onFile: (String,String)->Unit, onComment: (String)->Unit, onChecklistDone: (String)->Unit, onChecklistProblem: (String,String,String)->Unit, onChecklistSkip: (String,String)->Unit, onComplete: () -> Unit, onSkip: (String)->Unit, onOpenAnimal: (String)->Unit, canEdit: Boolean = true) {
+fun OperationScreenFactory(task: MobileTask, definition: OperationDefinition, onBack: () -> Unit, onBegin: () -> Unit, scannedRfid: String? = null, onScan: (String, Map<String,String>) -> Unit, onOpenRfidScanner: (Map<String, String>) -> Unit, onValue: (String,String) -> Unit, onPhoto: (String,String)->Unit, onVideo: (String,String)->Unit, onFile: (String,String)->Unit, onComment: (String)->Unit, onChecklistDone: (String)->Unit, onChecklistDoneWithValues: (String, Map<String, String>)->Unit, onChecklistProblem: (String,String,String)->Unit, onChecklistSkip: (String,String)->Unit, onComplete: () -> Unit, onSkip: (String)->Unit, onOpenAnimal: (String)->Unit, canEdit: Boolean = true) {
     when (task.operationType) {
         OperationType.INSEMINATION -> InseminationScreen(task, scannedRfid, onBack, onBegin, onScan, onOpenRfidScanner, onValue, onPhoto, onVideo, onFile, onComment, onChecklistDone, onChecklistProblem, onChecklistSkip, onComplete, onSkip, onOpenAnimal, canEdit)
         OperationType.PALPATION -> PalpationScreen(task, scannedRfid, onBack, onBegin, onScan, onOpenRfidScanner, onValue, onPhoto, onVideo, onFile, onComment, onChecklistDone, onChecklistProblem, onChecklistSkip, onComplete, onSkip, onOpenAnimal, canEdit)
-        OperationType.WEIGHING -> WeighingScreen(task, scannedRfid, onBack, onBegin, onScan, onOpenRfidScanner, onValue, onPhoto, onVideo, onFile, onComment, onChecklistDone, onChecklistProblem, onChecklistSkip, onComplete, onSkip, onOpenAnimal, canEdit)
+        OperationType.WEIGHING -> WeighingScreen(task, onBack, onBegin, onChecklistDoneWithValues, onPhoto, onVideo, onFile, onComment, onChecklistDone, onChecklistProblem, onChecklistSkip, onComplete, onSkip, canEdit)
         OperationType.NEST_PREPARATION -> CageOperationScreen("RFID клетки", task, scannedRfid, "Подготовка гнезда", onBack, onBegin, onScan, onOpenRfidScanner, onValue, onPhoto, onVideo, onFile, onComment, onChecklistDone, onChecklistProblem, onChecklistSkip, onComplete, onSkip, canEdit)
         OperationType.NEST_CONTROL -> CageOperationScreen("RFID клетки", task, scannedRfid, "Контроль гнезда: сытые/голодные/мертвые", onBack, onBegin, onScan, onOpenRfidScanner, onValue, onPhoto, onVideo, onFile, onComment, onChecklistDone, onChecklistProblem, onChecklistSkip, onComplete, onSkip, canEdit)
         OperationType.NEST_SELECTION -> CageOperationScreen("RFID клетки", task, scannedRfid, "Выравнивание / калибровка гнезда", onBack, onBegin, onScan, onOpenRfidScanner, onValue, onPhoto, onVideo, onFile, onComment, onChecklistDone, onChecklistProblem, onChecklistSkip, onComplete, onSkip, canEdit)

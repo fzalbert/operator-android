@@ -310,6 +310,26 @@ class MobileMesViewModel @Inject constructor(
         task.copy(checklist = task.checklist.map { if (it.id == itemId) it.copy(status = status, result = it.result.copy(problemReason = reason, comment = comment)) else it }).markOffline()
     }
 
+    fun completeChecklistItem(taskId: String, itemId: String, values: Map<String, String>) = updateTask(taskId) { task ->
+        task.copy(
+            status = TaskStatus.IN_PROGRESS,
+            checklist = task.checklist.map { item ->
+                if (item.id == itemId) {
+                    item.copy(
+                        status = ChecklistStatus.DONE,
+                        result = item.result.copy(
+                            values = item.result.values + values,
+                            completedAt = "now",
+                        ),
+                    )
+                } else {
+                    item
+                }
+            },
+            result = task.result.copy(values = task.result.values + values),
+        ).markOffline()
+    }
+
     fun completeTask(taskId: String) {
         val currentTask = tasks.first { it.id == taskId }
         val operation = MockRepository.operation(currentTask.operationType)

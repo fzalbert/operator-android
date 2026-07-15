@@ -45,8 +45,8 @@ object MockRepository {
         OperationDefinition(OperationType.PALPATION, TargetType.RABBIT, true, "Зафиксировать пальпацию", listOf(
             OperationField("rfid", "RFID самки", FieldType.TEXT, true), OperationField("result", "Результат", FieldType.SELECT, true, options = listOf("Сукрольная", "Не сукрольная", "Сомнительно")), OperationField("comment", "Комментарий", FieldType.TEXT)
         ), listOf(RoleId.OPERATOR)),
-        OperationDefinition(OperationType.WEIGHING, TargetType.RABBIT, true, "Сохранить вес", listOf(
-            OperationField("rfid", "RFID", FieldType.TEXT, true), OperationField("weight", "Вес", FieldType.NUMBER, true, "кг"), OperationField("photo", "Фото весов", FieldType.PHOTO)
+        OperationDefinition(OperationType.WEIGHING, TargetType.CAGE, false, "Сохранить вес", listOf(
+            OperationField("cageNumber", "Номер клетки", FieldType.NUMBER, true), OperationField("weightGrams", "Вес", FieldType.NUMBER, true, "г"), OperationField("photo", "Фото весов", FieldType.PHOTO)
         ), listOf(RoleId.OPERATOR)),
         OperationDefinition(OperationType.NEST_PREPARATION, TargetType.CAGE, true, "Гнездо подготовлено", listOf(
             OperationField("cageRfid", "RFID клетки", FieldType.TEXT, true), OperationField("nestReady", "Гнездо готово", FieldType.BOOLEAN, true), OperationField("shavings", "Стружка добавлена", FieldType.BOOLEAN, true), OperationField("photo", "Фото гнезда", FieldType.PHOTO)
@@ -91,11 +91,14 @@ object MockRepository {
 
     private fun rabbitChecklist(prefix: String, count: Int = 12) = rabbits.take(count).mapIndexed { index, rabbit -> ChecklistItem("$prefix-r-${index + 1}", "${rabbit.earNumber} · ${rabbit.rfid}", TargetType.RABBIT, rabbit.id) }
     private fun cageChecklist(prefix: String, count: Int = 18) = allCages.take(count).mapIndexed { index, cage -> ChecklistItem("$prefix-c-${index + 1}", "${cage.code} · ${cage.rfid}", TargetType.CAGE, cage.id) }
+    private fun weighingChecklist(count: Int = 10) = allCages.take(count).mapIndexed { index, cage ->
+        ChecklistItem("weight-c-${index + 1}", "Ряд ${cage.rowNumber} · клетка ${cage.number}", TargetType.CAGE, cage.id)
+    }
     private fun hangarChecklist(prefix: String, labels: List<String>) = labels.mapIndexed { index, label -> ChecklistItem("$prefix-h-${index + 1}", label, TargetType.HANGAR, workshop.hangars.first().id) }
 
     fun initialTasks(): List<MobileTask> = listOf(
         MobileTask("task-1", "Осеменение самок", OperationType.INSEMINATION, "ws-1", "h-1", "emp-1", "2026-07-09", "08:30", 180, Priority.URGENT, TaskStatus.NEW, rabbitChecklist("ins", 14), true, RoleId.CHIEF_TECHNOLOGIST, AcceptanceStatus.NOT_REQUIRED),
-        MobileTask("task-2", "Взвешивание контрольной группы", OperationType.WEIGHING, "ws-1", "h-1", "emp-1", "2026-07-09", "11:00", 90, Priority.HIGH, TaskStatus.NEW, rabbitChecklist("weight", 10), false),
+        MobileTask("task-2", "Взвешивание контрольной группы", OperationType.WEIGHING, "ws-1", "h-1", "emp-1", "2026-07-09", "11:00", 90, Priority.HIGH, TaskStatus.NEW, weighingChecklist(), false),
         MobileTask("task-3", "Подготовка гнезд", OperationType.NEST_PREPARATION, "ws-1", "h-1", "emp-1", "2026-07-09", "13:00", 120, Priority.HIGH, TaskStatus.NEW, cageChecklist("nestprep", 18), true, RoleId.CHIEF_TECHNOLOGIST, AcceptanceStatus.NOT_REQUIRED),
         MobileTask("task-4", "Контроль гнезд", OperationType.NEST_CONTROL, "ws-1", "h-1", "emp-1", "2026-07-09", "15:00", 150, Priority.NORMAL, TaskStatus.NEW, cageChecklist("nestctl", 12), true, RoleId.CHIEF_TECHNOLOGIST, AcceptanceStatus.NOT_REQUIRED),
         MobileTask("task-5", "Проверка светового режима", OperationType.LIGHTING_CHECK, "ws-1", "h-1", "emp-1", "2026-07-09", "06:05", 20, Priority.URGENT, TaskStatus.NEW, hangarChecklist("light", listOf("Ангар А: проверить лампы", "Сверить фазу цикла", "Заменить перегоревшие")), false),

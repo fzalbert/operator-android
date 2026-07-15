@@ -26,9 +26,54 @@ fun TaskExecutionScaffold(
     onChecklistSkip: (String, String) -> Unit,
     allowRootComplete: Boolean = true,
     canEdit: Boolean = true,
+    checklistAfterContent: Boolean = false,
+    checklistDescription: String? = null,
+    afterChecklist: @Composable ColumnScope.() -> Unit = {},
     bottom: @Composable ColumnScope.() -> Unit
 ) {
     var skipReason by remember { mutableStateOf("Не удалось выполнить") }
+
+    val checklist: @Composable () -> Unit = {
+        ChecklistExecutionBlock(
+            items = task.checklist,
+            onDone = onChecklistDone,
+            onProblem = onChecklistProblem,
+            onSkip = onChecklistSkip,
+            description = checklistDescription,
+        )
+    }
+
+    val accessAndStart: @Composable ColumnScope.() -> Unit = {
+        if (!canEdit) {
+            StatusBadge("Только просмотр", MaterialTheme.colorScheme.onSurfaceVariant)
+            Spacer(Modifier.height(10.dp))
+            Text(
+                "Эту задачу можно посмотреть, но взять в работу получится только после завершения предыдущей задачи.",
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Spacer(Modifier.height(10.dp))
+        } else if (task.status == TaskStatus.NEW) {
+            Button(onClick = onBegin, Modifier.fillMaxWidth()) { Text("Приступить") }
+            Spacer(Modifier.height(10.dp))
+        }
+    }
+
+    val completionControls: @Composable ColumnScope.() -> Unit = {
+        val pendingItems = task.checklist.count { it.status == ChecklistStatus.PENDING }
+        if (allowRootComplete) {
+            Button(onClick = onComplete, Modifier.fillMaxWidth()) {
+                Text(if (task.requiresAcceptance) "Отправить на приемку" else "Отправить результат")
+            }
+        } else {
+            Button(onClick = onComplete, Modifier.fillMaxWidth(), enabled = pendingItems == 0) {
+                Text(if (pendingItems == 0) "Отправить обработанный чек-лист" else "Осталось обработать: $pendingItems")
+            }
+        }
+        Spacer(Modifier.height(10.dp))
+        OutlinedTextField(skipReason, { skipReason = it }, Modifier.fillMaxWidth(), label = { Text("Причина если невозможно выполнить всю задачу") })
+        OutlinedButton(onClick = { onSkip(skipReason) }, Modifier.fillMaxWidth()) { Text("Невозможно выполнить всю задачу") }
+    }
+
     LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 20.dp)) {
         item { AppHeader(task.title, "${task.plannedStart} · ${task.operationType.title}", onBack) }
         item {
@@ -45,46 +90,34 @@ fun TaskExecutionScaffold(
                 }
             }
         }
-        item {
-            ChecklistExecutionBlock(
-                items = task.checklist,
-                onDone = onChecklistDone,
-                onProblem = onChecklistProblem,
-                onSkip = onChecklistSkip
-            )
+        if (!checklistAfterContent) {
+            item { checklist() }
         }
         item {
             MesCard {
-                if (!canEdit) {
-                    StatusBadge("Только просмотр", MaterialTheme.colorScheme.onSurfaceVariant)
-                    Spacer(Modifier.height(10.dp))
-                    Text(
-                        "Эту задачу можно посмотреть, но взять в работу получится только после завершения предыдущей задачи.",
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                    Spacer(Modifier.height(10.dp))
-                } else if (task.status == TaskStatus.NEW) {
-                    Button(onClick = onBegin, Modifier.fillMaxWidth()) { Text("Приступить") }
-                    Spacer(Modifier.height(10.dp))
-                }
+                accessAndStart()
                 if (canEdit) {
                     CompositionLocalProvider(LocalMesCardBorderEnabled provides false) {
                         bottom()
                     }
-                    Spacer(Modifier.height(10.dp))
-                    val pendingItems = task.checklist.count { it.status == ChecklistStatus.PENDING }
-                    if (allowRootComplete) {
-                        Button(onClick = onComplete, Modifier.fillMaxWidth()) {
-                            Text(if (task.requiresAcceptance) "Отправить на приемку" else "Отправить результат")
-                        }
-                    } else {
-                        Button(onClick = onComplete, Modifier.fillMaxWidth(), enabled = pendingItems == 0) {
-                            Text(if (pendingItems == 0) "Отправить обработанный чек-лист" else "Осталось обработать: $pendingItems")
-                        }
+                    if (!checklistAfterContent) {
+                        afterChecklist()
+                        Spacer(Modifier.height(10.dp))
+                        completionControls()
                     }
-                    Spacer(Modifier.height(10.dp))
-                    OutlinedTextField(skipReason, { skipReason = it }, Modifier.fillMaxWidth(), label = { Text("Причина если невозможно выполнить всю задачу") })
-                    OutlinedButton(onClick = { onSkip(skipReason) }, Modifier.fillMaxWidth()) { Text("Невозможно выполнить всю задачу") }
+                }
+            }
+        }
+        if (checklistAfterContent) {
+            item { checklist() }
+            if (canEdit) {
+                item {
+                    MesCard {
+                        CompositionLocalProvider(LocalMesCardBorderEnabled provides false) {
+                            afterChecklist()
+                        }
+                        completionControls()
+                    }
                 }
             }
         }
@@ -208,7 +241,8 @@ fun ChecklistExecutionBlock(
     items: List<ChecklistItem>,
     onDone: (String) -> Unit,
     onProblem: (String, String, String) -> Unit,
-    onSkip: (String, String) -> Unit
+    onSkip: (String, String) -> Unit,
+    description: String? = null,
 ) {
     var openedItemId by remember { mutableStateOf<String?>(null) }
     var showCompleted by remember { mutableStateOf(false) }
@@ -218,7 +252,10 @@ fun ChecklistExecutionBlock(
     val visibleItems = if (showCompleted) completedItems else pendingItems
     MesCard {
         Text("Рабочий чек-лист", fontWeight = FontWeight.Bold)
-        Text("ID кролика/клетки не редактируется. Исполнитель закрывает пункт сканом или ручной отметкой, если сканер/RFID недоступен.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text(
+            description ?: "ID кролика/клетки не редактируется. Исполнитель закрывает пункт сканом или ручной отметкой, если сканер/RFID недоступен.",
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
         Spacer(Modifier.height(8.dp))
         OutlinedButton(
             onClick = { isExpanded = !isExpanded },

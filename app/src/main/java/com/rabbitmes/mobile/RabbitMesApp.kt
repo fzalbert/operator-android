@@ -41,6 +41,7 @@ fun RabbitMesApp(vm: MobileMesViewModel) {
                 onFile = { name, uri -> vm.addFile(task.id, name, uri) },
                 onComment = { vm.addComment(task.id, it) },
                 onChecklistDone = { itemId -> vm.markChecklistItem(task.id, itemId, ChecklistStatus.DONE, "", "Выполнено вручную") },
+                onChecklistDoneWithValues = { itemId, values -> vm.completeChecklistItem(task.id, itemId, values) },
                 onChecklistProblem = { itemId, reason, comment -> vm.markChecklistItem(task.id, itemId, ChecklistStatus.PROBLEM, reason, comment) },
                 onChecklistSkip = { itemId, reason -> vm.markChecklistItem(task.id, itemId, ChecklistStatus.SKIPPED, reason, "Пропущено") },
                 onComplete = { vm.completeTask(task.id); vm.navigate(AppScreen.Tasks) },
