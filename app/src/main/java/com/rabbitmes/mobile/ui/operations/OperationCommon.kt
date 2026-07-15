@@ -227,11 +227,41 @@ fun ChecklistExecutionBlock(
     onSkip: (String, String) -> Unit
 ) {
     var openedItemId by remember { mutableStateOf<String?>(null) }
+    var showCompleted by remember { mutableStateOf(false) }
+    var isExpanded by remember { mutableStateOf(false) }
+    val pendingItems = items.filter { it.status == ChecklistStatus.PENDING }
+    val completedItems = items.filter { it.status != ChecklistStatus.PENDING }
+    val visibleItems = if (showCompleted) completedItems else pendingItems
     MesCard {
         Text("Рабочий чек-лист", fontWeight = FontWeight.Bold)
         Text("ID кролика/клетки не редактируется. Исполнитель закрывает пункт сканом или ручной отметкой, если сканер/RFID недоступен.", color = MaterialTheme.colorScheme.onSurfaceVariant)
         Spacer(Modifier.height(8.dp))
-        items.forEach { item ->
+        OutlinedButton(
+            onClick = { isExpanded = !isExpanded },
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Text(if (isExpanded) "Скрыть список" else "Показать список: ожидает ${pendingItems.size}, готово ${completedItems.size}")
+        }
+        if (isExpanded) {
+            Spacer(Modifier.height(8.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+                FilterChip(
+                    selected = !showCompleted,
+                    onClick = { showCompleted = false },
+                    label = { Text("Ожидает (${pendingItems.size})") }
+                )
+                FilterChip(
+                    selected = showCompleted,
+                    onClick = { showCompleted = true },
+                    label = { Text("Готово (${completedItems.size})") }
+                )
+            }
+            Spacer(Modifier.height(8.dp))
+            if (visibleItems.isEmpty()) {
+                Text("Нет пунктов в этом разделе", color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+        }
+        if (isExpanded) visibleItems.forEach { item ->
             var reason by remember(item.id) { mutableStateOf("Не выполнено") }
             var comment by remember(item.id) { mutableStateOf("") }
             Surface(color = MaterialTheme.colorScheme.background, shape = MaterialTheme.shapes.medium, modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp)) {
@@ -279,9 +309,42 @@ fun ProblemAndMediaControls(
         OutlinedTextField(comment, { comment = it; onComment(it) }, Modifier.fillMaxWidth(), label = { Text("Комментарий исполнителя") })
         Spacer(Modifier.height(12.dp))
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
-            OutlinedButton(onClick = { openCaptureIntent(context, AttachmentType.PHOTO); onPhoto("photo-${System.currentTimeMillis()}.jpg") }, Modifier.weight(1f)) { Text("📷 Фото") }
-            OutlinedButton(onClick = { openCaptureIntent(context, AttachmentType.VIDEO); onVideo("video-${System.currentTimeMillis()}.mp4") }, Modifier.weight(1f)) { Text("🎥 Видео") }
-            OutlinedButton(onClick = { openCaptureIntent(context, AttachmentType.VOICE); onVoice("voice-${System.currentTimeMillis()}.m4a") }, Modifier.weight(1f)) { Text("🎤 Голос") }
+            MediaActionButton("📷", "Фото", Modifier.weight(1f)) {
+                openCaptureIntent(context, AttachmentType.PHOTO)
+                onPhoto("photo-${System.currentTimeMillis()}.jpg")
+            }
+            MediaActionButton("🎥", "Видео", Modifier.weight(1f)) {
+                openCaptureIntent(context, AttachmentType.VIDEO)
+                onVideo("video-${System.currentTimeMillis()}.mp4")
+            }
+            MediaActionButton("🎤", "Голос", Modifier.weight(1f)) {
+                openCaptureIntent(context, AttachmentType.VOICE)
+                onVoice("voice-${System.currentTimeMillis()}.m4a")
+            }
+        }
+    }
+}
+
+@Composable
+private fun MediaActionButton(
+    icon: String,
+    label: String,
+    modifier: Modifier = Modifier,
+    onClick: () -> Unit
+) {
+    OutlinedButton(
+        onClick = onClick,
+        modifier = modifier.heightIn(min = 56.dp),
+        contentPadding = PaddingValues(horizontal = 6.dp, vertical = 8.dp)
+    ) {
+        Column(horizontalAlignment = androidx.compose.ui.Alignment.CenterHorizontally) {
+            Text(icon, maxLines = 1, softWrap = false)
+            Text(
+                label,
+                style = MaterialTheme.typography.labelMedium,
+                maxLines = 1,
+                softWrap = false
+            )
         }
     }
 }

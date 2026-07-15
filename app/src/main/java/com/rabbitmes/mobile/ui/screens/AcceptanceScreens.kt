@@ -155,12 +155,45 @@ private fun ReviewAttachmentButtons(attachments: List<MediaAttachment>, onAttach
         try { context.startActivity(intent) } catch (_: ActivityNotFoundException) { }
     }
     Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
-        OutlinedButton(onClick = { open(AttachmentType.PHOTO); onAttachments(attachments + create(AttachmentType.PHOTO, "jpg")) }, Modifier.weight(1f)) { Text("📷 Фото") }
-        OutlinedButton(onClick = { open(AttachmentType.VIDEO); onAttachments(attachments + create(AttachmentType.VIDEO, "mp4")) }, Modifier.weight(1f)) { Text("🎥 Видео") }
-        OutlinedButton(onClick = { open(AttachmentType.VOICE); onAttachments(attachments + create(AttachmentType.VOICE, "m4a")) }, Modifier.weight(1f)) { Text("🎤 Голос") }
+        ReviewMediaButton("📷", "Фото", Modifier.weight(1f)) {
+            open(AttachmentType.PHOTO)
+            onAttachments(attachments + create(AttachmentType.PHOTO, "jpg"))
+        }
+        ReviewMediaButton("🎥", "Видео", Modifier.weight(1f)) {
+            open(AttachmentType.VIDEO)
+            onAttachments(attachments + create(AttachmentType.VIDEO, "mp4"))
+        }
+        ReviewMediaButton("🎤", "Голос", Modifier.weight(1f)) {
+            open(AttachmentType.VOICE)
+            onAttachments(attachments + create(AttachmentType.VOICE, "m4a"))
+        }
     }
     if (attachments.isNotEmpty()) {
         Spacer(Modifier.height(8.dp))
         attachments.forEach { Text("${it.type.emoji} ${it.name}", color = MaterialTheme.colorScheme.onSurfaceVariant) }
+    }
+}
+
+@Composable
+private fun ReviewMediaButton(
+    icon: String,
+    label: String,
+    modifier: Modifier = Modifier,
+    onClick: () -> Unit
+) {
+    OutlinedButton(
+        onClick = onClick,
+        modifier = modifier.heightIn(min = 56.dp),
+        contentPadding = PaddingValues(horizontal = 6.dp, vertical = 8.dp)
+    ) {
+        Column(horizontalAlignment = androidx.compose.ui.Alignment.CenterHorizontally) {
+            Text(icon, maxLines = 1, softWrap = false)
+            Text(
+                label,
+                style = MaterialTheme.typography.labelMedium,
+                maxLines = 1,
+                softWrap = false
+            )
+        }
     }
 }
