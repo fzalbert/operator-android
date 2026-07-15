@@ -109,6 +109,12 @@ class MobileMesViewModel @Inject constructor(
     val allCages = MockRepository.allCages
     val operations = MockRepository.operationDefinitions
 
+    init {
+        if (sessionStore.currentUser != null) {
+            onLoggedInFromSession()
+        }
+    }
+
     fun navigate(target: AppScreen) { screen = target; lastMessage = null }
     fun onLoggedInFromSession() {
         val role = sessionStore.currentUser?.role

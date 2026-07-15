@@ -155,3 +155,27 @@ private fun ReviewAttachmentButtons(attachments: List<MediaAttachment>, onAttach
         attachments.forEach { Text("${it.type.emoji} ${it.name}", color = MaterialTheme.colorScheme.onSurfaceVariant) }
     }
 }
+
+@Composable
+private fun ReviewMediaButton(
+    icon: String,
+    label: String,
+    modifier: Modifier = Modifier,
+    onClick: () -> Unit
+) {
+    OutlinedButton(
+        onClick = onClick,
+        modifier = modifier.heightIn(min = 56.dp),
+        contentPadding = PaddingValues(horizontal = 6.dp, vertical = 8.dp)
+    ) {
+        Column(horizontalAlignment = androidx.compose.ui.Alignment.CenterHorizontally) {
+            Text(icon, maxLines = 1, softWrap = false)
+            Text(
+                label,
+                style = MaterialTheme.typography.labelMedium,
+                maxLines = 1,
+                softWrap = false
+            )
+        }
+    }
+}
