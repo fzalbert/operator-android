@@ -28,7 +28,6 @@ fun ShiftScreen(
     onOpenNext: (String) -> Unit,
     onOpenNotifications: () -> Unit,
     onLogout: () -> Unit,
-    onToggleOnline: () -> Unit,
     bottomBar: @Composable () -> Unit
 ) {
     var finishReason by remember { mutableStateOf("Смена завершена штатно") }
@@ -57,7 +56,13 @@ fun ShiftScreen(
                             Icon(Icons.Default.Notifications, null)
                         }
                     }
-                    IconButton(onClick = onToggleOnline) { Icon(if (shift.isOnline) Icons.Default.CloudDone else Icons.Default.CloudOff, null) }
+                    Box(Modifier.size(48.dp), contentAlignment = androidx.compose.ui.Alignment.Center) {
+                        Icon(
+                            if (shift.isOnline) Icons.Default.CloudDone else Icons.Default.CloudOff,
+                            null,
+                            tint = if (shift.isOnline) mobileSuccessGreen else Color(0xFFE98500),
+                        )
+                    }
                     IconButton(onClick = onLogout) { Icon(Icons.AutoMirrored.Filled.Logout, null) }
                 })
             }

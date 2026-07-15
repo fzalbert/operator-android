@@ -17,6 +17,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.rabbitmes.mobile.domain.*
 import ru.profikrol.operator.uikit.theme.mobileSuccessGreen
@@ -58,7 +59,22 @@ fun AppHeader(title: String, subtitle: String? = null, onBack: (() -> Unit)? = n
 
 @Composable
 fun StatusBadge(text: String, color: Color) {
-    Surface(shape = RoundedCornerShape(99.dp), color = color.copy(alpha = .12f)) { Text(text, color = color, style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold, modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp)) }
+    Surface(
+        modifier = Modifier.widthIn(min = 44.dp),
+        shape = RoundedCornerShape(99.dp),
+        color = color.copy(alpha = .12f),
+    ) {
+        Text(
+            text,
+            color = color,
+            style = MaterialTheme.typography.labelMedium,
+            fontWeight = FontWeight.Bold,
+            maxLines = 2,
+            softWrap = true,
+            textAlign = TextAlign.Center,
+            modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp),
+        )
+    }
 }
 
 @Composable fun TaskStatusBadge(status: TaskStatus) {

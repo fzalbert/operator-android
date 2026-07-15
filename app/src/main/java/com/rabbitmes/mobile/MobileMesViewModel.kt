@@ -165,8 +165,31 @@ class MobileMesViewModel @Inject constructor(
     }
     fun startShift() { shift = shift.copy(startedAt = "08:00", finishedAt = null); screen = AppScreen.Tasks }
     fun finishShift(reason: String) { shift = shift.copy(finishedAt = "18:00"); lastMessage = "Смена завершена: $reason" }
-    fun toggleOnline() { shift = shift.copy(isOnline = !shift.isOnline) }
-    fun syncNow() { shift = shift.copy(pendingSyncEvents = 0); tasks = tasks.map { it.copy(offlineEvents = 0) }; lastMessage = "Очередь синхронизации отправлена" }
+    fun setOnline(isOnline: Boolean) {
+        if (shift.isOnline == isOnline) return
+        val pending = shift.pendingSyncEvents
+        shift = shift.copy(isOnline = isOnline)
+        lastMessage = if (isOnline) {
+            if (pending > 0) "Интернет появился: можно синхронизировать накопленные изменения" else "Онлайн режим включен"
+        } else {
+            "Нет интернета: приложение перешло в офлайн режим"
+        }
+    }
+
+    fun syncNow() {
+        val hasPending = shift.pendingSyncEvents > 0 || tasks.any { it.offlineEvents > 0 }
+        if (!shift.isOnline) {
+            lastMessage = "Нет интернета: синхронизация будет доступна после перехода онлайн"
+            return
+        }
+        if (!hasPending) {
+            lastMessage = "Нет изменений для синхронизации"
+            return
+        }
+        shift = shift.copy(pendingSyncEvents = 0)
+        tasks = tasks.map { it.copy(offlineEvents = 0) }
+        lastMessage = "Очередь синхронизации отправлена"
+    }
     fun markNotificationAsRead(id: Long) {
         val index = notifications.indexOfFirst { it.id == id }
         if (index != -1) notifications[index] = notifications[index].copy(isUnread = false)
@@ -203,8 +226,20 @@ class MobileMesViewModel @Inject constructor(
         else -> AppScreen.Shift
     }
 
-    private fun pushOffline(): ShiftState = shift.copy(pendingSyncEvents = shift.pendingSyncEvents + 1)
-    private fun updateTask(taskId: String, transform: (MobileTask) -> MobileTask) { tasks = tasks.map { if (it.id == taskId) transform(it) else it }; shift = pushOffline() }
+    private fun queueOfflineChange(): ShiftState =
+        if (shift.isOnline) shift else shift.copy(pendingSyncEvents = shift.pendingSyncEvents + 1)
+
+    private fun updateTask(taskId: String, transform: (MobileTask) -> MobileTask) {
+        tasks = tasks.map { task ->
+            if (task.id == taskId) {
+                val updated = transform(task)
+                if (shift.isOnline) updated.copy(offlineEvents = task.offlineEvents) else updated
+            } else {
+                task
+            }
+        }
+        shift = queueOfflineChange()
+    }
     fun beginTask(taskId: String) = updateTask(taskId) { it.copy(status = TaskStatus.IN_PROGRESS).markOffline() }
 
     fun updateTaskValue(taskId: String, key: String, value: String) = updateTask(taskId) { it.copy(result = it.result.copy(values = it.result.values + (key to value))).markOffline() }
@@ -318,7 +353,7 @@ class MobileMesViewModel @Inject constructor(
     fun addRemark(taskId: String, itemId: String?, reason: String, comment: String, attachments: List<MediaAttachment>) {
         remarks = listOf(AcceptanceRemark("remark-${System.currentTimeMillis()}", taskId, itemId, reason, comment, attachments, "now")) + remarks
         if (itemId != null) updateTask(taskId) { task -> task.copy(checklist = task.checklist.map { if (it.id == itemId) it.copy(reviewStatus = ReviewStatus.REJECTED, reviewerComment = comment) else it }).markOffline() }
-        else shift = pushOffline()
+        else shift = queueOfflineChange()
     }
 
     fun acceptTask(taskId: String, comment: String = "") = updateTask(taskId) { task ->
