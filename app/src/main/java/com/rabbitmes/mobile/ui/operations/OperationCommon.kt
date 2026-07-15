@@ -213,11 +213,41 @@ fun ChecklistExecutionBlock(
     onSkip: (String, String) -> Unit
 ) {
     var openedItemId by remember { mutableStateOf<String?>(null) }
+    var showCompleted by remember { mutableStateOf(false) }
+    var isExpanded by remember { mutableStateOf(false) }
+    val pendingItems = items.filter { it.status == ChecklistStatus.PENDING }
+    val completedItems = items.filter { it.status != ChecklistStatus.PENDING }
+    val visibleItems = if (showCompleted) completedItems else pendingItems
     MesCard {
         Text("Рабочий чек-лист", fontWeight = FontWeight.Bold)
         Text("ID кролика/клетки не редактируется. Исполнитель закрывает пункт сканом или ручной отметкой, если сканер/RFID недоступен.", color = MaterialTheme.colorScheme.onSurfaceVariant)
         Spacer(Modifier.height(8.dp))
-        items.forEach { item ->
+        OutlinedButton(
+            onClick = { isExpanded = !isExpanded },
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Text(if (isExpanded) "Скрыть список" else "Показать список: ожидает ${pendingItems.size}, готово ${completedItems.size}")
+        }
+        if (isExpanded) {
+            Spacer(Modifier.height(8.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+                FilterChip(
+                    selected = !showCompleted,
+                    onClick = { showCompleted = false },
+                    label = { Text("Ожидает (${pendingItems.size})") }
+                )
+                FilterChip(
+                    selected = showCompleted,
+                    onClick = { showCompleted = true },
+                    label = { Text("Готово (${completedItems.size})") }
+                )
+            }
+            Spacer(Modifier.height(8.dp))
+            if (visibleItems.isEmpty()) {
+                Text("Нет пунктов в этом разделе", color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+        }
+        if (isExpanded) visibleItems.forEach { item ->
             var reason by remember(item.id) { mutableStateOf("Не выполнено") }
             var comment by remember(item.id) { mutableStateOf("") }
             Surface(color = MaterialTheme.colorScheme.background, shape = MaterialTheme.shapes.medium, modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp)) {
