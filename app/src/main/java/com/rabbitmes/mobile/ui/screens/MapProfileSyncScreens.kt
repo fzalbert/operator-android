@@ -37,6 +37,7 @@ fun HangarMapScreen(workshop: Workshop, tasks: List<MobileTask>, onOpenTask: (St
 fun SyncQueueScreen(shift: ShiftState, tasks: List<MobileTask>, onSync: () -> Unit, onBack: () -> Unit, bottomBar: @Composable () -> Unit) {
     val pendingTasks = tasks.filter { it.offlineEvents > 0 }
     val statusColor = if (shift.isOnline) mobileSuccessGreen else Color(0xFFE98500)
+    val hasPending = shift.pendingSyncEvents > 0 || pendingTasks.isNotEmpty()
 
     Scaffold(
         bottomBar = bottomBar,
@@ -69,14 +70,21 @@ fun SyncQueueScreen(shift: ShiftState, tasks: List<MobileTask>, onSync: () -> Un
                     Text("В очереди: ${shift.pendingSyncEvents} событий", color = MaterialTheme.colorScheme.onSurfaceVariant)
                     Text("Задач к синхронизации: ${pendingTasks.size}", color = MaterialTheme.colorScheme.onSurfaceVariant)
                     Spacer(Modifier.height(12.dp))
-                    OutlinedButton(
+                    if (!shift.isOnline) {
+                        Text(
+                            "Синхронизация появится автоматически, когда устройство снова будет онлайн.",
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                        Spacer(Modifier.height(8.dp))
+                    }
+                    Button(
                         onClick = onSync,
                         modifier = Modifier.fillMaxWidth(),
-                        enabled = shift.pendingSyncEvents > 0 || pendingTasks.isNotEmpty(),
+                        enabled = shift.isOnline && hasPending,
                     ) {
                         Icon(Icons.Default.Sync, null)
                         Spacer(Modifier.width(8.dp))
-                        Text("Синхронизировать")
+                        Text(if (shift.isOnline) "Синхронизировать" else "Синхронизация недоступна офлайн")
                     }
                 }
             }

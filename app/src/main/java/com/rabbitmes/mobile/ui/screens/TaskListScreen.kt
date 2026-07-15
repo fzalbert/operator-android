@@ -74,6 +74,7 @@ fun TaskListScreen(
     }
 }
 
+@OptIn(ExperimentalLayoutApi::class)
 @Composable
 fun TaskCard(task: MobileTask, isNext: Boolean = false, onClick: () -> Unit) {
     MesCard(onClick = onClick) {
@@ -85,7 +86,11 @@ fun TaskCard(task: MobileTask, isNext: Boolean = false, onClick: () -> Unit) {
             TaskStatusBadge(task.status)
         }
         Spacer(Modifier.height(8.dp))
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+        FlowRow(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
             StatusBadge(if (isNext) "Можно начать" else "Просмотр", if (isNext) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant)
             PriorityBadge(task.priority)
             StatusBadge(if (task.requiresAcceptance) "Приемка" else "Без приемки", if (task.requiresAcceptance) MaterialTheme.colorScheme.tertiary else MaterialTheme.colorScheme.onSurfaceVariant)
