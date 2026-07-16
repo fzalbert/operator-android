@@ -1,6 +1,7 @@
 package ru.profikrol.operator.navigation
 
 import androidx.compose.runtime.Composable
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
@@ -20,6 +21,8 @@ import ru.profikrol.operator.feature.rfidscan.RfidScanScreen
 import ru.profikrol.operator.feature.rfidscanresult.RfidScanResultScreen
 import ru.profikrol.operator.feature.settings.SettingsScreen
 import ru.profikrol.operator.feature.weighing.WeighingScreen
+
+private const val RfidInstallationScannedCodeKey = "rfidInstallationScannedCode"
 
 @Composable
 fun AppNavGraph() {
@@ -195,8 +198,20 @@ fun AppNavGraph() {
         composable<Route.NestAlignment> {
             NestAlignmentScreen(onBack = { navController.popBackStack() })
         }
-        composable<Route.RfidInstallation> {
-            RfidInstallationScreen(onBack = { navController.popBackStack() })
+        composable<Route.RfidInstallation> { backStackEntry ->
+            val scannedCode = backStackEntry.savedStateHandle
+                .getStateFlow<String?>(RfidInstallationScannedCodeKey, null)
+                .collectAsStateWithLifecycle()
+
+            RfidInstallationScreen(
+                scannedRfidResult = scannedCode.value,
+                onScanRfid = {
+                    navController.navigate(Route.RfidInstallationScan)
+                },
+                onBack = {
+                    navController.popBackStack()
+                }
+            )
         }
         composable<Route.RabbitCulling> {
 
@@ -217,6 +232,20 @@ fun AppNavGraph() {
                 onBack = { navController.popBackStack() },
                 onScanAgain = {
                     navController.navigate(Route.RfidScan)
+                }
+            )
+        }
+        composable<Route.RfidInstallationScan> {
+            RfidScanScreen(
+                onBack = {
+                    navController.popBackStack()
+                },
+                onScanned = { code ->
+                    navController.previousBackStackEntry
+                        ?.savedStateHandle
+                        ?.set(RfidInstallationScannedCodeKey, code)
+
+                    navController.popBackStack()
                 }
             )
         }
