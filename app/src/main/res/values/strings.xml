@@ -1,5 +1,5 @@
 <resources>
-    <string name="app_name">Профикрол</string>
+    <string name="app_name">Профикроль</string>
 
     <!-- Common -->
     <string name="cd_back">Назад</string>
@@ -9,7 +9,7 @@
 
     <!-- Auth -->
     <string name="auth_logo">🐰</string>
-    <string name="auth_brand_title">РаббитФарм</string>
+    <string name="auth_brand_title">Профикроль</string>
     <string name="auth_brand_subtitle">Система управления кролиководческой фермой</string>
     <string name="auth_title">Вход</string>F
     <string name="auth_login_label">Логин</string>
