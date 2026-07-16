@@ -19,7 +19,7 @@ fun AcceptanceQueueScreen(tasks: List<MobileTask>, onOpen: (String) -> Unit, onB
         bottomBar = bottomBar,
         containerColor = Color.Transparent,
     ) { padding ->
-        LazyColumn(Modifier.fillMaxSize().padding(padding)) {
+        LazyColumn(Modifier.fillMaxSize().padding(padding), contentPadding = PaddingValues(bottom = MesSpacing.screenBottom)) {
             item { AppHeader("Приемка", "Задачи, ожидающие проверку", onBack) }
             if (tasks.isEmpty()) item { MesCard { Text("Нет задач на приемку") } }
             items(tasks) { task -> TaskCard(task) { onOpen(task.id) } }
@@ -40,7 +40,7 @@ fun AcceptanceScreen(
     val localProblemItems = remember { mutableStateMapOf<String, Boolean>() }
     val hasProblems = localProblemItems.values.any { it }
 
-    LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 20.dp)) {
+    LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = MesSpacing.screenBottom)) {
         item { AppHeader("Приемка", task.title, onBack) }
         item {
             MesCard {
@@ -51,7 +51,7 @@ fun AcceptanceScreen(
                     }
                     TaskStatusBadge(task.status)
                 }
-                Spacer(Modifier.height(10.dp))
+                Spacer(Modifier.height(MesSpacing.contentGap))
                 ProgressLine(task.checklist.count { it.status == ChecklistStatus.DONE }, task.checklist.size)
                 Text("Если все нормально — просто нажмите «Готово». Если есть проблема по объекту, включите ползунок у этого объекта и заполните карточку замечания.", color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
@@ -68,12 +68,12 @@ fun AcceptanceScreen(
             MesCard {
                 Text("Итог приемки", fontWeight = FontWeight.Bold)
                 OutlinedTextField(finalComment, { finalComment = it }, Modifier.fillMaxWidth(), label = { Text("Комментарий проверяющего") })
-                Spacer(Modifier.height(8.dp))
+                Spacer(Modifier.height(MesSpacing.smallGap))
                 if (!hasProblems) {
                     Button(onClick = { onAccept(finalComment) }, Modifier.fillMaxWidth()) { Text("Готово") }
                 } else {
                     Text("Есть отмеченные проблемы. Сначала сохраните замечания по проблемным объектам, затем верните задачу на доработку.", color = MaterialTheme.colorScheme.error)
-                    Spacer(Modifier.height(8.dp))
+                    Spacer(Modifier.height(MesSpacing.smallGap))
                     OutlinedButton(onClick = { onReject(finalComment) }, Modifier.fillMaxWidth()) { Text("Вернуть на доработку") }
                 }
             }
@@ -84,7 +84,7 @@ fun AcceptanceScreen(
                 val taskRemarks = remarks.filter { it.taskId == task.id }
                 if (taskRemarks.isEmpty()) Text("Замечаний пока нет", color = MaterialTheme.colorScheme.onSurfaceVariant)
                 taskRemarks.forEach { remark ->
-                    Spacer(Modifier.height(8.dp))
+                    Spacer(Modifier.height(MesSpacing.smallGap))
                     Text("• ${remark.reason}: ${remark.comment}", color = MaterialTheme.colorScheme.error)
                     if (remark.attachments.isNotEmpty()) {
                         Text(remark.attachments.joinToString("  ") { "${it.type.emoji} ${it.name}" }, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -115,15 +115,15 @@ private fun AcceptanceItemCard(
             }
             StatusBadge(if (problemEnabled) "Проблема" else "OK", if (problemEnabled) MaterialTheme.colorScheme.error else mobileSuccessGreen)
         }
-        Spacer(Modifier.height(8.dp))
+        Spacer(Modifier.height(MesSpacing.smallGap))
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
             Text("Есть проблема", fontWeight = FontWeight.SemiBold)
             Switch(checked = problemEnabled, onCheckedChange = onProblemToggle)
         }
         if (problemEnabled) {
-            Spacer(Modifier.height(8.dp))
+            Spacer(Modifier.height(MesSpacing.smallGap))
             Surface(color = MaterialTheme.colorScheme.errorContainer, shape = MaterialTheme.shapes.medium, modifier = Modifier.fillMaxWidth()) {
-                Column(Modifier.padding(12.dp)) {
+                Column(Modifier.padding(MesSpacing.contentGap)) {
                     Text("Карточка проблемы", fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onErrorContainer)
                     OutlinedTextField(reason, { reason = it }, Modifier.fillMaxWidth(), label = { Text("Причина") })
                     OutlinedTextField(comment, { comment = it }, Modifier.fillMaxWidth(), label = { Text("Комментарий") })
@@ -151,7 +151,7 @@ private fun ReviewAttachmentButtons(attachments: List<MediaAttachment>, onAttach
         )
     })
     if (attachments.isNotEmpty()) {
-        Spacer(Modifier.height(8.dp))
+        Spacer(Modifier.height(MesSpacing.smallGap))
         attachments.forEach { Text("${it.type.emoji} ${it.name}", color = MaterialTheme.colorScheme.onSurfaceVariant) }
     }
 }
@@ -166,7 +166,7 @@ private fun ReviewMediaButton(
     OutlinedButton(
         onClick = onClick,
         modifier = modifier.heightIn(min = 56.dp),
-        contentPadding = PaddingValues(horizontal = 6.dp, vertical = 8.dp)
+        contentPadding = PaddingValues(horizontal = MesSpacing.smallGap, vertical = MesSpacing.smallGap)
     ) {
         Column(horizontalAlignment = androidx.compose.ui.Alignment.CenterHorizontally) {
             Text(icon, maxLines = 1, softWrap = false)

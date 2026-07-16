@@ -8,7 +8,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.rabbitmes.mobile.data.MockRepository
 import com.rabbitmes.mobile.domain.*
-import com.rabbitmes.mobile.ui.components.MesCard
+import com.rabbitmes.mobile.ui.components.*
 
 @Composable
 fun InseminationScreen(task: MobileTask, scannedRfid: String?, onBack: () -> Unit, onBegin: () -> Unit, onScan: (String, Map<String,String>) -> Unit, onOpenRfidScanner: (Map<String, String>) -> Unit, onValue: (String,String) -> Unit, onPhoto: (String,String)->Unit, onVideo: (String,String)->Unit, onFile: (String,String)->Unit, onComment: (String)->Unit, onChecklistDone: (String)->Unit, onChecklistProblem: (String,String,String)->Unit, onChecklistSkip: (String,String)->Unit, onComplete: () -> Unit, onSkip: (String)->Unit, onOpenAnimal: (String)->Unit, canEdit: Boolean = true) {
@@ -25,7 +25,7 @@ fun InseminationScreen(task: MobileTask, scannedRfid: String?, onBack: () -> Uni
 fun PalpationScreen(task: MobileTask, scannedRfid: String?, onBack: () -> Unit, onBegin: () -> Unit, onScan: (String, Map<String,String>) -> Unit, onOpenRfidScanner: (Map<String, String>) -> Unit, onValue: (String,String) -> Unit, onPhoto: (String,String)->Unit, onVideo: (String,String)->Unit, onFile: (String,String)->Unit, onComment: (String)->Unit, onChecklistDone: (String)->Unit, onChecklistProblem: (String,String,String)->Unit, onChecklistSkip: (String,String)->Unit, onComplete: () -> Unit, onSkip: (String)->Unit, onOpenAnimal: (String)->Unit, canEdit: Boolean = true) {
     var result by remember { mutableStateOf("Сукрольная") }
     TaskExecutionScaffold(task, onBack, onBegin, onComplete, onSkip, onChecklistDone, onChecklistProblem, onChecklistSkip, allowRootComplete = false, canEdit = canEdit) {
-        MesCard { Text("Результат пальпации", fontWeight = FontWeight.Bold); Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) { listOf("Сукрольная", "Не сукрольная", "Сомнительно").forEach { FilterChip(selected = result == it, onClick = { result = it; onValue("palpationResult", it) }, label = { Text(it) }) } } }
+        MesCard { Text("Результат пальпации", fontWeight = FontWeight.Bold); Row(horizontalArrangement = Arrangement.spacedBy(MesSpacing.smallGap)) { listOf("Сукрольная", "Не сукрольная", "Сомнительно").forEach { FilterChip(selected = result == it, onClick = { result = it; onValue("palpationResult", it) }, label = { Text(it) }) } } }
         ScanPanel("RFID самки", "RFID", onScan = { rfid -> onScan(rfid, mapOf("palpationResult" to result)) }, onOpenScanner = { onOpenRfidScanner(mapOf("palpationResult" to result)) }, initialRfid = scannedRfid)
         ProblemAndMediaControls(onPhoto, onVideo, onFile, onComment)
         ExecutionEvidencePanel(task)
@@ -56,6 +56,43 @@ fun CageOperationScreen(title: String, task: MobileTask, scannedRfid: String?, f
 }
 
 @Composable
+fun NestPreparationScreen(task: MobileTask, onBack: () -> Unit, onBegin: () -> Unit, onPhoto: (String,String)->Unit, onVideo: (String,String)->Unit, onFile: (String,String)->Unit, onComment: (String)->Unit, onChecklistDone: (String)->Unit, onChecklistProblem: (String,String,String)->Unit, onChecklistSkip: (String,String)->Unit, onComplete: () -> Unit, onSkip: (String)->Unit, canEdit: Boolean = true) {
+    val pendingItems = task.checklist.filter { it.status == ChecklistStatus.PENDING }
+    TaskExecutionScaffold(task, onBack, onBegin, onComplete, onSkip, onChecklistDone, onChecklistProblem, onChecklistSkip, allowRootComplete = false, canEdit = canEdit) {
+        MesCard {
+            Text("Подготовка гнезд", fontWeight = FontWeight.Bold)
+            Text("RFID не требуется. Отмечайте готовность по номеру клетки.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Spacer(Modifier.height(MesSpacing.contentGap))
+            if (pendingItems.isEmpty()) {
+                Text("Все клетки отмечены", color = MaterialTheme.colorScheme.onSurfaceVariant)
+            } else {
+                pendingItems.forEach { item ->
+                    Surface(
+                        color = MaterialTheme.colorScheme.background,
+                        shape = MaterialTheme.shapes.medium,
+                        modifier = Modifier.fillMaxWidth().padding(vertical = MesSpacing.smallGap)
+                    ) {
+                        Column(Modifier.padding(MesSpacing.contentGap)) {
+                            Text(item.label, fontWeight = FontWeight.SemiBold)
+                            Spacer(Modifier.height(MesSpacing.smallGap))
+                            Row(horizontalArrangement = Arrangement.spacedBy(MesSpacing.smallGap), modifier = Modifier.fillMaxWidth()) {
+                                Button(onClick = { onChecklistDone(item.id) }, modifier = Modifier.weight(1f)) { Text("Готова") }
+                                OutlinedButton(
+                                    onClick = { onChecklistProblem(item.id, "Клетка не готова", "Гнездо не подготовлено") },
+                                    modifier = Modifier.weight(1f)
+                                ) { Text("Не готова") }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        ProblemAndMediaControls(onPhoto, onVideo, onFile, onComment)
+        ExecutionEvidencePanel(task)
+    }
+}
+
+@Composable
 fun HangarGenericOperationScreen(task: MobileTask, definition: OperationDefinition, onBack: () -> Unit, onBegin: () -> Unit, onValue: (String,String) -> Unit, onPhoto: (String,String)->Unit, onVideo: (String,String)->Unit, onFile: (String,String)->Unit, onComment: (String)->Unit, onChecklistDone: (String)->Unit, onChecklistProblem: (String,String,String)->Unit, onChecklistSkip: (String,String)->Unit, onComplete: () -> Unit, onSkip: (String)->Unit, canEdit: Boolean = true) {
     TaskExecutionScaffold(task, onBack, onBegin, onComplete, onSkip, onChecklistDone, onChecklistProblem, onChecklistSkip, canEdit = canEdit) {
         MesCard { Text(definition.type.title, fontWeight = FontWeight.Bold); Text("Заполните обязательные данные по операции."); GenericFields(definition, onValue) }
@@ -69,7 +106,7 @@ fun LightAutomationTaskScreen(task: MobileTask, onBack: () -> Unit, onBegin: () 
     var hours by remember { mutableStateOf("14") }
     var mode by remember { mutableStateOf("База 14:00") }
     TaskExecutionScaffold(task, onBack, onBegin, onComplete, onSkip, onChecklistDone, onChecklistProblem, onChecklistSkip, canEdit = canEdit) {
-        MesCard { Text("Управление освещением", fontWeight = FontWeight.Bold); OutlinedTextField(hours, { hours = it; onValue("lightHours", it) }, Modifier.fillMaxWidth(), label = { Text("Длительность светового дня, ч") }); Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) { listOf("База 14:00", "Стимуляция 22:00").forEach { FilterChip(selected = mode == it, onClick = { mode = it; onValue("mode", it) }, label = { Text(it) }) } } }
+        MesCard { Text("Управление освещением", fontWeight = FontWeight.Bold); OutlinedTextField(hours, { hours = it; onValue("lightHours", it) }, Modifier.fillMaxWidth(), label = { Text("Длительность светового дня, ч") }); Row(horizontalArrangement = Arrangement.spacedBy(MesSpacing.smallGap)) { listOf("База 14:00", "Стимуляция 22:00").forEach { FilterChip(selected = mode == it, onClick = { mode = it; onValue("mode", it) }, label = { Text(it) }) } } }
         ProblemAndMediaControls(onPhoto, onVideo, onFile, onComment)
         ExecutionEvidencePanel(task)
     }
@@ -79,7 +116,7 @@ fun LightAutomationTaskScreen(task: MobileTask, onBack: () -> Unit, onBegin: () 
 fun FeedOperationScreen(task: MobileTask, onBack: () -> Unit, onBegin: () -> Unit, onValue: (String,String) -> Unit, onPhoto: (String,String)->Unit, onVideo: (String,String)->Unit, onFile: (String,String)->Unit, onComment: (String)->Unit, onChecklistDone: (String)->Unit, onChecklistProblem: (String,String,String)->Unit, onChecklistSkip: (String,String)->Unit, onComplete: () -> Unit, onSkip: (String)->Unit, canEdit: Boolean = true) {
     var feed by remember { mutableStateOf("Лактация") }
     TaskExecutionScaffold(task, onBack, onBegin, onComplete, onSkip, onChecklistDone, onChecklistProblem, onChecklistSkip, canEdit = canEdit) {
-        MesCard { Text("Подача / проверка корма", fontWeight = FontWeight.Bold); Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) { listOf("Откорм", "Отъем", "Лактация").forEach { FilterChip(selected = feed == it, onClick = { feed = it; onValue("feedType", it) }, label = { Text(it) }) } }; Text("Уставка применяется к ангару задачи, не к справочнику оборудования.") }
+        MesCard { Text("Подача / проверка корма", fontWeight = FontWeight.Bold); Row(horizontalArrangement = Arrangement.spacedBy(MesSpacing.smallGap)) { listOf("Откорм", "Отъем", "Лактация").forEach { FilterChip(selected = feed == it, onClick = { feed = it; onValue("feedType", it) }, label = { Text(it) }) } }; Text("Уставка применяется к ангару задачи, не к справочнику оборудования.") }
         ProblemAndMediaControls(onPhoto, onVideo, onFile, onComment)
         ExecutionEvidencePanel(task)
     }
@@ -91,7 +128,7 @@ fun OperationScreenFactory(task: MobileTask, definition: OperationDefinition, on
         OperationType.INSEMINATION -> InseminationScreen(task, scannedRfid, onBack, onBegin, onScan, onOpenRfidScanner, onValue, onPhoto, onVideo, onFile, onComment, onChecklistDone, onChecklistProblem, onChecklistSkip, onComplete, onSkip, onOpenAnimal, canEdit)
         OperationType.PALPATION -> PalpationScreen(task, scannedRfid, onBack, onBegin, onScan, onOpenRfidScanner, onValue, onPhoto, onVideo, onFile, onComment, onChecklistDone, onChecklistProblem, onChecklistSkip, onComplete, onSkip, onOpenAnimal, canEdit)
         OperationType.WEIGHING -> WeighingScreen(task, scannedRfid, onBack, onBegin, onScan, onOpenRfidScanner, onValue, onPhoto, onVideo, onFile, onComment, onChecklistDone, onChecklistProblem, onChecklistSkip, onComplete, onSkip, onOpenAnimal, canEdit)
-        OperationType.NEST_PREPARATION -> CageOperationScreen("RFID клетки", task, scannedRfid, "Подготовка гнезда", onBack, onBegin, onScan, onOpenRfidScanner, onValue, onPhoto, onVideo, onFile, onComment, onChecklistDone, onChecklistProblem, onChecklistSkip, onComplete, onSkip, canEdit)
+        OperationType.NEST_PREPARATION -> NestPreparationScreen(task, onBack, onBegin, onPhoto, onVideo, onFile, onComment, onChecklistDone, onChecklistProblem, onChecklistSkip, onComplete, onSkip, canEdit)
         OperationType.NEST_CONTROL -> CageOperationScreen("RFID клетки", task, scannedRfid, "Контроль гнезда: сытые/голодные/мертвые", onBack, onBegin, onScan, onOpenRfidScanner, onValue, onPhoto, onVideo, onFile, onComment, onChecklistDone, onChecklistProblem, onChecklistSkip, onComplete, onSkip, canEdit)
         OperationType.NEST_SELECTION -> CageOperationScreen("RFID клетки", task, scannedRfid, "Выравнивание / калибровка гнезда", onBack, onBegin, onScan, onOpenRfidScanner, onValue, onPhoto, onVideo, onFile, onComment, onChecklistDone, onChecklistProblem, onChecklistSkip, onComplete, onSkip, canEdit)
         OperationType.OKROL -> CageOperationScreen("RFID клетки", task, scannedRfid, "Окрол: учет живых и мертвых", onBack, onBegin, onScan, onOpenRfidScanner, onValue, onPhoto, onVideo, onFile, onComment, onChecklistDone, onChecklistProblem, onChecklistSkip, onComplete, onSkip, canEdit)

@@ -42,7 +42,7 @@ fun ShiftScreen(
         bottomBar = bottomBar,
         containerColor = Color.Transparent,
     ) { padding ->
-        LazyColumn(Modifier.fillMaxSize().padding(padding), contentPadding = PaddingValues(bottom = 20.dp)) {
+        LazyColumn(Modifier.fillMaxSize().padding(padding), contentPadding = PaddingValues(bottom = MesSpacing.screenBottom)) {
             item {
                 AppHeader("Рабочая смена", "${employee.fullName} · ${employee.role.title}", trailing = {
                     IconButton(onClick = onOpenNotifications) {
@@ -71,7 +71,7 @@ fun ShiftScreen(
             item {
                 MesCard {
                     Text(if (!shiftStarted) "Смена не начата" else "Смена начата в ${shift.startedAt}", fontWeight = FontWeight.Bold)
-                    Spacer(Modifier.height(10.dp))
+                    Spacer(Modifier.height(MesSpacing.contentGap))
                     ProgressLine(doneItems, totalItems)
                     Text(if (shift.isOnline) "Онлайн" else "Оффлайн: ${shift.pendingSyncEvents} событий", color = if (shift.isOnline) mobileSuccessGreen else Color(0xFFE98500))
                 }
@@ -87,7 +87,7 @@ fun ShiftScreen(
                         }
                         PriorityBadge(nextTask.priority)
                     }
-                    Spacer(Modifier.height(12.dp))
+                    Spacer(Modifier.height(MesSpacing.contentGap))
                     ProgressLine(nextTask.checklist.count { it.status != ChecklistStatus.PENDING }, nextTask.checklist.size)
                     Button(onClick = { onOpenNext(nextTask.id) }, Modifier.fillMaxWidth()) { Text("Открыть задачу") }
                 }
@@ -98,7 +98,7 @@ fun ShiftScreen(
                         Button(onClick = onStart, Modifier.fillMaxWidth()) { Text("Начать смену") }
                     } else {
                         OutlinedTextField(finishReason, { finishReason = it }, Modifier.fillMaxWidth(), label = { Text("Причина закрытия") })
-                        Spacer(Modifier.height(10.dp))
+                        Spacer(Modifier.height(MesSpacing.contentGap))
                         OutlinedButton(onClick = { onFinish(finishReason) }, Modifier.fillMaxWidth()) { Text("Закончить смену") }
                     }
                 }

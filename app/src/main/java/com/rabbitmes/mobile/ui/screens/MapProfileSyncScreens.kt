@@ -25,10 +25,10 @@ fun HangarMapScreen(workshop: Workshop, tasks: List<MobileTask>, onOpenTask: (St
         bottomBar = bottomBar,
         containerColor = Color.Transparent,
     ) { padding ->
-        LazyColumn(Modifier.fillMaxSize().padding(padding), contentPadding = PaddingValues(bottom = 16.dp)) {
+        LazyColumn(Modifier.fillMaxSize().padding(padding), contentPadding = PaddingValues(bottom = MesSpacing.screenBottom)) {
             item { AppHeader("Карта ангара", "${workshop.name} · ${hangar.name}", onBack) }
-            item { MesCard { Text("Клетки подсвечены по задачам смены", fontWeight = FontWeight.Bold); Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) { StatusBadge("План", MaterialTheme.colorScheme.primary); StatusBadge("Готово", mobileSuccessGreen); StatusBadge("Проблема", MaterialTheme.colorScheme.error) } } }
-            hangar.rows.forEach { row -> item { Text("Ряд ${row.number}", Modifier.padding(horizontal = 16.dp, vertical = 8.dp), fontWeight = FontWeight.Bold) }; item { Row(Modifier.padding(horizontal = 14.dp).fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(6.dp)) { row.cages.forEach { cage -> val task = tasks.firstOrNull { it.checklist.any { item -> item.targetId == cage.id } }; val item = task?.checklist?.firstOrNull { it.targetId == cage.id }; val color = when(item?.status) { ChecklistStatus.DONE -> mobileSuccessGreen; ChecklistStatus.PROBLEM -> MaterialTheme.colorScheme.error; ChecklistStatus.SKIPPED -> MaterialTheme.colorScheme.onSurfaceVariant; ChecklistStatus.PENDING -> MaterialTheme.colorScheme.primary; null -> MaterialTheme.colorScheme.outlineVariant }; Box(Modifier.weight(1f).height(42.dp).background(color.copy(alpha=.18f), RoundedCornerShape(10.dp)).clickable(enabled = task != null) { if (task != null) onOpenTask(task.id) }.padding(3.dp)) { Text(cage.number.toString(), color = color, style = MaterialTheme.typography.labelSmall) } } } } }
+            item { MesCard { Text("Клетки подсвечены по задачам смены", fontWeight = FontWeight.Bold); Row(horizontalArrangement = Arrangement.spacedBy(MesSpacing.smallGap)) { StatusBadge("План", MaterialTheme.colorScheme.primary); StatusBadge("Готово", mobileSuccessGreen); StatusBadge("Проблема", MaterialTheme.colorScheme.error) } } }
+            hangar.rows.forEach { row -> item { Text("Ряд ${row.number}", Modifier.padding(horizontal = MesSpacing.screenHorizontal, vertical = MesSpacing.smallGap), fontWeight = FontWeight.Bold) }; item { Row(Modifier.padding(horizontal = MesSpacing.screenHorizontal).fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(MesSpacing.smallGap)) { row.cages.forEach { cage -> val task = tasks.firstOrNull { it.checklist.any { item -> item.targetId == cage.id } }; val item = task?.checklist?.firstOrNull { it.targetId == cage.id }; val color = when(item?.status) { ChecklistStatus.DONE -> mobileSuccessGreen; ChecklistStatus.PROBLEM -> MaterialTheme.colorScheme.error; ChecklistStatus.SKIPPED -> MaterialTheme.colorScheme.onSurfaceVariant; ChecklistStatus.PENDING -> MaterialTheme.colorScheme.primary; null -> MaterialTheme.colorScheme.outlineVariant }; Box(Modifier.weight(1f).height(42.dp).background(color.copy(alpha=.18f), RoundedCornerShape(10.dp)).clickable(enabled = task != null) { if (task != null) onOpenTask(task.id) }.padding(MesSpacing.tinyGap)) { Text(cage.number.toString(), color = color, style = MaterialTheme.typography.labelSmall) } } } } }
         }
     }
 }
@@ -45,7 +45,7 @@ fun SyncQueueScreen(shift: ShiftState, tasks: List<MobileTask>, onSync: () -> Un
     ) { padding ->
         LazyColumn(
             Modifier.fillMaxSize().padding(padding),
-            contentPadding = PaddingValues(bottom = 20.dp),
+            contentPadding = PaddingValues(bottom = MesSpacing.screenBottom),
         ) {
             item {
                 AppHeader(
@@ -66,16 +66,16 @@ fun SyncQueueScreen(shift: ShiftState, tasks: List<MobileTask>, onSync: () -> Un
                         }
                         StatusBadge(if (shift.isOnline) "Онлайн" else "Оффлайн", statusColor)
                     }
-                    Spacer(Modifier.height(12.dp))
+                    Spacer(Modifier.height(MesSpacing.contentGap))
                     Text("В очереди: ${shift.pendingSyncEvents} событий", color = MaterialTheme.colorScheme.onSurfaceVariant)
                     Text("Задач к синхронизации: ${pendingTasks.size}", color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    Spacer(Modifier.height(12.dp))
+                    Spacer(Modifier.height(MesSpacing.contentGap))
                     if (!shift.isOnline) {
                         Text(
                             "Синхронизация появится автоматически, когда устройство снова будет онлайн.",
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                         )
-                        Spacer(Modifier.height(8.dp))
+                        Spacer(Modifier.height(MesSpacing.smallGap))
                     }
                     Button(
                         onClick = onSync,
@@ -83,7 +83,7 @@ fun SyncQueueScreen(shift: ShiftState, tasks: List<MobileTask>, onSync: () -> Un
                         enabled = shift.isOnline && hasPending,
                     ) {
                         Icon(Icons.Default.Sync, null)
-                        Spacer(Modifier.width(8.dp))
+                        Spacer(Modifier.width(MesSpacing.smallGap))
                         Text(if (shift.isOnline) "Синхронизировать" else "Синхронизация недоступна офлайн")
                     }
                 }
@@ -91,7 +91,7 @@ fun SyncQueueScreen(shift: ShiftState, tasks: List<MobileTask>, onSync: () -> Un
             item {
                 Text(
                     "Задачи на синхронизацию",
-                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp),
+                    modifier = Modifier.padding(horizontal = MesSpacing.screenHorizontal, vertical = MesSpacing.contentGap),
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold,
                 )
@@ -112,9 +112,9 @@ fun SyncQueueScreen(shift: ShiftState, tasks: List<MobileTask>, onSync: () -> Un
                             }
                             TaskStatusBadge(task.status)
                         }
-                        Spacer(Modifier.height(8.dp))
+                        Spacer(Modifier.height(MesSpacing.smallGap))
                         StatusBadge("Ожидает отправки: ${task.offlineEvents}", Color(0xFFE98500))
-                        Spacer(Modifier.height(8.dp))
+                        Spacer(Modifier.height(MesSpacing.smallGap))
                         ProgressLine(task.checklist.count { it.status != ChecklistStatus.PENDING }, task.checklist.size)
                     }
                 }
@@ -131,7 +131,7 @@ fun ProfileScreen(employee: Employee, tasks: List<MobileTask>, operations: List<
     ) { padding ->
         LazyColumn(Modifier.fillMaxSize().padding(padding)) {
             item { AppHeader("Профиль", employee.fullName, trailing = { TextButton(onClick = onLogout) { Text("Выйти") } }) }
-            item { MesCard { Text(employee.fullName, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold); StatusBadge(employee.role.title, MaterialTheme.colorScheme.primary); Spacer(Modifier.height(10.dp)); Text("Выполнено: ${tasks.count { it.status == TaskStatus.SENT || it.status == TaskStatus.DONE }}"); Text("Проблемы: ${tasks.sumOf { it.checklist.count { item -> item.status == ChecklistStatus.PROBLEM } }}") } }
+            item { MesCard { Text(employee.fullName, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold); StatusBadge(employee.role.title, MaterialTheme.colorScheme.primary); Spacer(Modifier.height(MesSpacing.contentGap)); Text("Выполнено: ${tasks.count { it.status == TaskStatus.SENT || it.status == TaskStatus.DONE }}"); Text("Проблемы: ${tasks.sumOf { it.checklist.count { item -> item.status == ChecklistStatus.PROBLEM } }}") } }
             item { MesCard { Text("Допустимые операции", fontWeight = FontWeight.Bold); operations.filter { employee.role in it.allowedRoles }.forEach { Text("• ${it.type.title}") } } }
         }
     }

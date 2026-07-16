@@ -312,26 +312,7 @@ class MobileMesViewModel @Inject constructor(
 
     fun completeTask(taskId: String) {
         val currentTask = tasks.first { it.id == taskId }
-        val operation = MockRepository.operation(currentTask.operationType)
-        val shouldFillChecklistFromResult = !operation.requiresScan && operation.targetType == TargetType.HANGAR
-        val checklist = if (shouldFillChecklistFromResult) {
-            currentTask.checklist.map { item ->
-                if (item.status == ChecklistStatus.PENDING) {
-                    item.copy(
-                        status = ChecklistStatus.DONE,
-                        result = item.result.copy(
-                            values = item.result.values + currentTask.result.values,
-                            comment = currentTask.result.comment,
-                            completedAt = "now"
-                        )
-                    )
-                } else {
-                    item
-                }
-            }
-        } else {
-            currentTask.checklist
-        }
+        val checklist = currentTask.checklist
         val pending = checklist.count { it.status == ChecklistStatus.PENDING }
         if (pending > 0) {
             lastMessage = "Нельзя завершить задачу: осталось $pending необработанных пунктов чек-листа"

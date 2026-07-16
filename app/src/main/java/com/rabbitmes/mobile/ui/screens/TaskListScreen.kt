@@ -37,7 +37,7 @@ fun TaskListScreen(
         bottomBar = bottomBar,
         containerColor = Color.Transparent,
     ) { padding ->
-        LazyColumn(Modifier.fillMaxSize().padding(padding), contentPadding = PaddingValues(bottom = 20.dp)) {
+        LazyColumn(Modifier.fillMaxSize().padding(padding), contentPadding = PaddingValues(bottom = MesSpacing.screenBottom)) {
             item { AppHeader("Мои задачи", "Предстоящие и выполненные задания", onBack) }
             if (!shiftStarted) {
                 item {
@@ -62,7 +62,7 @@ fun TaskListScreen(
                     }
                 }
                 item {
-                    Row(Modifier.padding(horizontal = 14.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Row(Modifier.padding(horizontal = MesSpacing.screenHorizontal), horizontalArrangement = Arrangement.spacedBy(MesSpacing.smallGap)) {
                         FilterChip(selected = tab == "upcoming", onClick = { tab = "upcoming" }, label = { Text("Предстоящие (${upcoming.size})") })
                         FilterChip(selected = tab == "completed", onClick = { tab = "completed" }, label = { Text("Выполненные (${completed.size})") })
                     }
@@ -85,21 +85,21 @@ fun TaskCard(task: MobileTask, isNext: Boolean = false, onClick: () -> Unit) {
             }
             TaskStatusBadge(task.status)
         }
-        Spacer(Modifier.height(8.dp))
+        Spacer(Modifier.height(MesSpacing.smallGap))
         FlowRow(
             modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
+            horizontalArrangement = Arrangement.spacedBy(MesSpacing.smallGap),
+            verticalArrangement = Arrangement.spacedBy(MesSpacing.smallGap),
         ) {
             StatusBadge(if (isNext) "Можно начать" else "Просмотр", if (isNext) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant)
             PriorityBadge(task.priority)
             StatusBadge(if (task.requiresAcceptance) "Приемка" else "Без приемки", if (task.requiresAcceptance) MaterialTheme.colorScheme.tertiary else MaterialTheme.colorScheme.onSurfaceVariant)
             StatusBadge("${task.plannedDurationMinutes} мин", operationAccent(task.operationType))
         }
-        Spacer(Modifier.height(10.dp))
+        Spacer(Modifier.height(MesSpacing.contentGap))
         ProgressLine(task.checklist.count { it.status != ChecklistStatus.PENDING }, task.checklist.size)
         if (task.offlineEvents > 0) {
-            Spacer(Modifier.height(8.dp))
+            Spacer(Modifier.height(MesSpacing.smallGap))
             StatusBadge("Offline: ${task.offlineEvents}", Color(0xFFE98500))
         }
     }

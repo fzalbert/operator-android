@@ -29,7 +29,7 @@ fun TaskExecutionScaffold(
     bottom: @Composable ColumnScope.() -> Unit
 ) {
     var skipReason by remember { mutableStateOf("Не удалось выполнить") }
-    LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 20.dp)) {
+    LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = MesSpacing.screenBottom)) {
         item { AppHeader(task.title, "${task.plannedStart} · ${task.operationType.title}", onBack) }
         item {
             MesCard {
@@ -37,41 +37,45 @@ fun TaskExecutionScaffold(
                     TaskStatusBadge(task.status)
                     PriorityBadge(task.priority)
                 }
-                Spacer(Modifier.height(10.dp))
-                ProgressLine(task.checklist.count { it.status != ChecklistStatus.PENDING }, task.checklist.size)
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                Spacer(Modifier.height(MesSpacing.contentGap))
+                if (task.checklist.isNotEmpty()) {
+                    ProgressLine(task.checklist.count { it.status != ChecklistStatus.PENDING }, task.checklist.size)
+                }
+                Row(horizontalArrangement = Arrangement.spacedBy(MesSpacing.smallGap)) {
                     StatusBadge("${task.plannedDurationMinutes} мин", operationAccent(task.operationType))
                     if (task.requiresAcceptance) StatusBadge("Приемка", MaterialTheme.colorScheme.tertiary)
                 }
             }
         }
-        item {
-            ChecklistExecutionBlock(
-                items = task.checklist,
-                onDone = onChecklistDone,
-                onProblem = onChecklistProblem,
-                onSkip = onChecklistSkip
-            )
+        if (task.checklist.isNotEmpty()) {
+            item {
+                ChecklistExecutionBlock(
+                    items = task.checklist,
+                    onDone = onChecklistDone,
+                    onProblem = onChecklistProblem,
+                    onSkip = onChecklistSkip
+                )
+            }
         }
         item {
             MesCard {
                 if (!canEdit) {
                     StatusBadge("Только просмотр", MaterialTheme.colorScheme.onSurfaceVariant)
-                    Spacer(Modifier.height(10.dp))
+                    Spacer(Modifier.height(MesSpacing.contentGap))
                     Text(
                         "Эту задачу можно посмотреть, но взять в работу получится только после завершения предыдущей задачи.",
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
-                    Spacer(Modifier.height(10.dp))
+                    Spacer(Modifier.height(MesSpacing.contentGap))
                 } else if (task.status == TaskStatus.NEW) {
                     Button(onClick = onBegin, Modifier.fillMaxWidth()) { Text("Приступить") }
-                    Spacer(Modifier.height(10.dp))
+                    Spacer(Modifier.height(MesSpacing.contentGap))
                 }
                 if (canEdit) {
                     CompositionLocalProvider(LocalMesCardBorderEnabled provides false) {
                         bottom()
                     }
-                    Spacer(Modifier.height(10.dp))
+                    Spacer(Modifier.height(MesSpacing.contentGap))
                     val pendingItems = task.checklist.count { it.status == ChecklistStatus.PENDING }
                     if (allowRootComplete) {
                         Button(onClick = onComplete, Modifier.fillMaxWidth()) {
@@ -79,10 +83,16 @@ fun TaskExecutionScaffold(
                         }
                     } else {
                         Button(onClick = onComplete, Modifier.fillMaxWidth(), enabled = pendingItems == 0) {
-                            Text(if (pendingItems == 0) "Отправить обработанный чек-лист" else "Осталось обработать: $pendingItems")
+                            Text(
+                                when {
+                                    pendingItems > 0 -> "Осталось обработать: $pendingItems"
+                                    task.checklist.isEmpty() -> "Отправить результат"
+                                    else -> "Отправить обработанный чек-лист"
+                                }
+                            )
                         }
                     }
-                    Spacer(Modifier.height(10.dp))
+                    Spacer(Modifier.height(MesSpacing.contentGap))
                     OutlinedTextField(skipReason, { skipReason = it }, Modifier.fillMaxWidth(), label = { Text("Причина если невозможно выполнить всю задачу") })
                     OutlinedButton(onClick = { onSkip(skipReason) }, Modifier.fillMaxWidth()) { Text("Невозможно выполнить всю задачу") }
                 }
@@ -113,8 +123,8 @@ fun ScanPanel(
         Text(title, fontWeight = FontWeight.Bold)
         Text("Сначала отсканируйте RFID. После успешного скана рядом появится кнопка «Выполнено».", color = MaterialTheme.colorScheme.onSurfaceVariant)
         OutlinedTextField(rfid, { rfid = it; scannedRfid = null }, Modifier.fillMaxWidth(), label = { Text(placeholder) })
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
-            Button(onClick = { onOpenScanner?.invoke() ?: run { scannedRfid = rfid } }, modifier = Modifier.weight(1f)) { Icon(Icons.Default.QrCodeScanner, null); Spacer(Modifier.width(6.dp)); Text("Скан") }
+        Row(horizontalArrangement = Arrangement.spacedBy(MesSpacing.smallGap), modifier = Modifier.fillMaxWidth()) {
+            Button(onClick = { onOpenScanner?.invoke() ?: run { scannedRfid = rfid } }, modifier = Modifier.weight(1f)) { Icon(Icons.Default.QrCodeScanner, null); Spacer(Modifier.width(MesSpacing.smallGap)); Text("Скан") }
             OutlinedButton(
                 onClick = {
                     val mockRfid = MockRepository.rabbits.first().rfid
@@ -126,14 +136,14 @@ fun ScanPanel(
         }
         val rabbit = scannedRfid?.let { MockRepository.rabbitByRfid(it) }
         if (rabbit != null) {
-            Spacer(Modifier.height(10.dp))
+            Spacer(Modifier.height(MesSpacing.contentGap))
             RabbitMiniCard(rabbit, onOpenAnimal)
         } else if (scannedRfid != null) {
-            Spacer(Modifier.height(8.dp))
+            Spacer(Modifier.height(MesSpacing.smallGap))
             Text("RFID отсканирован: $scannedRfid", color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
         if (scannedRfid != null) {
-            Spacer(Modifier.height(10.dp))
+            Spacer(Modifier.height(MesSpacing.contentGap))
             Button(onClick = { onScan(scannedRfid!!) }, Modifier.fillMaxWidth()) { Text("Выполнено") }
         }
     }
@@ -160,7 +170,7 @@ fun CageScanPanel(
         Text(title, fontWeight = FontWeight.Bold)
         Text("Сначала скан клетки. После скана кнопка «Выполнено» сохраняет RFID.", color = MaterialTheme.colorScheme.onSurfaceVariant)
         OutlinedTextField(rfid, { rfid = it; scannedRfid = null }, Modifier.fillMaxWidth(), label = { Text("RFID клетки") })
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+        Row(horizontalArrangement = Arrangement.spacedBy(MesSpacing.smallGap), modifier = Modifier.fillMaxWidth()) {
             Button(onClick = { onOpenScanner?.invoke() ?: run { scannedRfid = rfid } }, Modifier.weight(1f)) { Text("Скан клетки") }
             OutlinedButton(
                 onClick = {
@@ -173,19 +183,19 @@ fun CageScanPanel(
         }
         val cage = scannedRfid?.let { MockRepository.cageByRfid(it) }
         if (cage != null) {
-            Spacer(Modifier.height(10.dp))
+            Spacer(Modifier.height(MesSpacing.contentGap))
             Surface(color = MaterialTheme.colorScheme.background, shape = MaterialTheme.shapes.medium) {
-                Column(Modifier.padding(12.dp)) {
+                Column(Modifier.padding(MesSpacing.contentGap)) {
                     Text("${cage.code} · ${cage.rfid}", fontWeight = FontWeight.Bold)
                     Text("Ряд ${cage.rowNumber}, клетка ${cage.number}")
                 }
             }
         } else if (scannedRfid != null) {
-            Spacer(Modifier.height(8.dp))
+            Spacer(Modifier.height(MesSpacing.smallGap))
             Text("RFID отсканирован: $scannedRfid", color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
         if (scannedRfid != null) {
-            Spacer(Modifier.height(10.dp))
+            Spacer(Modifier.height(MesSpacing.contentGap))
             Button(onClick = { onScan(scannedRfid!!) }, Modifier.fillMaxWidth()) { Text("Выполнено") }
         }
     }
@@ -194,7 +204,7 @@ fun CageScanPanel(
 @Composable
 fun RabbitMiniCard(rabbit: Rabbit, onOpenAnimal: ((String) -> Unit)?) {
     Surface(color = MaterialTheme.colorScheme.background, shape = MaterialTheme.shapes.medium) {
-        Column(Modifier.padding(12.dp)) {
+        Column(Modifier.padding(MesSpacing.contentGap)) {
             Text("${rabbit.earNumber} · ${rabbit.rfid}", fontWeight = FontWeight.Bold)
             Text("Возраст ${rabbit.ageDays} дней · вес ${"%.2f".format(rabbit.lastWeightKg)} кг")
             Text("Статус: ${rabbit.healthStatus}")
@@ -218,8 +228,8 @@ fun ChecklistExecutionBlock(
     val visibleItems = if (showCompleted) completedItems else pendingItems
     MesCard {
         Text("Рабочий чек-лист", fontWeight = FontWeight.Bold)
-        Text("ID кролика/клетки не редактируется. Исполнитель закрывает пункт сканом или ручной отметкой, если сканер/RFID недоступен.", color = MaterialTheme.colorScheme.onSurfaceVariant)
-        Spacer(Modifier.height(8.dp))
+        Text("Исполнитель закрывает пункты операции по списку. Для операций со сканированием пункт также может закрываться после успешного скана.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Spacer(Modifier.height(MesSpacing.smallGap))
         OutlinedButton(
             onClick = { isExpanded = !isExpanded },
             modifier = Modifier.fillMaxWidth()
@@ -227,8 +237,8 @@ fun ChecklistExecutionBlock(
             Text(if (isExpanded) "Скрыть список" else "Показать список: ожидает ${pendingItems.size}, готово ${completedItems.size}")
         }
         if (isExpanded) {
-            Spacer(Modifier.height(8.dp))
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+            Spacer(Modifier.height(MesSpacing.smallGap))
+            Row(horizontalArrangement = Arrangement.spacedBy(MesSpacing.smallGap), modifier = Modifier.fillMaxWidth()) {
                 FilterChip(
                     selected = !showCompleted,
                     onClick = { showCompleted = false },
@@ -240,7 +250,7 @@ fun ChecklistExecutionBlock(
                     label = { Text("Готово (${completedItems.size})") }
                 )
             }
-            Spacer(Modifier.height(8.dp))
+            Spacer(Modifier.height(MesSpacing.smallGap))
             if (visibleItems.isEmpty()) {
                 Text("Нет пунктов в этом разделе", color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
@@ -248,8 +258,8 @@ fun ChecklistExecutionBlock(
         if (isExpanded) visibleItems.forEach { item ->
             var reason by remember(item.id) { mutableStateOf("Не выполнено") }
             var comment by remember(item.id) { mutableStateOf("") }
-            Surface(color = MaterialTheme.colorScheme.background, shape = MaterialTheme.shapes.medium, modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp)) {
-                Column(Modifier.padding(12.dp)) {
+            Surface(color = MaterialTheme.colorScheme.background, shape = MaterialTheme.shapes.medium, modifier = Modifier.fillMaxWidth().padding(vertical = MesSpacing.smallGap)) {
+                Column(Modifier.padding(MesSpacing.contentGap)) {
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                         Column(Modifier.weight(1f)) {
                             Text(item.label, fontWeight = FontWeight.SemiBold)
@@ -260,14 +270,14 @@ fun ChecklistExecutionBlock(
                         }
                         StatusBadge(item.status.title, when(item.status){ ChecklistStatus.DONE -> mobileSuccessGreen; ChecklistStatus.PROBLEM -> MaterialTheme.colorScheme.error; ChecklistStatus.SKIPPED -> MaterialTheme.colorScheme.onSurfaceVariant; ChecklistStatus.PENDING -> MaterialTheme.colorScheme.primary })
                     }
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+                    Row(horizontalArrangement = Arrangement.spacedBy(MesSpacing.smallGap), modifier = Modifier.fillMaxWidth()) {
                         OutlinedButton(onClick = { openedItemId = if (openedItemId == item.id) null else item.id }, modifier = Modifier.weight(1f)) { Text("Детали / проблема") }
                     }
                     if (openedItemId == item.id) {
-                        Spacer(Modifier.height(8.dp))
+                        Spacer(Modifier.height(MesSpacing.smallGap))
                         OutlinedTextField(reason, { reason = it }, Modifier.fillMaxWidth(), label = { Text("Причина проблемы/пропуска") })
                         OutlinedTextField(comment, { comment = it }, Modifier.fillMaxWidth(), label = { Text("Комментарий по объекту") })
-                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
+                        Row(horizontalArrangement = Arrangement.spacedBy(MesSpacing.smallGap), modifier = Modifier.fillMaxWidth()) {
                             OutlinedButton(onClick = { onProblem(item.id, reason, comment) }, modifier = Modifier.weight(1f)) { Text("Проблема") }
                             OutlinedButton(onClick = { onSkip(item.id, reason) }, modifier = Modifier.weight(1f)) { Text("Пропустить") }
                         }
@@ -288,9 +298,9 @@ fun ProblemAndMediaControls(
     var comment by remember { mutableStateOf("") }
     MesCard {
         Text("Замечания", fontWeight = FontWeight.Bold)
-        Spacer(Modifier.height(12.dp))
+        Spacer(Modifier.height(MesSpacing.contentGap))
         OutlinedTextField(comment, { comment = it; onComment(it) }, Modifier.fillMaxWidth(), label = { Text("Комментарий исполнителя") })
-        Spacer(Modifier.height(12.dp))
+        Spacer(Modifier.height(MesSpacing.contentGap))
         AttachmentPickerButtons(onAttachment = { type, name, uri ->
             when (type) {
                 AttachmentType.PHOTO -> onPhoto(name, uri)
@@ -309,7 +319,7 @@ fun ExecutionEvidencePanel(task: MobileTask) {
             Text("Доказательства выполнения", fontWeight = FontWeight.Bold)
             if (task.result.comment.isNotBlank()) Text(task.result.comment)
             attachments.forEach { attachment ->
-                Row(Modifier.fillMaxWidth().padding(vertical = 5.dp), horizontalArrangement = Arrangement.SpaceBetween) {
+                Row(Modifier.fillMaxWidth().padding(vertical = MesSpacing.tinyGap), horizontalArrangement = Arrangement.SpaceBetween) {
                     Text("${attachment.type.emoji} ${attachment.name}")
                     Text(attachment.createdAt, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }

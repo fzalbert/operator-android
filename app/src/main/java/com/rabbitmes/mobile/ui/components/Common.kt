@@ -23,6 +23,18 @@ import com.rabbitmes.mobile.domain.*
 import ru.profikrol.operator.uikit.theme.mobileSuccessGreen
 
 private val MesWarning = Color(0xFFE98500)
+
+object MesSpacing {
+    val screenHorizontal = 16.dp
+    val screenBottom = 24.dp
+    val cardVertical = 8.dp
+    val cardInner = 16.dp
+    val headerHorizontal = 20.dp
+    val headerVertical = 14.dp
+    val contentGap = 12.dp
+    val smallGap = 8.dp
+    val tinyGap = 4.dp
+}
 val LocalMesCardBorderEnabled = compositionLocalOf { true }
 
 @Composable
@@ -34,18 +46,18 @@ fun MesCard(
 ) {
     val clickable = if (onClick != null) modifier.clickable { onClick() } else modifier
     Card(
-        clickable.padding(horizontal = 14.dp, vertical = 8.dp).fillMaxWidth(),
+        clickable.padding(horizontal = MesSpacing.screenHorizontal, vertical = MesSpacing.cardVertical).fillMaxWidth(),
         shape = RoundedCornerShape(20.dp),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
         border = if (showBorder) BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant) else null,
     ) {
-        Column(Modifier.padding(16.dp), content = content)
+        Column(Modifier.padding(MesSpacing.cardInner), content = content)
     }
 }
 
 @Composable
 fun AppHeader(title: String, subtitle: String? = null, onBack: (() -> Unit)? = null, trailing: @Composable RowScope.() -> Unit = {}) {
-    Row(Modifier.fillMaxWidth().statusBarsPadding().padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
+    Row(Modifier.fillMaxWidth().statusBarsPadding().padding(horizontal = MesSpacing.headerHorizontal, vertical = MesSpacing.headerVertical), verticalAlignment = Alignment.CenterVertically) {
         if (onBack != null) IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, null) }
         Column(Modifier.weight(1f)) {
             Text(title, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
@@ -108,22 +120,23 @@ fun operationAccent(type: OperationType): Color = when(type) {
 }
 
 @Composable fun ProgressLine(done: Int, total: Int) {
-    val pct = if (total == 0) 0f else done.toFloat() / total
+    if (total <= 0) return
+    val pct = done.toFloat() / total
     Box(Modifier.fillMaxWidth().height(9.dp).background(MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(20.dp))) {
         Box(Modifier.fillMaxWidth(pct).height(9.dp).background(MaterialTheme.colorScheme.primary, RoundedCornerShape(20.dp)))
     }
-    Spacer(Modifier.height(4.dp)); Text("$done / $total", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.labelMedium)
+    Spacer(Modifier.height(MesSpacing.tinyGap)); Text("$done / $total", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.labelMedium)
 }
 
 @Composable fun MetricTile(title: String, value: String, icon: ImageVector, modifier: Modifier = Modifier) {
     Card(
-        modifier.padding(8.dp),
+        modifier.padding(MesSpacing.cardVertical),
         shape = RoundedCornerShape(20.dp),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
         border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
     ) {
-        Row(Modifier.padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
-            Icon(icon, null, tint = MaterialTheme.colorScheme.primary); Spacer(Modifier.width(10.dp)); Column { Text(value, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleLarge); Text(title, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.labelMedium) }
+        Row(Modifier.padding(MesSpacing.cardInner), verticalAlignment = Alignment.CenterVertically) {
+            Icon(icon, null, tint = MaterialTheme.colorScheme.primary); Spacer(Modifier.width(MesSpacing.smallGap)); Column { Text(value, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleLarge); Text(title, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.labelMedium) }
         }
     }
 }

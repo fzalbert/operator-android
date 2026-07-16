@@ -48,8 +48,8 @@ object MockRepository {
         OperationDefinition(OperationType.WEIGHING, TargetType.RABBIT, true, "Сохранить вес", listOf(
             OperationField("rfid", "RFID", FieldType.TEXT, true), OperationField("weight", "Вес", FieldType.NUMBER, true, "кг"), OperationField("photo", "Фото весов", FieldType.PHOTO)
         ), listOf(RoleId.OPERATOR)),
-        OperationDefinition(OperationType.NEST_PREPARATION, TargetType.CAGE, true, "Гнездо подготовлено", listOf(
-            OperationField("cageRfid", "RFID клетки", FieldType.TEXT, true), OperationField("nestReady", "Гнездо готово", FieldType.BOOLEAN, true), OperationField("shavings", "Стружка добавлена", FieldType.BOOLEAN, true), OperationField("photo", "Фото гнезда", FieldType.PHOTO)
+        OperationDefinition(OperationType.NEST_PREPARATION, TargetType.CAGE, false, "Гнездо подготовлено", listOf(
+            OperationField("nestReady", "Гнездо готово", FieldType.BOOLEAN, true)
         ), listOf(RoleId.OPERATOR), true),
         OperationDefinition(OperationType.NEST_CONTROL, TargetType.CAGE, true, "Сохранить контроль", listOf(
             OperationField("cageRfid", "RFID клетки", FieldType.TEXT, true), OperationField("fed", "Сытых", FieldType.NUMBER, true), OperationField("hungry", "Голодных", FieldType.NUMBER, true), OperationField("dead", "Мертвых", FieldType.NUMBER, true), OperationField("nestState", "Состояние гнезда", FieldType.SELECT, true, options = listOf("Норма", "Мокрое", "Мало стружки", "Нужно вмешательство"))
@@ -91,20 +91,19 @@ object MockRepository {
 
     private fun rabbitChecklist(prefix: String, count: Int = 12) = rabbits.take(count).mapIndexed { index, rabbit -> ChecklistItem("$prefix-r-${index + 1}", "${rabbit.earNumber} · ${rabbit.rfid}", TargetType.RABBIT, rabbit.id) }
     private fun cageChecklist(prefix: String, count: Int = 18) = allCages.take(count).mapIndexed { index, cage -> ChecklistItem("$prefix-c-${index + 1}", "${cage.code} · ${cage.rfid}", TargetType.CAGE, cage.id) }
-    private fun hangarChecklist(prefix: String, labels: List<String>) = labels.mapIndexed { index, label -> ChecklistItem("$prefix-h-${index + 1}", label, TargetType.HANGAR, workshop.hangars.first().id) }
-
+    private fun cageNumberChecklist(prefix: String, count: Int = 18) = allCages.take(count).mapIndexed { index, cage -> ChecklistItem("$prefix-c-${index + 1}", "Клетка ${cage.code}", TargetType.CAGE, cage.id) }
     fun initialTasks(): List<MobileTask> = listOf(
         MobileTask("task-1", "Осеменение самок", OperationType.INSEMINATION, "ws-1", "h-1", "emp-1", "2026-07-09", "08:30", 180, Priority.URGENT, TaskStatus.NEW, rabbitChecklist("ins", 14), true, RoleId.CHIEF_TECHNOLOGIST, AcceptanceStatus.NOT_REQUIRED),
         MobileTask("task-2", "Взвешивание контрольной группы", OperationType.WEIGHING, "ws-1", "h-1", "emp-1", "2026-07-09", "11:00", 90, Priority.HIGH, TaskStatus.NEW, rabbitChecklist("weight", 10), false),
-        MobileTask("task-3", "Подготовка гнезд", OperationType.NEST_PREPARATION, "ws-1", "h-1", "emp-1", "2026-07-09", "13:00", 120, Priority.HIGH, TaskStatus.NEW, cageChecklist("nestprep", 18), true, RoleId.CHIEF_TECHNOLOGIST, AcceptanceStatus.NOT_REQUIRED),
+        MobileTask("task-3", "Подготовка гнезд", OperationType.NEST_PREPARATION, "ws-1", "h-1", "emp-1", "2026-07-09", "13:00", 120, Priority.HIGH, TaskStatus.NEW, cageNumberChecklist("nestprep", 18), true, RoleId.CHIEF_TECHNOLOGIST, AcceptanceStatus.NOT_REQUIRED),
         MobileTask("task-4", "Контроль гнезд", OperationType.NEST_CONTROL, "ws-1", "h-1", "emp-1", "2026-07-09", "15:00", 150, Priority.NORMAL, TaskStatus.NEW, cageChecklist("nestctl", 12), true, RoleId.CHIEF_TECHNOLOGIST, AcceptanceStatus.NOT_REQUIRED),
-        MobileTask("task-5", "Проверка светового режима", OperationType.LIGHTING_CHECK, "ws-1", "h-1", "emp-1", "2026-07-09", "06:05", 20, Priority.URGENT, TaskStatus.NEW, hangarChecklist("light", listOf("Ангар А: проверить лампы", "Сверить фазу цикла", "Заменить перегоревшие")), false),
-        MobileTask("task-6", "Мойка ангара после цикла", OperationType.WASHING, "ws-1", "h-2", "emp-3", "2026-07-09", "09:00", 240, Priority.HIGH, TaskStatus.DONE, hangarChecklist("wash", listOf("Проходы", "Клеточные батареи", "Поилки", "Кормолиния")).map { it.copy(status = ChecklistStatus.DONE) }, true, RoleId.CHIEF_TECHNOLOGIST, AcceptanceStatus.WAITING),
-        MobileTask("task-7", "Дезинфекция ангара", OperationType.DISINFECTION, "ws-1", "h-2", "emp-3", "2026-07-09", "14:00", 180, Priority.NORMAL, TaskStatus.NEW, hangarChecklist("dis", listOf("Препарат подготовлен", "Поверхности обработаны", "Экспозиция выдержана")), true, RoleId.CHIEF_TECHNOLOGIST, AcceptanceStatus.NOT_REQUIRED),
-        MobileTask("task-8", "Приемка ангара", OperationType.HANGAR_ACCEPTANCE, "ws-1", "h-2", "emp-2", "2026-07-09", "17:00", 60, Priority.HIGH, TaskStatus.NEW, hangarChecklist("acc", listOf("Пол сухой", "Нет остатков органики", "Поилки промыты", "Кормушки чистые")), false),
+        MobileTask("task-5", "Проверка светового режима", OperationType.LIGHTING_CHECK, "ws-1", "h-1", "emp-1", "2026-07-09", "06:05", 20, Priority.URGENT, TaskStatus.NEW, emptyList(), false),
+        MobileTask("task-6", "Мойка ангара после цикла", OperationType.WASHING, "ws-1", "h-2", "emp-3", "2026-07-09", "09:00", 240, Priority.HIGH, TaskStatus.DONE, emptyList(), true, RoleId.CHIEF_TECHNOLOGIST, AcceptanceStatus.WAITING),
+        MobileTask("task-7", "Дезинфекция ангара", OperationType.DISINFECTION, "ws-1", "h-2", "emp-3", "2026-07-09", "14:00", 180, Priority.NORMAL, TaskStatus.NEW, emptyList(), true, RoleId.CHIEF_TECHNOLOGIST, AcceptanceStatus.NOT_REQUIRED),
+        MobileTask("task-8", "Приемка ангара", OperationType.HANGAR_ACCEPTANCE, "ws-1", "h-2", "emp-2", "2026-07-09", "17:00", 60, Priority.HIGH, TaskStatus.NEW, emptyList(), false),
         MobileTask("task-9", "Пальпация", OperationType.PALPATION, "ws-1", "h-1", "emp-1", "2026-07-09", "16:00", 120, Priority.NORMAL, TaskStatus.NEW, rabbitChecklist("pal", 10), false),
         MobileTask("task-10", "Селекция / выравнивание гнезд", OperationType.NEST_SELECTION, "ws-1", "h-1", "emp-1", "2026-07-09", "16:40", 90, Priority.HIGH, TaskStatus.NEW, cageChecklist("sel", 10), true, RoleId.CHIEF_TECHNOLOGIST, AcceptanceStatus.NOT_REQUIRED),
-        MobileTask("task-11", "Проверка корма", OperationType.FEED_CHECK, "ws-1", "h-1", "emp-1", "2026-07-09", "07:30", 20, Priority.NORMAL, TaskStatus.NEW, hangarChecklist("feed", listOf("Бункер", "Кормолиния", "Тип корма")), false),
-        MobileTask("task-12", "Проверка воды", OperationType.WATER_CHECK, "ws-1", "h-1", "emp-1", "2026-07-09", "07:40", 20, Priority.NORMAL, TaskStatus.NEW, hangarChecklist("water", listOf("Поилки ряд 1", "Поилки ряд 2", "Поилки ряд 3")), false)
+        MobileTask("task-11", "Проверка корма", OperationType.FEED_CHECK, "ws-1", "h-1", "emp-1", "2026-07-09", "07:30", 20, Priority.NORMAL, TaskStatus.NEW, emptyList(), false),
+        MobileTask("task-12", "Проверка воды", OperationType.WATER_CHECK, "ws-1", "h-1", "emp-1", "2026-07-09", "07:40", 20, Priority.NORMAL, TaskStatus.NEW, emptyList(), false)
     )
 }

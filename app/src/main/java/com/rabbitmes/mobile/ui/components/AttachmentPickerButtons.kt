@@ -117,8 +117,8 @@ fun AttachmentPickerButtons(
 
     if (showMediaOptions) {
         ModalBottomSheet(onDismissRequest = { showMediaOptions = false }) {
-            Text("Добавить фото или видео", modifier = Modifier.padding(horizontal = 24.dp, vertical = 8.dp))
-            Column(Modifier.padding(bottom = 20.dp)) {
+            Text("Добавить фото или видео", modifier = Modifier.padding(horizontal = MesSpacing.headerHorizontal, vertical = MesSpacing.smallGap))
+            Column(Modifier.padding(bottom = MesSpacing.screenBottom)) {
                 ListItem(
                     headlineContent = { Text("Сделать фото") },
                     leadingContent = { Icon(painterResource(R.drawable.ic_camera), contentDescription = null) },
@@ -157,24 +157,24 @@ fun AttachmentPickerButtons(
 
     Row(
         modifier = modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        horizontalArrangement = Arrangement.spacedBy(MesSpacing.smallGap),
     ) {
         OutlinedButton(
             onClick = { showMediaOptions = true },
             modifier = Modifier.weight(1f).height(56.dp),
-            contentPadding = PaddingValues(horizontal = 8.dp),
+            contentPadding = PaddingValues(horizontal = MesSpacing.smallGap),
         ) {
             Icon(painterResource(R.drawable.ic_camera), contentDescription = null, Modifier.size(20.dp))
-            Spacer(Modifier.width(4.dp))
+            Spacer(Modifier.width(MesSpacing.tinyGap))
             Text("Фото/видео", maxLines = 1, softWrap = false)
         }
         OutlinedButton(
             onClick = { filePicker.launch(arrayOf("*/*")) },
             modifier = Modifier.weight(1f).height(56.dp),
-            contentPadding = PaddingValues(horizontal = 8.dp),
+            contentPadding = PaddingValues(horizontal = MesSpacing.smallGap),
         ) {
             Icon(painterResource(R.drawable.ic_upload), contentDescription = null, Modifier.size(20.dp))
-            Spacer(Modifier.width(4.dp))
+            Spacer(Modifier.width(MesSpacing.tinyGap))
             Text("Файл", maxLines = 1, softWrap = false)
         }
     }
