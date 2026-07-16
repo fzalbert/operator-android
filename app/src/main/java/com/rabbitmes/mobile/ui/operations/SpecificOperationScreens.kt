@@ -132,7 +132,9 @@ fun InseminationScreen(
                 Surface(
                     color = MaterialTheme.colorScheme.primaryContainer,
                     shape = MaterialTheme.shapes.medium,
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = MesSpacing.contentGap),
                 ) {
                     Column(Modifier.padding(MesSpacing.contentGap)) {
                         Text("Карточка животного", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)

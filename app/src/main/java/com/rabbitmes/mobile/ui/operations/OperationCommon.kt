@@ -76,7 +76,6 @@ fun TaskExecutionScaffold(
     val startControl: @Composable ColumnScope.() -> Unit = {
         if (task.status == TaskStatus.NEW) {
             Button(onClick = onBegin, Modifier.fillMaxWidth()) { Text("Приступить") }
-            Spacer(Modifier.height(MesSpacing.contentGap))
         }
     }
 
@@ -112,17 +111,22 @@ fun TaskExecutionScaffold(
         item { AppHeader(task.title, "${task.plannedStart} · ${task.operationType.title}", onBack) }
         item {
             MesCard {
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(MesSpacing.smallGap),
+                    verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
+                ) {
                     TaskStatusBadge(task.status)
+                    StatusBadge("${task.plannedDurationMinutes} мин", operationAccent(task.operationType))
                     PriorityBadge(task.priority)
                 }
-                Spacer(Modifier.height(MesSpacing.contentGap))
-                if (task.checklist.isNotEmpty()) {
-                    ProgressLine(task.checklist.count { it.status != ChecklistStatus.PENDING }, task.checklist.size)
+                if (task.requiresAcceptance) {
+                    Spacer(Modifier.height(MesSpacing.smallGap))
+                    StatusBadge("Приемка", MaterialTheme.colorScheme.tertiary)
                 }
-                Row(horizontalArrangement = Arrangement.spacedBy(MesSpacing.smallGap)) {
-                    StatusBadge("${task.plannedDurationMinutes} мин", operationAccent(task.operationType))
-                    if (task.requiresAcceptance) StatusBadge("Приемка", MaterialTheme.colorScheme.tertiary)
+                if (task.checklist.isNotEmpty()) {
+                    Spacer(Modifier.height(MesSpacing.contentGap))
+                    ProgressLine(task.checklist.count { it.status != ChecklistStatus.PENDING }, task.checklist.size)
                 }
             }
         }
@@ -133,18 +137,13 @@ fun TaskExecutionScaffold(
             item { checklist() }
         }
         if (canEdit) {
-            item {
-                MesCard {
-                    startControl()
-                    CompositionLocalProvider(LocalMesCardBorderEnabled provides false) {
-                        bottom()
-                    }
-                    if (!checklistAfterContent) {
-                        afterChecklist()
-                        Spacer(Modifier.height(MesSpacing.contentGap))
-                        completionControls()
-                    }
-                }
+            if (task.status == TaskStatus.NEW) {
+                item { MesCard { startControl() } }
+            }
+            item { Column { bottom() } }
+            if (!checklistAfterContent) {
+                item { Column { afterChecklist() } }
+                item { MesCard { completionControls() } }
             }
         }
         if (checklistAfterContent) {
@@ -152,14 +151,8 @@ fun TaskExecutionScaffold(
                 item { checklist() }
             }
             if (canEdit) {
-                item {
-                    MesCard {
-                        CompositionLocalProvider(LocalMesCardBorderEnabled provides false) {
-                            afterChecklist()
-                        }
-                        completionControls()
-                    }
-                }
+                item { Column { afterChecklist() } }
+                item { MesCard { completionControls() } }
             }
         }
     }
