@@ -185,7 +185,7 @@ fun ScanPanel(
     }
     MesCard {
         Text(title, fontWeight = FontWeight.Bold)
-        Text("Сначала отсканируйте RFID. После успешного скана рядом появится кнопка «Выполнено».", color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text("Отсканируйте RFID.", color = MaterialTheme.colorScheme.onSurfaceVariant)
         OutlinedTextField(rfid, { rfid = it; scannedRfid = null }, Modifier.fillMaxWidth(), label = { Text(placeholder) })
         Row(horizontalArrangement = Arrangement.spacedBy(MesSpacing.smallGap), modifier = Modifier.fillMaxWidth()) {
             Button(onClick = { onOpenScanner?.invoke() ?: run { scannedRfid = rfid } }, modifier = Modifier.weight(1f)) { Icon(Icons.Default.QrCodeScanner, null); Spacer(Modifier.width(MesSpacing.smallGap)); Text("Скан") }
@@ -232,7 +232,7 @@ fun CageScanPanel(
 
     MesCard {
         Text(title, fontWeight = FontWeight.Bold)
-        Text("Сначала скан клетки. После скана кнопка «Выполнено» сохраняет RFID.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text("Отсканируйте RFID клетки.", color = MaterialTheme.colorScheme.onSurfaceVariant)
         OutlinedTextField(rfid, { rfid = it; scannedRfid = null }, Modifier.fillMaxWidth(), label = { Text("RFID клетки") })
         Row(horizontalArrangement = Arrangement.spacedBy(MesSpacing.smallGap), modifier = Modifier.fillMaxWidth()) {
             Button(onClick = { onOpenScanner?.invoke() ?: run { scannedRfid = rfid } }, Modifier.weight(1f)) { Text("Скан клетки") }
@@ -295,7 +295,7 @@ fun ChecklistExecutionBlock(
     MesCard {
         Text("Рабочий чек-лист", fontWeight = FontWeight.Bold)
         Text(
-            description ?: "Исполнитель закрывает пункты операции по списку. Для операций со сканированием пункт также может закрываться после успешного скана.",
+            description ?: "Сканирование или ручная отметка.",
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
         Spacer(Modifier.height(MesSpacing.smallGap))

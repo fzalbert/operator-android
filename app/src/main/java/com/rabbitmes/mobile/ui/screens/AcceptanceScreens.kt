@@ -62,7 +62,7 @@ fun AcceptanceScreen(
                 }
                 Spacer(Modifier.height(MesSpacing.contentGap))
                 ProgressLine(task.checklist.count { it.status == ChecklistStatus.DONE }, task.checklist.size)
-                Text("Если все нормально — просто нажмите «Готово». Если есть проблема по объекту, включите ползунок у этого объекта и заполните карточку замечания.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text("Отметьте только объекты с проблемами.", color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
         items(task.checklist) { item ->
@@ -81,7 +81,7 @@ fun AcceptanceScreen(
                 if (!hasProblems) {
                     Button(onClick = { onAccept(finalComment) }, Modifier.fillMaxWidth()) { Text("Готово") }
                 } else {
-                    Text("Есть отмеченные проблемы. Сначала сохраните замечания по проблемным объектам, затем верните задачу на доработку.", color = MaterialTheme.colorScheme.error)
+                    Text("Сохраните замечания и верните задачу на доработку.", color = MaterialTheme.colorScheme.error)
                     Spacer(Modifier.height(MesSpacing.smallGap))
                     OutlinedButton(onClick = { onReject(finalComment) }, Modifier.fillMaxWidth()) { Text("Вернуть на доработку") }
                 }

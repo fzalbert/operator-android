@@ -92,12 +92,12 @@ object MockRepository {
     private fun rabbitChecklist(prefix: String, count: Int = 12) = rabbits.take(count).mapIndexed { index, rabbit -> ChecklistItem("$prefix-r-${index + 1}", "${rabbit.earNumber} · ${rabbit.rfid}", TargetType.RABBIT, rabbit.id) }
     private fun cageChecklist(prefix: String, count: Int = 18) = allCages.take(count).mapIndexed { index, cage -> ChecklistItem("$prefix-c-${index + 1}", "${cage.code} · ${cage.rfid}", TargetType.CAGE, cage.id) }
     private fun cageNumberChecklist(prefix: String, count: Int = 18) = allCages.take(count).mapIndexed { index, cage -> ChecklistItem("$prefix-c-${index + 1}", "Клетка ${cage.code}", TargetType.CAGE, cage.id) }
-    private fun weighingChecklist(count: Int = 10) = allCages.take(count).mapIndexed { index, cage ->
+    private fun weighingChecklist(count: Int = 4) = allCages.take(count).mapIndexed { index, cage ->
         ChecklistItem("weight-c-${index + 1}", "Ряд ${cage.rowNumber} · клетка ${cage.number}", TargetType.CAGE, cage.id)
     }
 
     fun initialTasks(): List<MobileTask> = listOf(
-        MobileTask("task-1", "Осеменение самок", OperationType.INSEMINATION, "ws-1", "h-1", "emp-1", "2026-07-09", "08:30", 180, Priority.URGENT, TaskStatus.NEW, rabbitChecklist("ins", 14), true, RoleId.CHIEF_TECHNOLOGIST, AcceptanceStatus.NOT_REQUIRED),
+        MobileTask("task-1", "Осеменение самок", OperationType.INSEMINATION, "ws-1", "h-1", "emp-1", "2026-07-09", "08:30", 180, Priority.URGENT, TaskStatus.NEW, rabbitChecklist("ins", 4), true, RoleId.CHIEF_TECHNOLOGIST, AcceptanceStatus.NOT_REQUIRED),
         MobileTask("task-2", "Взвешивание контрольной группы", OperationType.WEIGHING, "ws-1", "h-1", "emp-1", "2026-07-09", "11:00", 90, Priority.HIGH, TaskStatus.NEW, weighingChecklist(), false),
         MobileTask("task-3", "Подготовка гнезд", OperationType.NEST_PREPARATION, "ws-1", "h-1", "emp-1", "2026-07-09", "13:00", 120, Priority.HIGH, TaskStatus.NEW, cageNumberChecklist("nestprep", 18), true, RoleId.CHIEF_TECHNOLOGIST, AcceptanceStatus.NOT_REQUIRED),
         MobileTask("task-4", "Контроль гнезд", OperationType.NEST_CONTROL, "ws-1", "h-1", "emp-1", "2026-07-09", "15:00", 150, Priority.NORMAL, TaskStatus.NEW, cageChecklist("nestctl", 12), true, RoleId.CHIEF_TECHNOLOGIST, AcceptanceStatus.NOT_REQUIRED),
