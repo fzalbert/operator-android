@@ -5,6 +5,7 @@ plugins {
     alias(libs.plugins.kotlin.serialization)
     alias(libs.plugins.ksp)
     alias(libs.plugins.hilt)
+    alias(libs.plugins.protobuf)
 }
 
 android {
@@ -17,6 +18,12 @@ android {
         targetSdk = 35
         versionCode = 1
         versionName = "1.0"
+
+        // Android Emulator reaches services running on the development PC via 10.0.2.2.
+        // For a physical device replace this host with the PC's LAN address.
+        buildConfigField("String", "NOTIFICATIONS_GRPC_HOST", "\"10.0.2.2\"")
+        buildConfigField("int", "NOTIFICATIONS_GRPC_PORT", "5217")
+        buildConfigField("boolean", "NOTIFICATIONS_GRPC_TLS", "false")
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
@@ -39,6 +46,7 @@ android {
     }
     buildFeatures {
         compose = true
+        buildConfig = true
     }
 }
 
@@ -79,6 +87,13 @@ dependencies {
     // Coroutines
     implementation(libs.kotlinx.coroutines.android)
 
+    // Notification bidirectional stream
+    implementation(libs.protobuf.kotlin.lite)
+    implementation(libs.grpc.okhttp)
+    implementation(libs.grpc.protobuf.lite)
+    implementation(libs.grpc.stub)
+    implementation(libs.grpc.kotlin.stub)
+
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)
@@ -86,4 +101,30 @@ dependencies {
     androidTestImplementation(libs.androidx.ui.test.junit4)
     debugImplementation(libs.androidx.ui.tooling)
     debugImplementation(libs.androidx.ui.test.manifest)
+}
+
+protobuf {
+    protoc {
+        artifact = "com.google.protobuf:protoc:${libs.versions.protobuf.get()}"
+    }
+    plugins {
+        create("grpc") {
+            artifact = "io.grpc:protoc-gen-grpc-java:${libs.versions.grpc.get()}"
+        }
+        create("grpckt") {
+            artifact = "io.grpc:protoc-gen-grpc-kotlin:${libs.versions.grpcKotlin.get()}:jdk8@jar"
+        }
+    }
+    generateProtoTasks {
+        all().configureEach {
+            builtins {
+                create("kotlin") { option("lite") }
+                create("java") { option("lite") }
+            }
+            plugins {
+                create("grpc") { option("lite") }
+                create("grpckt")
+            }
+        }
+    }
 }

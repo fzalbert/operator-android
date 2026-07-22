@@ -1,106 +1,55 @@
 package com.rabbitmes.mobile.ui.screens
 
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.rabbitmes.mobile.domain.*
 import com.rabbitmes.mobile.ui.components.*
 
 @Composable
-fun TaskListScreen(
-    tasks: List<MobileTask>,
-    nextTask: MobileTask?,
-    message: String?,
-    shiftStarted: Boolean,
-    onOpen: (String) -> Unit,
-    onBack: () -> Unit,
-    bottomBar: @Composable () -> Unit
-) {
-    var tab by remember { mutableStateOf("upcoming") }
-    val upcoming = tasks
-        .filter { it.status != TaskStatus.DONE && it.status != TaskStatus.SENT && it.status != TaskStatus.SKIPPED }
-        .sortedWith(compareBy<MobileTask> { it.priority.weight }.thenBy { it.plannedStart })
-    val completed = tasks
-        .filter { it.status == TaskStatus.DONE || it.status == TaskStatus.SENT || it.status == TaskStatus.SKIPPED }
-        .sortedByDescending { it.plannedStart }
-    val visible = if (tab == "upcoming") upcoming else completed
-
-    Scaffold(
-        bottomBar = bottomBar,
-        containerColor = Color.Transparent,
-    ) { padding ->
-        LazyColumn(Modifier.fillMaxSize().padding(padding), contentPadding = PaddingValues(bottom = MesSpacing.screenBottom)) {
-            item { AppHeader("Мои задачи", "Предстоящие и выполненные задания", onBack) }
-            if (!shiftStarted) {
-                item {
-                    MesCard {
-                        Text("Задачи доступны только после начала смены", fontWeight = FontWeight.Bold)
-                        Text("Начните смену на главном экране, чтобы увидеть предстоящие задачи.", color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    }
+fun TaskListScreen(tasks: List<MobileTask>, nextTask: MobileTask?, message: String?, shiftStarted: Boolean, onOpen: (String) -> Unit, onBack: () -> Unit, bottomBar: @Composable () -> Unit) {
+    val open = tasks.filter { it.status != TaskStatus.DONE && it.status != TaskStatus.SENT && it.status != TaskStatus.SKIPPED }.sortedWith(compareBy<MobileTask> { it.priority.weight }.thenBy { it.plannedStart })
+    val problems = open.sumOf { task -> task.checklist.count { it.status == ChecklistStatus.PROBLEM } }
+    Scaffold(bottomBar = bottomBar, containerColor = MaterialTheme.colorScheme.background) { padding ->
+        LazyColumn(Modifier.fillMaxSize().padding(padding), contentPadding = PaddingValues(bottom = 24.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            item { AppHeader("Мои задачи", "Rabbit MES Mobile", onBack) }
+            item {
+                Row(Modifier.fillMaxWidth().padding(horizontal = 18.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    TaskMetric(open.size.toString(), "активных", Modifier.weight(1f)); TaskMetric(open.count { it.priority == Priority.URGENT }.toString(), "срочных", Modifier.weight(1f)); TaskMetric(problems.toString(), "проблем", Modifier.weight(1f))
                 }
-            } else {
-                if (message != null) item { MesCard { Text(message, color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold) } }
-                if (nextTask != null && tab == "upcoming") item {
-                    MesCard(onClick = { onOpen(nextTask.id) }) {
-                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                            Column(Modifier.weight(1f)) {
-                                Text("Следующая", color = MaterialTheme.colorScheme.onSurfaceVariant)
-                                Text(nextTask.title, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleLarge)
-                                Text("${nextTask.plannedStart} · ${nextTask.operationType.title}")
-                            }
-                            Icon(Icons.Default.PlayArrow, null, tint = MaterialTheme.colorScheme.primary)
-                        }
-                        Button(onClick = { onOpen(nextTask.id) }, Modifier.fillMaxWidth()) { Text("Начать") }
-                    }
-                }
-                item {
-                    Row(Modifier.padding(horizontal = MesSpacing.screenHorizontal), horizontalArrangement = Arrangement.spacedBy(MesSpacing.smallGap)) {
-                        FilterChip(selected = tab == "upcoming", onClick = { tab = "upcoming" }, label = { Text("Предстоящие (${upcoming.size})") })
-                        FilterChip(selected = tab == "completed", onClick = { tab = "completed" }, label = { Text("Выполненные (${completed.size})") })
-                    }
-                }
-                if (visible.isEmpty()) item { MesCard { Text(if (tab == "upcoming") "Предстоящих задач нет" else "Выполненных задач пока нет") } }
-                items(visible) { task -> TaskCard(task, isNext = nextTask?.id == task.id) { onOpen(task.id) } }
             }
+            if (!shiftStarted) item { TaskEmpty("Начните смену, чтобы открыть задачи") }
+            else if (open.isEmpty()) item { TaskEmpty("Задач нет") }
+            else items(open, key = { it.id }) { task -> PrototypeTaskCard(task) { onOpen(task.id) } }
         }
     }
 }
 
-@OptIn(ExperimentalLayoutApi::class)
 @Composable
-fun TaskCard(task: MobileTask, isNext: Boolean = false, onClick: () -> Unit) {
-    MesCard(onClick = onClick) {
-        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-            Column(Modifier.weight(1f)) {
-                Text(task.title, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium)
-                Text("${task.plannedStart} · ${task.operationType.title}", color = MaterialTheme.colorScheme.onSurfaceVariant)
-            }
-            TaskStatusBadge(task.status)
-        }
-        Spacer(Modifier.height(MesSpacing.smallGap))
-        FlowRow(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.spacedBy(MesSpacing.smallGap),
-            verticalArrangement = Arrangement.spacedBy(MesSpacing.smallGap),
-        ) {
-            StatusBadge(if (isNext) "Можно начать" else "Просмотр", if (isNext) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant)
-            PriorityBadge(task.priority)
-            StatusBadge(if (task.requiresAcceptance) "Приемка" else "Без приемки", if (task.requiresAcceptance) MaterialTheme.colorScheme.tertiary else MaterialTheme.colorScheme.onSurfaceVariant)
-            StatusBadge("${task.plannedDurationMinutes} мин", operationAccent(task.operationType))
-        }
-        Spacer(Modifier.height(MesSpacing.contentGap))
-        ProgressLine(task.checklist.count { it.status != ChecklistStatus.PENDING }, task.checklist.size)
-        if (task.offlineEvents > 0) {
-            Spacer(Modifier.height(MesSpacing.smallGap))
-            StatusBadge("Offline: ${task.offlineEvents}", Color(0xFFE98500))
-        }
+fun TaskCard(task: MobileTask, isNext: Boolean = false, onClick: () -> Unit) = PrototypeTaskCard(task, onClick)
+
+@Composable private fun PrototypeTaskCard(task: MobileTask, onClick: () -> Unit) {
+    val accent = when (task.priority) { Priority.URGENT -> Color(0xFFDC4C4C); Priority.HIGH -> Color(0xFFF59E0B); Priority.NORMAL -> Color(0xFF1F8A5B) }
+    val problems = task.checklist.count { it.status == ChecklistStatus.PROBLEM }
+    Card(shape = RoundedCornerShape(22.dp), colors = CardDefaults.cardColors(Color.White), elevation = CardDefaults.cardElevation(5.dp), modifier = Modifier.fillMaxWidth().padding(horizontal = 18.dp).clickable(onClick = onClick)) {
+        Row { Box(Modifier.width(5.dp).heightIn(min = 190.dp).background(accent)); Column(Modifier.weight(1f).padding(16.dp)) {
+            Row(Modifier.fillMaxWidth(), Arrangement.SpaceBetween, Alignment.CenterVertically) { TaskStatusBadge(task.status); Text("${task.plannedStart} · ${task.plannedDurationMinutes} мин", color = Color(0xFF60726A), fontSize = 12.sp) }
+            Spacer(Modifier.height(12.dp)); Text(task.title, color = Color(0xFF10231B), fontSize = 18.sp, lineHeight = 22.sp, fontWeight = FontWeight.Black); Spacer(Modifier.height(6.dp)); Text(task.operationType.title, color = Color(0xFF60726A), fontSize = 13.sp)
+            Spacer(Modifier.height(14.dp)); Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) { TaskMetric("${task.checklist.count { it.status == ChecklistStatus.DONE }}/${task.checklist.size}", "пунктов", Modifier.weight(1f)); TaskMetric(problems.toString(), "замечаний", Modifier.weight(1f)); TaskMetric(if (task.requiresAcceptance) "Да" else "Нет", "приёмка", Modifier.weight(1f)) }
+        } }
     }
 }
+
+@Composable private fun TaskMetric(value: String, label: String, modifier: Modifier) { Column(modifier.background(Color.White, RoundedCornerShape(15.dp)).padding(11.dp)) { Text(value, color = Color(0xFF10231B), fontSize = 20.sp, fontWeight = FontWeight.ExtraBold); Text(label, color = Color(0xFF60726A), fontSize = 11.sp) } }
+@Composable private fun TaskEmpty(text: String) { Surface(color = Color.White, shape = RoundedCornerShape(22.dp), modifier = Modifier.fillMaxWidth().padding(horizontal = 18.dp)) { Text(text, color = Color(0xFF60726A), fontSize = 16.sp, modifier = Modifier.padding(24.dp)) } }

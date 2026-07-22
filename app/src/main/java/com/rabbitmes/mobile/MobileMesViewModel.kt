@@ -12,6 +12,9 @@ import ru.profikrol.operator.data.local.SessionStore
 import ru.profikrol.operator.domain.model.UserRole
 import javax.inject.Inject
 import com.rabbitmes.mobile.data.MockRepository
+import com.rabbitmes.mobile.data.NotificationRepository
+import androidx.lifecycle.viewModelScope
+import kotlinx.coroutines.launch
 import com.rabbitmes.mobile.domain.*
 
 sealed class AppScreen {
@@ -30,11 +33,13 @@ sealed class AppScreen {
     ) : AppScreen()
     data class Acceptance(val taskId: String) : AppScreen()
     data class AnimalHistory(val rabbitId: String) : AppScreen()
+    data class RabbitProfile(val rfidCode: String, val taskId: String) : AppScreen()
 }
 
 @HiltViewModel
 class MobileMesViewModel @Inject constructor(
     private val sessionStore: SessionStore,
+    private val notificationRepository: NotificationRepository,
 ) : ViewModel() {
     var screen: AppScreen by mutableStateOf(AppScreen.Login)
         private set
@@ -60,48 +65,7 @@ class MobileMesViewModel @Inject constructor(
     var isAuthLoading: Boolean by mutableStateOf(false)
         private set
 
-    val notifications = mutableStateListOf(
-        NotificationUi(
-            id = 1,
-            title = "Критическая задача",
-            description = "Требуется пальпация 24 особей",
-            time = "5 мин назад",
-            isUnread = true,
-            type = NotificationType.CRITICAL,
-        ),
-        NotificationUi(
-            id = 2,
-            title = "Завершена задача",
-            description = "Осеменение в Ангаре 2 завершено",
-            time = "1 час назад",
-            isUnread = true,
-            type = NotificationType.SUCCESS,
-        ),
-        NotificationUi(
-            id = 3,
-            title = "Новое уведомление",
-            description = "Добавлены 12 новых кроликов в базу данных",
-            time = "2 часа назад",
-            isUnread = false,
-            type = NotificationType.SUCCESS,
-        ),
-        NotificationUi(
-            id = 4,
-            title = "Напоминание",
-            description = "Плановое взвешивание в 15:00",
-            time = "3 часа назад",
-            isUnread = false,
-            type = NotificationType.SUCCESS,
-        ),
-        NotificationUi(
-            id = 5,
-            title = "Обновление системы",
-            description = "Доступна новая версия приложения",
-            time = "5 часов назад",
-            isUnread = false,
-            type = NotificationType.DEFAULT,
-        ),
-    )
+    val notifications = mutableStateListOf<NotificationUi>()
 
     val employees = MockRepository.employees
     val workshop = MockRepository.workshop
@@ -110,6 +74,12 @@ class MobileMesViewModel @Inject constructor(
     val operations = MockRepository.operationDefinitions
 
     init {
+        viewModelScope.launch {
+            notificationRepository.notifications.collect { items ->
+                notifications.clear()
+                notifications.addAll(items)
+            }
+        }
         if (sessionStore.currentUser != null) {
             onLoggedInFromSession()
         }
@@ -159,11 +129,12 @@ class MobileMesViewModel @Inject constructor(
     }
     fun logout() {
         sessionStore.clear()
+        notificationRepository.clear()
         authPassword = ""
         authError = null
         screen = AppScreen.Login
     }
-    fun startShift() { shift = shift.copy(startedAt = "08:00", finishedAt = null); screen = AppScreen.Tasks }
+    fun startShift() { shift = shift.copy(startedAt = "08:00", finishedAt = null) }
     fun finishShift(reason: String) { shift = shift.copy(finishedAt = "18:00"); lastMessage = "Смена завершена: $reason" }
     fun setOnline(isOnline: Boolean) {
         if (shift.isOnline == isOnline) return
@@ -191,11 +162,10 @@ class MobileMesViewModel @Inject constructor(
         lastMessage = "Очередь синхронизации отправлена"
     }
     fun markNotificationAsRead(id: Long) {
-        val index = notifications.indexOfFirst { it.id == id }
-        if (index != -1) notifications[index] = notifications[index].copy(isUnread = false)
+        notificationRepository.markAsRead(id)
     }
     fun markAllNotificationsAsRead() {
-        notifications.replaceAll { it.copy(isUnread = false) }
+        notificationRepository.markAllAsRead()
     }
 
     fun task(id: String) = tasks.first { it.id == id }

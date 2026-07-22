@@ -173,6 +173,8 @@ private fun NotificationIcon(type: NotificationType) {
 @Composable
 private fun notificationAccent(type: NotificationType): Color = when (type) {
     NotificationType.CRITICAL -> MaterialTheme.colorScheme.error
+    NotificationType.WARNING -> Color(0xFFFF9800)
+    NotificationType.INFO -> MaterialTheme.colorScheme.primary
     NotificationType.SUCCESS -> mobileSuccessGreen
     NotificationType.DEFAULT -> MaterialTheme.colorScheme.primary
 }

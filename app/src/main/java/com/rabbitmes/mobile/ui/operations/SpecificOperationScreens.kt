@@ -11,6 +11,8 @@ import androidx.compose.ui.unit.dp
 import com.rabbitmes.mobile.data.MockRepository
 import com.rabbitmes.mobile.domain.*
 import com.rabbitmes.mobile.ui.components.*
+import ru.profikrol.operator.domain.model.Rabbit as RabbitInfo
+import ru.profikrol.operator.feature.rfidscanresult.RabbitInfoCard
 
 private const val SHOW_BLUETOOTH_SCALE_BUTTON = false
 
@@ -129,23 +131,18 @@ fun InseminationScreen(
             }
 
             rabbit?.let { selected ->
-                Surface(
-                    color = MaterialTheme.colorScheme.primaryContainer,
-                    shape = MaterialTheme.shapes.medium,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(vertical = MesSpacing.contentGap),
-                ) {
-                    Column(Modifier.padding(MesSpacing.contentGap)) {
-                        Text("Карточка животного", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
-                        Text("${selected.earNumber} · ${selected.rfid}", fontWeight = FontWeight.Bold)
-                        Text(
-                            "Клетка ${MockRepository.cage(selected.cageId)?.code ?: "—"} · вес ${"%.2f".format(selected.lastWeightKg)} кг · ${selected.healthStatus}",
-                            color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                        TextButton(onClick = { onOpenAnimal(selected.id) }) { Text("Открыть карточку") }
-                    }
-                }
+                RabbitInfoCard(
+                    isLoading = false,
+                    rabbit = RabbitInfo(
+                        rfidCode = selected.rfid,
+                        status = selected.healthStatus,
+                        age = "${selected.ageDays / 30} мес",
+                        cage = MockRepository.cage(selected.cageId)?.code ?: "—",
+                        weight = "%.2f кг".format(selected.lastWeightKg),
+                        diagnosis = selected.healthStatus,
+                    ),
+                    onClick = { onOpenAnimal(selected.rfid) },
+                )
 
                 OutlinedTextField(
                     value = maleMaterialCode,
@@ -445,6 +442,9 @@ fun FeedOperationScreen(task: MobileTask, onBack: () -> Unit, onBegin: () -> Uni
 
 @Composable
 fun OperationScreenFactory(task: MobileTask, definition: OperationDefinition, onBack: () -> Unit, onBegin: () -> Unit, scannedRfid: String? = null, onScan: (String, Map<String,String>) -> Unit, onOpenRfidScanner: (Map<String, String>) -> Unit, onValue: (String,String) -> Unit, onPhoto: (String,String)->Unit, onVideo: (String,String)->Unit, onFile: (String,String)->Unit, onComment: (String)->Unit, onChecklistDone: (String)->Unit, onChecklistDoneWithValues: (String, Map<String, String>)->Unit, onChecklistProblem: (String,String,String)->Unit, onChecklistSkip: (String,String)->Unit, onComplete: () -> Unit, onSkip: (String)->Unit, onOpenAnimal: (String)->Unit, canEdit: Boolean = true) {
+    SimpleOperationScreen(task, definition, scannedRfid, onBack, onBegin, onScan, onOpenRfidScanner, onValue, onChecklistDone, onChecklistDoneWithValues, onChecklistProblem, onComplete, canEdit)
+    return
+    @Suppress("UNREACHABLE_CODE")
     when (task.operationType) {
         OperationType.INSEMINATION -> InseminationScreen(task, scannedRfid, onBack, onBegin, onScan, onOpenRfidScanner, onValue, onPhoto, onVideo, onFile, onComment, onChecklistDone, onChecklistProblem, onChecklistSkip, onComplete, onSkip, onOpenAnimal, canEdit)
         OperationType.PALPATION -> PalpationScreen(task, scannedRfid, onBack, onBegin, onScan, onOpenRfidScanner, onValue, onPhoto, onVideo, onFile, onComment, onChecklistDone, onChecklistProblem, onChecklistSkip, onComplete, onSkip, onOpenAnimal, canEdit)

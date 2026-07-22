@@ -7,10 +7,13 @@ data class NotificationUi(
     val time: String,
     val isUnread: Boolean,
     val type: NotificationType,
+    val backendType: String? = null,
 )
 
 enum class NotificationType {
     CRITICAL,
+    WARNING,
+    INFO,
     SUCCESS,
     DEFAULT,
 }
