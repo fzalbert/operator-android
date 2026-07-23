@@ -1,53 +1,92 @@
 package ru.profikrol.operator.core.di
 
 import android.util.Log
+import com.jakewharton.retrofit2.converter.kotlinx.serialization.asConverterFactory
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
 import dagger.hilt.components.SingletonComponent
+import kotlinx.serialization.json.Json
+import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.logging.HttpLoggingInterceptor
 import retrofit2.Retrofit
-import com.jakewharton.retrofit2.converter.kotlinx.serialization.asConverterFactory
-import kotlinx.serialization.json.Json
-import okhttp3.MediaType.Companion.toMediaType
+import ru.profikrol.operator.BuildConfig
+import ru.profikrol.operator.data.remote.auth.AccessTokenAuthenticator
 import ru.profikrol.operator.data.remote.auth.AuthApi
+import ru.profikrol.operator.data.remote.auth.AuthTokenInterceptor
 import java.security.SecureRandom
 import java.security.cert.X509Certificate
+import javax.inject.Named
 import javax.inject.Singleton
 import javax.net.ssl.HostnameVerifier
 import javax.net.ssl.SSLContext
 import javax.net.ssl.X509TrustManager
 
-/**
- * Здесь будут провайды OkHttp, Retrofit, API-интерфейсов.
- */
 @Module
 @InstallIn(SingletonComponent::class)
 object NetworkModule {
-
     private const val BASE_URL = "https://195.58.153.25/"
     private const val AUTH_LOG_TAG = "RabbitAuth"
-    private const val ALLOW_UNSAFE_CERTIFICATES = true
+    private val ALLOW_UNSAFE_CERTIFICATES = BuildConfig.DEBUG
 
     @Provides
     @Singleton
-    fun provideJson(): Json = Json {
-        ignoreUnknownKeys = true
-        isLenient = true
-    }
+    fun provideJson(): Json = Json { ignoreUnknownKeys = true; isLenient = true }
 
     @Provides
     @Singleton
-    fun provideOkHttpClient(): OkHttpClient {
-        val loggingInterceptor = HttpLoggingInterceptor { message ->
-            Log.d(AUTH_LOG_TAG, message)
-        }.apply {
+    fun provideLoggingInterceptor(): HttpLoggingInterceptor =
+        HttpLoggingInterceptor { Log.d(AUTH_LOG_TAG, it) }.apply {
             level = HttpLoggingInterceptor.Level.BASIC
         }
 
-        return OkHttpClient.Builder()
-            .addInterceptor(loggingInterceptor)
+    @Provides
+    @Singleton
+    @Named("authless")
+    fun provideAuthlessClient(logging: HttpLoggingInterceptor): OkHttpClient =
+        baseClient(logging).build()
+
+    @Provides
+    @Singleton
+    @Named("authless")
+    fun provideAuthlessRetrofit(
+        @Named("authless") client: OkHttpClient,
+        json: Json,
+    ): Retrofit = retrofit(client, json)
+
+    @Provides
+    @Singleton
+    @Named("authless")
+    fun provideAuthApi(@Named("authless") retrofit: Retrofit): AuthApi =
+        retrofit.create(AuthApi::class.java)
+
+    @Provides
+    @Singleton
+    fun provideOkHttpClient(
+        logging: HttpLoggingInterceptor,
+        tokenInterceptor: AuthTokenInterceptor,
+        tokenAuthenticator: AccessTokenAuthenticator,
+    ): OkHttpClient = baseClient(logging)
+        .addInterceptor(tokenInterceptor)
+        .authenticator(tokenAuthenticator)
+        .build()
+
+    @Provides
+    @Singleton
+    fun provideRetrofit(client: OkHttpClient, json: Json): Retrofit =
+        retrofit(client, json)
+
+    private fun retrofit(client: OkHttpClient, json: Json): Retrofit =
+        Retrofit.Builder()
+            .baseUrl(BASE_URL)
+            .client(client)
+            .addConverterFactory(json.asConverterFactory("application/json".toMediaType()))
+            .build()
+
+    private fun baseClient(logging: HttpLoggingInterceptor): OkHttpClient.Builder =
+        OkHttpClient.Builder()
+            .addInterceptor(logging)
             .apply {
                 if (ALLOW_UNSAFE_CERTIFICATES) {
                     Log.w(AUTH_LOG_TAG, "Unsafe TLS checks are enabled for API client")
@@ -55,34 +94,14 @@ object NetworkModule {
                     hostnameVerifier(unsafeHostnameVerifier)
                 }
             }
-            .build()
-    }
-
-    @Provides
-    @Singleton
-    fun provideRetrofit(
-        okHttpClient: OkHttpClient,
-        json: Json,
-    ): Retrofit = Retrofit.Builder()
-        .baseUrl(BASE_URL)
-        .client(okHttpClient)
-        .addConverterFactory(json.asConverterFactory("application/json".toMediaType()))
-        .build()
-
-    @Provides
-    @Singleton
-    fun provideAuthApi(retrofit: Retrofit): AuthApi =
-        retrofit.create(AuthApi::class.java)
 
     private val unsafeTrustManager = object : X509TrustManager {
         override fun checkClientTrusted(chain: Array<out X509Certificate>?, authType: String?) = Unit
         override fun checkServerTrusted(chain: Array<out X509Certificate>?, authType: String?) = Unit
         override fun getAcceptedIssuers(): Array<X509Certificate> = emptyArray()
     }
-
     private val unsafeSslSocketFactory = SSLContext.getInstance("TLS").apply {
         init(null, arrayOf(unsafeTrustManager), SecureRandom())
     }.socketFactory
-
     private val unsafeHostnameVerifier = HostnameVerifier { _, _ -> true }
 }

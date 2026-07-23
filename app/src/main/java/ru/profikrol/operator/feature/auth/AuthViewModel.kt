@@ -12,6 +12,7 @@ import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import ru.profikrol.operator.domain.repository.AuthRepository
+import ru.profikrol.operator.domain.repository.AuthError
 import javax.inject.Inject
 
 @HiltViewModel
@@ -52,7 +53,12 @@ class AuthViewModel @Inject constructor(
                 }
                 .onFailure { throwable ->
                     Log.w(AUTH_LOG_TAG, "Auth failed in ViewModel: ${throwable.message}")
-                    val errorRes = "Неверный логин или пароль"
+                    val errorRes = when (throwable) {
+                        AuthError.InvalidCredentials -> "Неверный логин или пароль"
+                        AuthError.Network -> "Нет связи с сервером. Проверьте интернет и повторите попытку"
+                        AuthError.InvalidToken -> "Сервер не вернул токен авторизации"
+                        else -> "Не удалось войти. Повторите попытку"
+                    }
                     _uiState.update { it.copy(isLoading = false, errorText = errorRes) }
                 }
         }

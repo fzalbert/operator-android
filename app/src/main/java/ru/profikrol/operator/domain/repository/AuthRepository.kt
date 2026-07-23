@@ -9,11 +9,13 @@ interface AuthRepository {
      * Возвращает Result.success(User) при успехе или Result.failure(AuthError) при ошибке.
      */
     suspend fun login(login: String, password: String): Result<User>
+    suspend fun logout(): Result<Unit>
 }
 
 /** Доменные ошибки авторизации. */
 sealed class AuthError(message: String) : Throwable(message) {
     data object InvalidCredentials : AuthError("Invalid credentials")
     data object Network : AuthError("Network error")
+    data object InvalidToken : AuthError("Invalid token response")
     data object Unknown : AuthError("Unknown error")
 }

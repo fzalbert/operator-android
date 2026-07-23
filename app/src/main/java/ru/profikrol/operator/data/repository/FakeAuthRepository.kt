@@ -71,6 +71,11 @@ class FakeAuthRepository @Inject constructor(
         }
     }
 
+    override suspend fun logout(): Result<Unit> {
+        sessionStore.clear()
+        return Result.success(Unit)
+    }
+
     private fun developmentJwt(userId: String): String {
         val encoder = Base64.getUrlEncoder().withoutPadding()
         val header = encoder.encodeToString("{\"alg\":\"none\",\"typ\":\"JWT\"}".toByteArray())

@@ -10,6 +10,7 @@ import androidx.lifecycle.ViewModel
 import dagger.hilt.android.lifecycle.HiltViewModel
 import ru.profikrol.operator.data.local.SessionStore
 import ru.profikrol.operator.domain.model.UserRole
+import ru.profikrol.operator.domain.repository.AuthRepository
 import javax.inject.Inject
 import com.rabbitmes.mobile.data.MockRepository
 import com.rabbitmes.mobile.data.NotificationRepository
@@ -39,6 +40,7 @@ sealed class AppScreen {
 @HiltViewModel
 class MobileMesViewModel @Inject constructor(
     private val sessionStore: SessionStore,
+    private val authRepository: AuthRepository,
     private val notificationRepository: NotificationRepository,
 ) : ViewModel() {
     var screen: AppScreen by mutableStateOf(AppScreen.Login)
@@ -56,15 +58,6 @@ class MobileMesViewModel @Inject constructor(
     private val scannedRfidByTaskId = mutableStateMapOf<String, String>()
     var lastMessage: String? by mutableStateOf(null)
         private set
-    var authLogin: String by mutableStateOf("")
-        private set
-    var authPassword: String by mutableStateOf("")
-        private set
-    var authError: String? by mutableStateOf(null)
-        private set
-    var isAuthLoading: Boolean by mutableStateOf(false)
-        private set
-
     val notifications = mutableStateListOf<NotificationUi>()
 
     val employees = MockRepository.employees
@@ -97,42 +90,12 @@ class MobileMesViewModel @Inject constructor(
         screen = defaultScreenForRole()
         lastMessage = null
     }
-    fun onAuthLoginChange(value: String) {
-        authLogin = value
-        authError = null
-    }
-    fun onAuthPasswordChange(value: String) {
-        authPassword = value
-        authError = null
-    }
-    fun login() {
-        if (authLogin.isBlank() || authPassword.isBlank() || isAuthLoading) return
-
-        isAuthLoading = true
-        if (authLogin.equals("fail", ignoreCase = true)) {
-            authError = "Неверный логин или пароль"
-            isAuthLoading = false
-            return
-        }
-
-        currentEmployee = when {
-            authLogin.startsWith("admin", ignoreCase = true) -> employees.first { it.role == RoleId.CHIEF_TECHNOLOGIST }
-            authLogin.startsWith("super", ignoreCase = true) -> employees.first { it.role == RoleId.CHIEF_TECHNOLOGIST }
-            authLogin.startsWith("tech", ignoreCase = true) -> employees.first { it.role == RoleId.CHIEF_TECHNOLOGIST }
-            authLogin.startsWith("mech", ignoreCase = true) -> employees.first { it.role == RoleId.CHIEF_MECHANIC }
-            else -> employees.first { it.role == RoleId.OPERATOR }
-        }
-        shift = ShiftState(currentEmployee.id)
-        screen = defaultScreenForRole()
-        authError = null
-        isAuthLoading = false
-    }
     fun logout() {
-        sessionStore.clear()
         notificationRepository.clear()
-        authPassword = ""
-        authError = null
         screen = AppScreen.Login
+        viewModelScope.launch {
+            authRepository.logout()
+        }
     }
     fun startShift() { shift = shift.copy(startedAt = "08:00", finishedAt = null) }
     fun finishShift(reason: String) { shift = shift.copy(finishedAt = "18:00"); lastMessage = "Смена завершена: $reason" }
