@@ -1,5 +1,6 @@
 package ru.profikrol.operator.feature.auth
 
+import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -34,21 +35,31 @@ class AuthViewModel @Inject constructor(
 
     fun onSubmit() {
         val state = _uiState.value
-        if (!state.canSubmit) return
+        Log.d(AUTH_LOG_TAG, "Auth button clicked. login=${state.login.trim()}")
+        if (!state.canSubmit) {
+            Log.d(AUTH_LOG_TAG, "Auth submit ignored. canSubmit=false")
+            return
+        }
 
         viewModelScope.launch {
             _uiState.update { it.copy(isLoading = true, errorText = null) }
 
             authRepository.login(state.login, state.password)
                 .onSuccess {
+                    Log.i(AUTH_LOG_TAG, "Auth event LoggedIn")
                     _uiState.update { it.copy(isLoading = false) }
                     _events.send(AuthEvent.LoggedIn)
                 }
                 .onFailure { throwable ->
+                    Log.w(AUTH_LOG_TAG, "Auth failed in ViewModel: ${throwable.message}")
                     val errorRes = "Неверный логин или пароль"
                     _uiState.update { it.copy(isLoading = false, errorText = errorRes) }
                 }
         }
+    }
+
+    private companion object {
+        const val AUTH_LOG_TAG = "RabbitAuth"
     }
 }
 
