@@ -101,12 +101,12 @@ object MockRepository {
         MobileTask("task-2", "Взвешивание контрольной группы", OperationType.WEIGHING, "ws-1", "h-1", "emp-1", "2026-07-09", "11:00", 90, Priority.HIGH, TaskStatus.NEW, weighingChecklist(), false),
         MobileTask("task-3", "Подготовка гнезд", OperationType.NEST_PREPARATION, "ws-1", "h-1", "emp-1", "2026-07-09", "13:00", 120, Priority.HIGH, TaskStatus.NEW, cageNumberChecklist("nestprep", 18), true, RoleId.CHIEF_TECHNOLOGIST, AcceptanceStatus.NOT_REQUIRED),
         MobileTask("task-4", "Контроль гнезд", OperationType.NEST_CONTROL, "ws-1", "h-1", "emp-1", "2026-07-09", "15:00", 150, Priority.NORMAL, TaskStatus.NEW, cageChecklist("nestctl", 12), true, RoleId.CHIEF_TECHNOLOGIST, AcceptanceStatus.NOT_REQUIRED),
-        MobileTask("task-5", "Проверка светового режима", OperationType.LIGHTING_CHECK, "ws-1", "h-1", "emp-1", "2026-07-09", "06:05", 20, Priority.URGENT, TaskStatus.NEW, emptyList(), false),
+        MobileTask("task-5", "Проверка светового режима", OperationType.LIGHTING_CHECK, "ws-1", "h-1", "emp-1", "2026-07-09", "06:05", 20, Priority.NORMAL, TaskStatus.NEW, emptyList(), false),
         MobileTask("task-6", "Мойка ангара после цикла", OperationType.WASHING, "ws-1", "h-2", "emp-3", "2026-07-09", "09:00", 240, Priority.HIGH, TaskStatus.DONE, emptyList(), true, RoleId.CHIEF_TECHNOLOGIST, AcceptanceStatus.WAITING),
         MobileTask("task-7", "Дезинфекция ангара", OperationType.DISINFECTION, "ws-1", "h-2", "emp-3", "2026-07-09", "14:00", 180, Priority.NORMAL, TaskStatus.NEW, emptyList(), true, RoleId.CHIEF_TECHNOLOGIST, AcceptanceStatus.NOT_REQUIRED),
         MobileTask("task-8", "Приемка ангара", OperationType.HANGAR_ACCEPTANCE, "ws-1", "h-2", "emp-2", "2026-07-09", "17:00", 60, Priority.HIGH, TaskStatus.NEW, emptyList(), false),
         MobileTask("task-9", "Пальпация", OperationType.PALPATION, "ws-1", "h-1", "emp-1", "2026-07-09", "16:00", 120, Priority.NORMAL, TaskStatus.NEW, rabbitChecklist("pal", 10), false),
-        MobileTask("task-10", "Селекция / выравнивание гнезд", OperationType.NEST_SELECTION, "ws-1", "h-1", "emp-1", "2026-07-09", "16:40", 90, Priority.HIGH, TaskStatus.NEW, cageChecklist("sel", 10), true, RoleId.CHIEF_TECHNOLOGIST, AcceptanceStatus.NOT_REQUIRED),
+        MobileTask("task-10", "Выравнивание гнезд", OperationType.NEST_SELECTION, "ws-1", "h-1", "emp-1", "2026-07-09", "16:40", 90, Priority.HIGH, TaskStatus.NEW, cageChecklist("sel", 10), true, RoleId.CHIEF_TECHNOLOGIST, AcceptanceStatus.NOT_REQUIRED),
         MobileTask("task-11", "Проверка корма", OperationType.FEED_CHECK, "ws-1", "h-1", "emp-1", "2026-07-09", "07:30", 20, Priority.NORMAL, TaskStatus.NEW, emptyList(), false),
         MobileTask("task-12", "Проверка воды", OperationType.WATER_CHECK, "ws-1", "h-1", "emp-1", "2026-07-09", "07:40", 20, Priority.NORMAL, TaskStatus.NEW, emptyList(), false)
     )

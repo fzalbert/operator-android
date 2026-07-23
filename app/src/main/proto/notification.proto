@@ -1,0 +1,20 @@
+syntax = "proto3";
+
+option java_multiple_files = true;
+option java_package = "ru.profikrol.operator.data.remote.grpc";
+option java_outer_classname = "NotificationProto";
+
+service NotificationService {
+  rpc NotificationStream(stream NotificationClientMessage)
+      returns (stream NotificationServerMessage);
+}
+
+message NotificationClientMessage {
+  string token = 1;
+}
+
+message NotificationServerMessage {
+  string message = 1;
+  string notification_type = 2;
+  string notification_category = 3;
+}

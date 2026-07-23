@@ -9,11 +9,12 @@ import com.rabbitmes.mobile.ui.operations.OperationScreenFactory
 import com.rabbitmes.mobile.ui.screens.*
 import ru.profikrol.operator.feature.auth.AuthScreen
 import ru.profikrol.operator.feature.rfidscan.RfidScanScreen
+import ru.profikrol.operator.feature.rabbitprofile.RabbitProfileScreen
 
 @Composable
 fun RabbitMesApp(vm: MobileMesViewModel) {
     fun bottom(current: String): @Composable () -> Unit = { BottomNav(current, vm.shift.pendingSyncEvents) { key ->
-        when(key) { "shift" -> vm.navigate(AppScreen.Shift); "tasks" -> vm.navigate(AppScreen.Tasks); "accept" -> vm.navigate(AppScreen.AcceptanceQueue); "sync" -> vm.navigate(AppScreen.Sync) }
+        when(key) { "shift" -> vm.navigate(AppScreen.Shift); "tasks" -> vm.navigate(AppScreen.Tasks); "accept" -> vm.navigate(AppScreen.AcceptanceQueue); "sync" -> vm.navigate(AppScreen.Sync); "profile" -> vm.navigate(AppScreen.Profile) }
     } }
     when(val screen = vm.screen) {
         AppScreen.Login -> AuthScreen(onLoggedIn = vm::onLoggedInFromSession)
@@ -21,7 +22,7 @@ fun RabbitMesApp(vm: MobileMesViewModel) {
         AppScreen.Tasks -> TaskListScreen(vm.tasksForCurrentEmployee(), vm.nextTask(), vm.lastMessage, vm.shift.startedAt != null, { vm.navigate(AppScreen.TaskExecution(it)) }, { vm.navigate(AppScreen.Shift) }, bottom("tasks"))
         AppScreen.Map -> HangarMapScreen(vm.workshop, vm.tasksForCurrentEmployee(), { vm.navigate(AppScreen.TaskExecution(it)) }, { vm.navigate(AppScreen.Tasks) }, bottom("map"))
         AppScreen.Sync -> SyncQueueScreen(vm.shift, vm.tasks, vm::syncNow, { vm.navigate(AppScreen.Tasks) }, bottom("sync"))
-        AppScreen.Profile -> ProfileScreen(vm.currentEmployee, vm.tasksForCurrentEmployee(), vm.operations, vm::logout, bottom("shift"))
+        AppScreen.Profile -> ProfileScreen(vm.currentEmployee, vm.tasksForCurrentEmployee(), vm.operations, vm::logout, bottom("profile"))
         AppScreen.Notifications -> NotificationsScreen(vm.notifications, { vm.navigate(AppScreen.Shift) }, vm::markNotificationAsRead, vm::markAllNotificationsAsRead)
         AppScreen.AcceptanceQueue -> AcceptanceQueueScreen(vm.tasksForAcceptance(), { vm.navigate(AppScreen.Acceptance(it)) }, { vm.navigate(AppScreen.Tasks) }, bottom("accept"))
         is AppScreen.TaskExecution -> {
@@ -46,7 +47,7 @@ fun RabbitMesApp(vm: MobileMesViewModel) {
                 onChecklistSkip = { itemId, reason -> vm.markChecklistItem(task.id, itemId, ChecklistStatus.SKIPPED, reason, "Пропущено") },
                 onComplete = { vm.completeTask(task.id); vm.navigate(AppScreen.Tasks) },
                 onSkip = { vm.skipTask(task.id, it); vm.navigate(AppScreen.Tasks) },
-                onOpenAnimal = { vm.navigate(AppScreen.AnimalHistory(it)) },
+                onOpenAnimal = { rfid -> vm.navigate(AppScreen.RabbitProfile(rfid, task.id)) },
                 canEdit = canEdit,
             )
         }
@@ -70,5 +71,12 @@ fun RabbitMesApp(vm: MobileMesViewModel) {
             val rabbit = vm.rabbits.firstOrNull { it.id == screen.rabbitId } ?: vm.rabbits.first()
             AnimalHistoryScreen(rabbit, MockRepository.cage(rabbit.cageId), { vm.navigate(AppScreen.Tasks) })
         }
+        is AppScreen.RabbitProfile -> RabbitProfileScreen(
+            rfidCode = screen.rfidCode,
+            onBack = { vm.navigate(AppScreen.TaskExecution(screen.taskId)) },
+            onWeighing = { vm.navigate(AppScreen.TaskExecution(screen.taskId)) },
+            onMoving = { vm.navigate(AppScreen.TaskExecution(screen.taskId)) },
+            onCulling = { vm.navigate(AppScreen.TaskExecution(screen.taskId)) },
+        )
     }
 }

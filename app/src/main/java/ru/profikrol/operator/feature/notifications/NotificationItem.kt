@@ -99,6 +99,8 @@ private fun NotificationIcon(
 
     val backgroundColor = when (type) {
         NotificationType.CRITICAL -> Color(0xFFFFEBEE)
+        NotificationType.WARNING -> Color(0xFFFFF3E0)
+        NotificationType.INFO -> Color(0xFFE3F2FD)
         NotificationType.SUCCESS -> Color(0xFFE8F5E9)
         NotificationType.DEFAULT -> Color(0xFFF5F5F5)
     }

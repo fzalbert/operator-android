@@ -2,6 +2,7 @@ package ru.profikrol.operator.feature.rfidscanresult
 
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -49,13 +50,16 @@ private val PlaceholderRabbit = Rabbit(
 fun RabbitInfoCard(
     isLoading: Boolean,
     rabbit: Rabbit?,
+    onClick: (() -> Unit)? = null,
 ) {
     // При загрузке/отсутствии кролика рисуем плейсхолдер с теми же полями.
     // Так Column всегда занимает свою «реальную» высоту, а loading совпадает с loaded.
     val displayRabbit = rabbit ?: PlaceholderRabbit
 
     Card(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier
+            .fillMaxWidth()
+            .then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier),
         shape = RoundedCornerShape(Radii.md),
         border = BorderStroke(defaultBorderWidth, MaterialTheme.colorScheme.primary),
         colors = CardDefaults.cardColors(

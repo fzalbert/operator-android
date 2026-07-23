@@ -3,6 +3,7 @@ package ru.profikrol.operator.uikit.theme
 import android.os.Build
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Shapes
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.dynamicDarkColorScheme
 import androidx.compose.material3.dynamicLightColorScheme
@@ -10,6 +11,8 @@ import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.Immutable
 import androidx.compose.ui.graphics.Color
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.platform.LocalContext
 
 private val lightScheme = lightColorScheme(
@@ -254,7 +257,7 @@ val unspecified_scheme = ColorFamily(
 
 @Composable
 fun ProfikrolTheme(
-    darkTheme: Boolean = isSystemInDarkTheme(),
+    darkTheme: Boolean = false,
     // На время разработки оставляю dynamicColor = false, чтобы видеть нашу палитру,
     // а не системную с обоев. Включи true для Material You.
     dynamicColor: Boolean = false,
@@ -267,12 +270,48 @@ fun ProfikrolTheme(
         }
 
         darkTheme -> darkScheme
-        else -> lightScheme
+        else -> rabbitMesLightScheme
     }
 
     MaterialTheme(
         colorScheme = colorScheme,
         typography = AppTypography,
+        shapes = RabbitMesShapes,
         content = content,
     )
 }
+
+private val RabbitMesShapes = Shapes(
+    extraSmall = RoundedCornerShape(12.dp),
+    small = RoundedCornerShape(14.dp),
+    medium = RoundedCornerShape(16.dp),
+    large = RoundedCornerShape(20.dp),
+    extraLarge = RoundedCornerShape(26.dp),
+)
+
+private val rabbitMesLightScheme = lightColorScheme(
+    primary = Color(0xFF1F8A5B),
+    onPrimary = Color.White,
+    primaryContainer = Color(0xFFE4F5EC),
+    onPrimaryContainer = Color(0xFF0B2F24),
+    secondary = Color(0xFF0B2F24),
+    onSecondary = Color.White,
+    secondaryContainer = Color(0xFFE4ECE8),
+    onSecondaryContainer = Color(0xFF10231B),
+    tertiary = Color(0xFF2FB977),
+    onTertiary = Color.White,
+    tertiaryContainer = Color(0xFFF1FAF5),
+    onTertiaryContainer = Color(0xFF10231B),
+    background = Color(0xFFF1F5F3),
+    onBackground = Color(0xFF10231B),
+    surface = Color.White,
+    onSurface = Color(0xFF10231B),
+    surfaceVariant = Color(0xFFF1FAF5),
+    onSurfaceVariant = Color(0xFF60726A),
+    outline = Color(0xFFDCE6E1),
+    outlineVariant = Color(0xFFDCE6E1),
+    error = Color(0xFFDC4C4C),
+    onError = Color.White,
+    errorContainer = Color(0xFFFFE5E5),
+    onErrorContainer = Color(0xFF9E2F2F),
+)

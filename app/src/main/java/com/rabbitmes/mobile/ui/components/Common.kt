@@ -18,18 +18,19 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.rabbitmes.mobile.domain.*
 import ru.profikrol.operator.uikit.theme.mobileSuccessGreen
 
 private val MesWarning = Color(0xFFE98500)
 
 object MesSpacing {
-    val screenHorizontal = 16.dp
+    val screenHorizontal = 18.dp
     val screenBottom = 24.dp
     val cardVertical = 8.dp
-    val cardInner = 16.dp
-    val headerHorizontal = 20.dp
-    val headerVertical = 14.dp
+    val cardInner = 18.dp
+    val headerHorizontal = 18.dp
+    val headerVertical = 16.dp
     val contentGap = 12.dp
     val smallGap = 8.dp
     val tinyGap = 4.dp
@@ -46,9 +47,10 @@ fun MesCard(
     val clickable = if (onClick != null) modifier.clickable { onClick() } else modifier
     Card(
         clickable.padding(horizontal = MesSpacing.screenHorizontal, vertical = MesSpacing.cardVertical).fillMaxWidth(),
-        shape = RoundedCornerShape(20.dp),
+        shape = RoundedCornerShape(24.dp),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
         border = if (showBorder) BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant) else null,
+        elevation = CardDefaults.cardElevation(defaultElevation = 4.dp),
     ) {
         Column(Modifier.padding(MesSpacing.cardInner), content = content)
     }
@@ -98,15 +100,26 @@ fun SelectionDropdown(
 
 @Composable
 fun AppHeader(title: String, subtitle: String? = null, onBack: (() -> Unit)? = null, trailing: @Composable RowScope.() -> Unit = {}) {
-    Row(Modifier.fillMaxWidth().statusBarsPadding().padding(horizontal = MesSpacing.headerHorizontal, vertical = MesSpacing.headerVertical), verticalAlignment = Alignment.CenterVertically) {
-        if (onBack != null) IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, null) }
-        Column(Modifier.weight(1f)) {
-            Text(title, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
-            if (subtitle != null) {
-                Text(subtitle, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.bodyMedium)
+    Surface(
+        color = Color(0xFF0B2F24),
+        contentColor = Color.White,
+        shape = RoundedCornerShape(bottomStart = 26.dp, bottomEnd = 26.dp),
+        shadowElevation = 14.dp,
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Row(
+            Modifier.fillMaxWidth().statusBarsPadding().padding(horizontal = MesSpacing.headerHorizontal, vertical = MesSpacing.headerVertical),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            if (onBack != null) IconButton(onClick = onBack) {
+                Icon(Icons.AutoMirrored.Filled.ArrowBack, null, tint = Color.White)
             }
+            Column(Modifier.weight(1f)) {
+                if (subtitle != null) Text(subtitle, color = Color(0xFFA7DCC2), fontSize = 13.sp, maxLines = 1)
+                Text(title, color = Color.White, fontSize = 26.sp, lineHeight = 30.sp, fontWeight = FontWeight.Black)
+            }
+            Row(content = trailing)
         }
-        Row(content = trailing)
     }
 }
 
@@ -182,11 +195,33 @@ fun operationAccent(type: OperationType): Color = when(type) {
     }
 }
 
-@Composable fun BottomNav(current: String, syncCount: Int = 0, onSelect: (String) -> Unit) {
-    NavigationBar(containerColor = MaterialTheme.colorScheme.surface) {
-        NavigationBarItem(selected = current == "shift", onClick = { onSelect("shift") }, icon = { Icon(Icons.Default.Home, null) }, label = { Text("Смена") })
-        NavigationBarItem(selected = current == "tasks", onClick = { onSelect("tasks") }, icon = { Icon(Icons.AutoMirrored.Filled.Assignment, null) }, label = { Text("Задачи") })
-        NavigationBarItem(selected = current == "accept", onClick = { onSelect("accept") }, icon = { Icon(Icons.Default.Verified, null) }, label = { Text("Приемка") })
-        NavigationBarItem(selected = current == "sync", onClick = { onSelect("sync") }, icon = { BadgedBox(badge = { if(syncCount > 0) Badge { Text(syncCount.toString()) } }) { Icon(Icons.Default.Sync, null) } }, label = { Text("Sync") })
+@Composable
+fun BottomNav(current: String, syncCount: Int = 0, onSelect: (String) -> Unit) {
+    val items = listOf(
+        Triple("shift", "Смена", Icons.Default.Home),
+        Triple("tasks", "Задачи", Icons.AutoMirrored.Filled.Assignment),
+        Triple("accept", "Приёмка", Icons.Default.Verified),
+        Triple("sync", if (syncCount > 0) "Синхр. · $syncCount" else "Синхр.", Icons.Default.Sync),
+        Triple("profile", "Профиль", Icons.Default.Person),
+    )
+    Surface(color = Color.White, shadowElevation = 12.dp, modifier = Modifier.fillMaxWidth()) {
+        Row(
+            Modifier.navigationBarsPadding().padding(horizontal = 8.dp, vertical = 10.dp),
+            horizontalArrangement = Arrangement.spacedBy(4.dp),
+        ) {
+            items.forEach { (key, label, icon) ->
+                val active = current == key
+                Column(
+                    modifier = Modifier.weight(1f).heightIn(min = 50.dp)
+                        .background(if (active) Color(0xFFE4F5EC) else Color.Transparent, RoundedCornerShape(14.dp))
+                        .clickable { onSelect(key) }.padding(vertical = 5.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.Center,
+                ) {
+                    Icon(icon, null, tint = if (active) Color(0xFF1F8A5B) else Color(0xFF60726A), modifier = Modifier.size(21.dp))
+                    Text(label, color = if (active) Color(0xFF1F8A5B) else Color(0xFF60726A), fontSize = 11.sp, fontWeight = FontWeight.ExtraBold, maxLines = 1)
+                }
+            }
+        }
     }
 }

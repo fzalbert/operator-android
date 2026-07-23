@@ -6,7 +6,7 @@ import ru.profikrol.operator.domain.model.User
 import ru.profikrol.operator.domain.model.UserRole
 import ru.profikrol.operator.domain.repository.AuthError
 import ru.profikrol.operator.domain.repository.AuthRepository
-import java.util.UUID
+import java.util.Base64
 import javax.inject.Inject
 import javax.inject.Singleton
 import kotlin.coroutines.cancellation.CancellationException
@@ -46,11 +46,16 @@ class FakeAuthRepository @Inject constructor(
                 else -> UserRole.Operator
             }
 
+            // Local backend currently only parses the userId claim and does not validate
+            // the signature. Keep this development token syntactically valid so the gRPC
+            // stream can be exercised until the real authentication endpoint is connected.
+            val userId = login.trim()
+            val token = developmentJwt(userId)
             val user = User(
-                id = UUID.randomUUID().toString(),
+                id = userId,
                 login = login,
                 displayName = login.replaceFirstChar { it.uppercase() },
-                token = "fake-token-${UUID.randomUUID()}",
+                token = token,
                 role = role,
                 email = "$login@profikrol.ru",
                 phone = "+7 (916) 123-45-67",
@@ -64,5 +69,13 @@ class FakeAuthRepository @Inject constructor(
         } catch (e: Throwable) {
             Result.failure(AuthError.Unknown)
         }
+    }
+
+    private fun developmentJwt(userId: String): String {
+        val encoder = Base64.getUrlEncoder().withoutPadding()
+        val header = encoder.encodeToString("{\"alg\":\"none\",\"typ\":\"JWT\"}".toByteArray())
+        val escapedUserId = userId.replace("\\", "\\\\").replace("\"", "\\\"")
+        val payload = encoder.encodeToString("{\"userId\":\"$escapedUserId\"}".toByteArray())
+        return "$header.$payload."
     }
 }

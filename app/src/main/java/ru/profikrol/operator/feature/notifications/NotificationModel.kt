@@ -11,6 +11,8 @@ data class NotificationUi(
 
 enum class NotificationType {
     CRITICAL,
+    WARNING,
+    INFO,
     SUCCESS,
     DEFAULT,
 }
