@@ -14,6 +14,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.platform.LocalDensity
 import com.rabbitmes.mobile.domain.*
 import com.rabbitmes.mobile.ui.components.*
 
@@ -21,12 +22,22 @@ import com.rabbitmes.mobile.ui.components.*
 fun TaskListScreen(tasks: List<MobileTask>, nextTask: MobileTask?, message: String?, shiftStarted: Boolean, onOpen: (String) -> Unit, onBack: () -> Unit, bottomBar: @Composable () -> Unit) {
     val open = tasks.filter { it.status != TaskStatus.DONE && it.status != TaskStatus.SENT && it.status != TaskStatus.SKIPPED }.sortedWith(compareBy<MobileTask> { it.priority.weight }.thenBy { it.plannedStart })
     val problems = open.sumOf { task -> task.checklist.count { it.status == ChecklistStatus.PROBLEM } }
+    val largeFont = LocalDensity.current.fontScale >= 1.3f
     Scaffold(bottomBar = bottomBar, containerColor = MaterialTheme.colorScheme.background) { padding ->
         LazyColumn(Modifier.fillMaxSize().padding(padding), contentPadding = PaddingValues(bottom = 24.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             item { AppHeader("Мои задачи", "Rabbit MES Mobile", onBack) }
             item {
-                Row(Modifier.fillMaxWidth().padding(horizontal = 18.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    TaskMetric(open.size.toString(), "активных", Modifier.weight(1f)); TaskMetric(open.count { it.priority == Priority.URGENT }.toString(), "срочных", Modifier.weight(1f)); TaskMetric(problems.toString(), "проблем", Modifier.weight(1f))
+                if (largeFont) {
+                    Text(
+                        "${open.size} активных · ${open.count { it.priority == Priority.URGENT }} срочных · $problems проблем",
+                        modifier = Modifier.fillMaxWidth().padding(horizontal = 18.dp),
+                        style = MaterialTheme.typography.bodyLarge,
+                        fontWeight = FontWeight.Bold,
+                    )
+                } else {
+                    Row(Modifier.fillMaxWidth().padding(horizontal = 18.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                        TaskMetric(open.size.toString(), "активных", Modifier.weight(1f)); TaskMetric(open.count { it.priority == Priority.URGENT }.toString(), "срочных", Modifier.weight(1f)); TaskMetric(problems.toString(), "проблем", Modifier.weight(1f))
+                    }
                 }
             }
             if (!shiftStarted) item { TaskEmpty("Начните смену, чтобы открыть задачи") }
@@ -42,11 +53,28 @@ fun TaskCard(task: MobileTask, isNext: Boolean = false, onClick: () -> Unit) = P
 @Composable private fun PrototypeTaskCard(task: MobileTask, onClick: () -> Unit) {
     val accent = when (task.priority) { Priority.URGENT -> Color(0xFFDC4C4C); Priority.HIGH -> Color(0xFFF59E0B); Priority.NORMAL -> Color(0xFF1F8A5B) }
     val problems = task.checklist.count { it.status == ChecklistStatus.PROBLEM }
+    val largeFont = LocalDensity.current.fontScale >= 1.3f
     Card(shape = RoundedCornerShape(22.dp), colors = CardDefaults.cardColors(Color.White), elevation = CardDefaults.cardElevation(5.dp), modifier = Modifier.fillMaxWidth().padding(horizontal = 18.dp).clickable(onClick = onClick)) {
         Row { Box(Modifier.width(5.dp).heightIn(min = 190.dp).background(accent)); Column(Modifier.weight(1f).padding(16.dp)) {
-            Row(Modifier.fillMaxWidth(), Arrangement.SpaceBetween, Alignment.CenterVertically) { TaskStatusBadge(task.status); Text("${task.plannedStart} · ${task.plannedDurationMinutes} мин", color = Color(0xFF60726A), fontSize = 12.sp) }
+            if (largeFont) {
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    TaskStatusBadge(task.status)
+                    Text("${task.plannedStart} · ${task.plannedDurationMinutes} мин", color = Color(0xFF60726A), style = MaterialTheme.typography.bodySmall)
+                }
+            } else {
+                Row(Modifier.fillMaxWidth(), Arrangement.SpaceBetween, Alignment.CenterVertically) { TaskStatusBadge(task.status); Text("${task.plannedStart} · ${task.plannedDurationMinutes} мин", color = Color(0xFF60726A), fontSize = 12.sp) }
+            }
             Spacer(Modifier.height(12.dp)); Text(task.title, color = Color(0xFF10231B), fontSize = 18.sp, lineHeight = 22.sp, fontWeight = FontWeight.Black); Spacer(Modifier.height(6.dp)); Text(task.operationType.title, color = Color(0xFF60726A), fontSize = 13.sp)
-            Spacer(Modifier.height(14.dp)); Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) { TaskMetric("${task.checklist.count { it.status == ChecklistStatus.DONE }}/${task.checklist.size}", "пунктов", Modifier.weight(1f)); TaskMetric(problems.toString(), "замечаний", Modifier.weight(1f)); TaskMetric(if (task.requiresAcceptance) "Да" else "Нет", "приёмка", Modifier.weight(1f)) }
+            Spacer(Modifier.height(12.dp))
+            if (largeFont) {
+                Text(
+                    "${task.checklist.count { it.status == ChecklistStatus.DONE }}/${task.checklist.size} пунктов · $problems замечаний · приёмка: ${if (task.requiresAcceptance) "да" else "нет"}",
+                    color = Color(0xFF60726A),
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+            } else {
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) { TaskMetric("${task.checklist.count { it.status == ChecklistStatus.DONE }}/${task.checklist.size}", "пунктов", Modifier.weight(1f)); TaskMetric(problems.toString(), "замечаний", Modifier.weight(1f)); TaskMetric(if (task.requiresAcceptance) "Да" else "Нет", "приёмка", Modifier.weight(1f)) }
+            }
         } }
     }
 }

@@ -1,7 +1,10 @@
 package com.rabbitmes.mobile.ui.screens
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -124,7 +127,13 @@ fun SyncQueueScreen(shift: ShiftState, tasks: List<MobileTask>, onSync: () -> Un
 }
 
 @Composable
+@OptIn(ExperimentalLayoutApi::class)
 fun ProfileScreen(employee: Employee, tasks: List<MobileTask>, operations: List<OperationDefinition>, onLogout: () -> Unit, bottomBar: @Composable () -> Unit) {
+    val allowedOperations = operations
+        .filter { employee.role in it.allowedRoles }
+        .distinctBy { it.type }
+        .sortedBy { it.type.title }
+
     Scaffold(
         bottomBar = bottomBar,
         containerColor = Color.Transparent,
@@ -132,8 +141,46 @@ fun ProfileScreen(employee: Employee, tasks: List<MobileTask>, operations: List<
         LazyColumn(Modifier.fillMaxSize().padding(padding)) {
             item { AppHeader("Профиль", employee.fullName, trailing = { TextButton(onClick = onLogout) { Text("Выйти") } }) }
             item { MesCard { Text(employee.fullName, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold); StatusBadge(employee.role.title, MaterialTheme.colorScheme.primary); Spacer(Modifier.height(MesSpacing.contentGap)); Text("Выполнено: ${tasks.count { it.status == TaskStatus.SENT || it.status == TaskStatus.DONE }}"); Text("Проблемы: ${tasks.sumOf { it.checklist.count { item -> item.status == ChecklistStatus.PROBLEM } }}") } }
-            item { MesCard { Text("Допустимые операции", fontWeight = FontWeight.Bold); operations.filter { employee.role in it.allowedRoles }.forEach { Text("• ${it.type.title}") } } }
+            item {
+                MesCard {
+                    Text(
+                        "Допустимые операции",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold,
+                    )
+                    Spacer(Modifier.height(MesSpacing.contentGap))
+                    FlowRow(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(MesSpacing.smallGap),
+                        verticalArrangement = Arrangement.spacedBy(MesSpacing.smallGap),
+                    ) {
+                        allowedOperations.forEach { operation ->
+                            OperationReadOnlyChip(operation.type.title)
+                        }
+                    }
+                }
+            }
         }
+    }
+}
+
+@Composable
+private fun OperationReadOnlyChip(title: String) {
+    Surface(
+        color = MaterialTheme.colorScheme.surface,
+        contentColor = MaterialTheme.colorScheme.onSurface,
+        shape = RoundedCornerShape(18.dp),
+        border = BorderStroke(
+            width = 1.dp,
+            color = MaterialTheme.colorScheme.primary.copy(alpha = 0.45f),
+        ),
+    ) {
+        Text(
+            text = title,
+            style = MaterialTheme.typography.bodyMedium,
+            fontWeight = FontWeight.Medium,
+            modifier = Modifier.padding(horizontal = 14.dp, vertical = 9.dp),
+        )
     }
 }
 

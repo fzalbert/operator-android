@@ -1,10 +1,12 @@
 package com.rabbitmes.mobile.ui.operations
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.*
@@ -18,7 +20,12 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.platform.LocalDensity
 import com.rabbitmes.mobile.domain.*
+import com.rabbitmes.mobile.data.MockRepository
+import com.rabbitmes.mobile.ui.components.AttachmentPickerButtons
+import ru.profikrol.operator.domain.model.Rabbit as RabbitInfo
+import ru.profikrol.operator.feature.rfidscanresult.RabbitInfoCard
 
 private val SimpleGreen = Color(0xFF1F8A5B)
 private val SimpleDarkGreen = Color(0xFF0B2F24)
@@ -42,6 +49,11 @@ fun SimpleOperationScreen(
     onChecklistDoneWithValues: (String, Map<String, String>) -> Unit,
     onChecklistProblem: (String, String, String) -> Unit,
     onComplete: () -> Unit,
+    onPhoto: (String, String) -> Unit,
+    onVideo: (String, String) -> Unit,
+    onFile: (String, String) -> Unit,
+    onComment: (String) -> Unit,
+    onOpenAnimal: (String) -> Unit,
     canEdit: Boolean,
 ) {
     var activeItemId by remember(task.id) { mutableStateOf<String?>(null) }
@@ -51,6 +63,14 @@ fun SimpleOperationScreen(
     val doneCount = task.checklist.count { it.status == ChecklistStatus.DONE }
     val problemCount = task.checklist.count { it.status == ChecklistStatus.PROBLEM }
     val allProcessed = task.checklist.isEmpty() || pending.isEmpty()
+    val listState = rememberLazyListState()
+    val largeFont = LocalDensity.current.fontScale >= 1.3f
+    var previousProcessedCount by remember(task.id) { mutableIntStateOf(closed.size) }
+
+    LaunchedEffect(closed.size) {
+        if (closed.size > previousProcessedCount) listState.animateScrollToItem(0)
+        previousProcessedCount = closed.size
+    }
 
     if (activeItem != null && !definition.requiresScan) {
         SimpleItemForm(
@@ -58,17 +78,24 @@ fun SimpleOperationScreen(
             definition = definition,
             item = activeItem,
             onCancel = { activeItemId = null },
-            onSubmit = { values, problem, comment ->
+            onSubmit = { values, problem, reason, comment ->
                 values.forEach(onValue)
-                if (problem) onChecklistProblem(activeItem.id, comment, comment)
+                if (problem) {
+                    onChecklistProblem(activeItem.id, reason, comment)
+                    if (comment.isNotBlank()) onComment(comment)
+                }
                 else onChecklistDoneWithValues(activeItem.id, values)
                 activeItemId = null
             },
+            onPhoto = onPhoto,
+            onVideo = onVideo,
+            onFile = onFile,
         )
         return
     }
 
     LazyColumn(
+        state = listState,
         modifier = Modifier.fillMaxSize().background(SimpleBackground).statusBarsPadding(),
         contentPadding = PaddingValues(horizontal = 18.dp),
         verticalArrangement = Arrangement.spacedBy(10.dp),
@@ -86,19 +113,41 @@ fun SimpleOperationScreen(
                 Modifier.fillMaxWidth().clip(RoundedCornerShape(26.dp))
                     .background(Brush.linearGradient(listOf(SimpleGreen, SimpleDarkGreen))).padding(18.dp),
             ) {
-                Row(Modifier.fillMaxWidth(), Arrangement.SpaceBetween, Alignment.CenterVertically) {
-                    SimpleBadge(task.priority.title, if (task.priority == Priority.URGENT) SimpleRed else Color(0xFFF59E0B))
-                    Text("${task.plannedStart} · ${task.plannedDurationMinutes} мин", color = Color(0xFFD6EEE2), fontSize = 13.sp)
+                if (largeFont) {
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        SimplePriorityBadge(task.priority)
+                        Text("${task.plannedStart} · ${task.plannedDurationMinutes} мин", color = Color(0xFFD6EEE2), style = MaterialTheme.typography.bodyMedium)
+                    }
+                } else {
+                    Row(Modifier.fillMaxWidth(), Arrangement.SpaceBetween, Alignment.CenterVertically) {
+                        SimplePriorityBadge(task.priority)
+                        Text("${task.plannedStart} · ${task.plannedDurationMinutes} мин", color = Color(0xFFD6EEE2), fontSize = 13.sp)
+                    }
                 }
-                Spacer(Modifier.height(14.dp))
-                Text(task.title, color = Color.White, fontSize = 26.sp, lineHeight = 30.sp, fontWeight = FontWeight.Black)
-                Spacer(Modifier.height(7.dp))
-                Text(definition.type.title, color = Color(0xFFD6EEE2), fontSize = 16.sp)
-                Spacer(Modifier.height(16.dp))
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    SimpleMetric(doneCount.toString(), "выполнено", Modifier.weight(1f), true)
-                    SimpleMetric(problemCount.toString(), "проблем", Modifier.weight(1f), true)
-                    SimpleMetric(task.checklist.size.toString(), "всего", Modifier.weight(1f), true)
+                Spacer(Modifier.height(12.dp))
+                Text(task.title, color = Color.White, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Black)
+                Spacer(Modifier.height(5.dp))
+                Text(
+                    listOf(definition.type.title, workshopName(task), hangarName(task))
+                        .filter(String::isNotBlank)
+                        .joinToString(" · "),
+                    color = Color(0xFFD6EEE2),
+                    style = MaterialTheme.typography.bodyMedium,
+                )
+                Spacer(Modifier.height(12.dp))
+                if (largeFont) {
+                    Text(
+                        "$doneCount выполнено · $problemCount проблем · ${task.checklist.size} всего",
+                        color = Color.White,
+                        style = MaterialTheme.typography.bodyMedium,
+                        fontWeight = FontWeight.Bold,
+                    )
+                } else {
+                    Row(horizontalArrangement = Arrangement.spacedBy(7.dp)) {
+                        SimpleMetric(doneCount.toString(), "выполнено", Modifier.weight(1f), true)
+                        SimpleMetric(problemCount.toString(), "проблем", Modifier.weight(1f), true)
+                        SimpleMetric(task.checklist.size.toString(), "всего", Modifier.weight(1f), true)
+                    }
                 }
                 if (task.status == TaskStatus.NEW && canEdit) {
                     Spacer(Modifier.height(14.dp))
@@ -110,7 +159,18 @@ fun SimpleOperationScreen(
         if (task.status != TaskStatus.NEW && canEdit) {
             if (definition.requiresScan) {
                 item {
-                    SimpleScanPanel(task, definition, scannedRfid, onOpenRfidScanner, onScan)
+                    SimpleScanPanel(
+                        task = task,
+                        definition = definition,
+                        scannedRfid = scannedRfid,
+                        onOpenScanner = onOpenRfidScanner,
+                        onScan = onScan,
+                        onPhoto = onPhoto,
+                        onVideo = onVideo,
+                        onFile = onFile,
+                        onComment = onComment,
+                        onOpenAnimal = onOpenAnimal,
+                    )
                 }
             } else if (task.checklist.isEmpty()) {
                 item {
@@ -155,36 +215,105 @@ private fun SimpleScanPanel(
     scannedRfid: String?,
     onOpenScanner: (Map<String, String>) -> Unit,
     onScan: (String, Map<String, String>) -> Unit,
+    onPhoto: (String, String) -> Unit,
+    onVideo: (String, String) -> Unit,
+    onFile: (String, String) -> Unit,
+    onComment: (String) -> Unit,
+    onOpenAnimal: (String) -> Unit,
 ) {
-    val values = remember(task.id) { mutableStateMapOf<String, String>().apply { definition.fields.filterNot(::isRfidField).forEach { put(it.id, defaultValue(it)) } } }
-    var hasProblem by remember(task.id) { mutableStateOf(false) }
-    var problemComment by remember(task.id) { mutableStateOf("") }
+    val values = remember(task.id) {
+        mutableStateMapOf<String, String>().apply {
+            definition.fields.filterNot(::isRfidField).forEach { field ->
+                put(field.id, task.result.values[field.id] ?: defaultValue(field))
+            }
+        }
+    }
+    var hasProblem by remember(task.id) {
+        mutableStateOf(task.result.values[PROBLEM_REASON_KEY].orEmpty().isNotBlank())
+    }
+    var problemReason by remember(task.id) {
+        mutableStateOf(task.result.values[PROBLEM_REASON_KEY].orEmpty())
+    }
+    var problemComment by remember(task.id) {
+        mutableStateOf(task.result.values[PROBLEM_COMMENT_KEY].orEmpty())
+    }
     var error by remember(task.id) { mutableStateOf("") }
     SimpleCard {
         Text("Сканирование RFID", color = SimpleText, fontSize = 20.sp, fontWeight = FontWeight.Black)
         Text("Сканируйте метку объекта, заполните несколько полей и сохраните результат.", color = SimpleMuted, fontSize = 14.sp)
         SimpleButton(
             if (scannedRfid.isNullOrBlank()) "Сканировать RFID" else "Сканировать другую метку",
-            { onOpenScanner(values.toMap()) }, Modifier.fillMaxWidth(), secondary = true,
+            {
+                onOpenScanner(
+                    values.toMap() + mapOf(
+                        PROBLEM_REASON_KEY to if (hasProblem) problemReason else "",
+                        PROBLEM_COMMENT_KEY to if (hasProblem) problemComment else "",
+                    ),
+                )
+            },
+            Modifier.fillMaxWidth(),
+            secondary = true,
         )
         if (!scannedRfid.isNullOrBlank()) {
-            Column(Modifier.fillMaxWidth().background(Color(0xFFEAF7F0), RoundedCornerShape(18.dp)).border(1.dp, Color(0xFFB7DEC9), RoundedCornerShape(18.dp)).padding(14.dp)) {
-                Text("Метка считана", color = SimpleGreen, fontWeight = FontWeight.ExtraBold, fontSize = 13.sp)
-                Text(scannedRfid, color = SimpleText, fontWeight = FontWeight.Black, fontSize = 19.sp)
+            val scannedRabbit = MockRepository.rabbitByRfid(scannedRfid)
+            if (scannedRabbit != null) {
+                RabbitInfoCard(
+                    isLoading = false,
+                    rabbit = RabbitInfo(
+                        rfidCode = scannedRabbit.rfid,
+                        status = scannedRabbit.healthStatus,
+                        age = "${scannedRabbit.ageDays / 30} мес",
+                        cage = MockRepository.cage(scannedRabbit.cageId)?.code ?: "—",
+                        weight = "%.2f кг".format(scannedRabbit.lastWeightKg),
+                        diagnosis = scannedRabbit.healthStatus,
+                    ),
+                    onClick = { onOpenAnimal(scannedRabbit.rfid) },
+                )
+            } else {
+                Column(Modifier.fillMaxWidth().background(Color(0xFFEAF7F0), RoundedCornerShape(18.dp)).border(1.dp, Color(0xFFB7DEC9), RoundedCornerShape(18.dp)).padding(14.dp)) {
+                    Text("Метка считана", color = SimpleGreen, fontWeight = FontWeight.ExtraBold, fontSize = 13.sp)
+                    Text(scannedRfid, color = SimpleText, fontWeight = FontWeight.Black, fontSize = 19.sp)
+                }
             }
         }
         definition.fields.filterNot(::isRfidField).forEach { field -> SimpleField(field, values[field.id].orEmpty()) { values[field.id] = it } }
-        SimpleProblemBlock(hasProblem, { hasProblem = it }, problemComment, { problemComment = it })
+        SimpleProblemBlock(
+            problem = hasProblem,
+            onProblem = {
+                hasProblem = it
+                if (!it) {
+                    problemReason = ""
+                    problemComment = ""
+                }
+            },
+            reason = problemReason,
+            onReason = { problemReason = it },
+            comment = problemComment,
+            onComment = { problemComment = it },
+            reasons = problemReasons(definition.type),
+            onPhoto = onPhoto,
+            onVideo = onVideo,
+            onFile = onFile,
+        )
         if (error.isNotBlank()) Text(error, color = SimpleRed, fontWeight = FontWeight.Bold)
         SimpleButton(
             if (hasProblem) "Зафиксировать проблему" else definition.completionLabel,
             {
                 val missing = definition.fields.filter { it.required && !isRfidField(it) && values[it.id].isNullOrBlank() }
                 when {
-                    scannedRfid.isNullOrBlank() -> error = "Сначала отсканируйте RFID"
-                    hasProblem && problemComment.length < 3 -> error = "Укажите причину проблемы"
+                    hasProblem && problemReason.isBlank() -> error = "Выберите причину замечания"
+                    !hasProblem && scannedRfid.isNullOrBlank() -> error = "Сначала отсканируйте RFID"
                     !hasProblem && missing.isNotEmpty() -> error = "Заполните обязательные поля"
-                    else -> onScan(scannedRfid, values.toMap() + ("problem" to if (hasProblem) problemComment else ""))
+                    else -> {
+                        if (problemComment.isNotBlank()) onComment(problemComment)
+                        onScan(
+                            scannedRfid.orEmpty(),
+                            values.toMap() + mapOf(
+                                PROBLEM_REASON_KEY to if (hasProblem) problemReason else "",
+                                PROBLEM_COMMENT_KEY to if (hasProblem) problemComment else "",
+                            ),
+                        )
+                    }
                 }
             }, Modifier.fillMaxWidth(),
         )
@@ -192,9 +321,19 @@ private fun SimpleScanPanel(
 }
 
 @Composable
-private fun SimpleItemForm(task: MobileTask, definition: OperationDefinition, item: ChecklistItem, onCancel: () -> Unit, onSubmit: (Map<String, String>, Boolean, String) -> Unit) {
+private fun SimpleItemForm(
+    task: MobileTask,
+    definition: OperationDefinition,
+    item: ChecklistItem,
+    onCancel: () -> Unit,
+    onSubmit: (Map<String, String>, Boolean, String, String) -> Unit,
+    onPhoto: (String, String) -> Unit,
+    onVideo: (String, String) -> Unit,
+    onFile: (String, String) -> Unit,
+) {
     val values = remember(item.id) { mutableStateMapOf<String, String>().apply { definition.fields.forEach { put(it.id, defaultValue(it)) } } }
     var problem by remember(item.id) { mutableStateOf(false) }
+    var reason by remember(item.id) { mutableStateOf("") }
     var comment by remember(item.id) { mutableStateOf("") }
     var error by remember(item.id) { mutableStateOf("") }
     LazyColumn(Modifier.fillMaxSize().background(Color.White).statusBarsPadding(), contentPadding = PaddingValues(18.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -206,16 +345,47 @@ private fun SimpleItemForm(task: MobileTask, definition: OperationDefinition, it
         }
         item { SimpleReadonly("Объект чек-листа", item.label) }
         definition.fields.forEach { field -> item(field.id) { SimpleField(field, values[field.id].orEmpty()) { values[field.id] = it } } }
-        item { SimpleProblemBlock(problem, { problem = it }, comment, { comment = it }) }
+        item {
+            SimpleProblemBlock(
+                problem = problem,
+                onProblem = {
+                    problem = it
+                    if (!it) {
+                        reason = ""
+                        comment = ""
+                    }
+                },
+                reason = reason,
+                onReason = { reason = it },
+                comment = comment,
+                onComment = { comment = it },
+                reasons = problemReasons(definition.type),
+                onPhoto = onPhoto,
+                onVideo = onVideo,
+                onFile = onFile,
+            )
+        }
         if (error.isNotBlank()) item { Text(error, color = SimpleRed, fontWeight = FontWeight.Bold) }
         item {
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 SimpleButton("Отмена", onCancel, Modifier.width(112.dp), secondary = true)
                 SimpleButton(definition.completionLabel, {
-                    val missing = definition.fields.filter { it.required && values[it.id].isNullOrBlank() }
-                    if (problem && comment.length < 3) error = "Укажите причину проблемы"
+                    val missing = definition.fields.filter { field ->
+                        field.required && values[field.id].isMissingRequiredValue()
+                    }
+                    if (problem && reason.isBlank()) error = "Выберите причину замечания"
                     else if (!problem && missing.isNotEmpty()) error = "Заполните обязательные поля"
-                    else onSubmit(values.toMap(), problem, comment)
+                    else if (
+                        !problem &&
+                        definition.type == OperationType.NEST_SELECTION &&
+                        values["sourceCage"] == values["destinationCage"]
+                    ) error = "Клетки «откуда» и «куда» должны отличаться"
+                    else if (
+                        !problem &&
+                        definition.type == OperationType.NEST_SELECTION &&
+                        (values["movedCount"]?.toIntOrNull() ?: 0) <= 0
+                    ) error = "Укажите количество крольчат больше нуля"
+                    else onSubmit(values.toMap(), problem, reason, comment)
                 }, Modifier.weight(1f))
             }
         }
@@ -257,12 +427,77 @@ private fun SimpleField(field: OperationField, value: String, onValue: (String) 
     }
 }
 
-@Composable private fun SimpleProblemBlock(problem: Boolean, onProblem: (Boolean) -> Unit, comment: String, onComment: (String) -> Unit) {
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun SimpleProblemBlock(
+    problem: Boolean,
+    onProblem: (Boolean) -> Unit,
+    reason: String,
+    onReason: (String) -> Unit,
+    comment: String,
+    onComment: (String) -> Unit,
+    reasons: List<String>,
+    onPhoto: (String, String) -> Unit,
+    onVideo: (String, String) -> Unit,
+    onFile: (String, String) -> Unit,
+) {
+    var expanded by remember { mutableStateOf(false) }
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
         Row(Modifier.fillMaxWidth().background(Color(0xFFFFF3D6), RoundedCornerShape(16.dp)).clickable { onProblem(!problem) }.padding(14.dp), Arrangement.SpaceBetween, Alignment.CenterVertically) {
-            Text("Есть проблема / отклонение", color = Color(0xFF875100), fontWeight = FontWeight.ExtraBold); Switch(problem, onProblem)
+            Text("Есть замечание", color = Color(0xFF875100), fontWeight = FontWeight.ExtraBold)
+            Switch(problem, onProblem)
         }
-        if (problem) OutlinedTextField(comment, onComment, Modifier.fillMaxWidth(), label = { Text("Причина проблемы") }, shape = RoundedCornerShape(16.dp))
+        if (problem) {
+            ExposedDropdownMenuBox(
+                expanded = expanded,
+                onExpandedChange = { expanded = !expanded },
+            ) {
+                OutlinedTextField(
+                    value = reason,
+                    onValueChange = {},
+                    readOnly = true,
+                    label = { Text("Причина замечания") },
+                    placeholder = { Text("Выберите причину") },
+                    trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded) },
+                    modifier = Modifier
+                        .menuAnchor(MenuAnchorType.PrimaryNotEditable)
+                        .fillMaxWidth(),
+                    shape = RoundedCornerShape(16.dp),
+                )
+                ExposedDropdownMenu(
+                    expanded = expanded,
+                    onDismissRequest = { expanded = false },
+                ) {
+                    reasons.forEach { option ->
+                        DropdownMenuItem(
+                            text = { Text(option) },
+                            onClick = {
+                                onReason(option)
+                                expanded = false
+                            },
+                        )
+                    }
+                }
+            }
+            OutlinedTextField(
+                value = comment,
+                onValueChange = onComment,
+                modifier = Modifier.fillMaxWidth(),
+                label = { Text("Комментарий") },
+                placeholder = { Text("Опишите подробности, если необходимо") },
+                minLines = 3,
+                shape = RoundedCornerShape(16.dp),
+            )
+            AttachmentPickerButtons(
+                onAttachment = { type, name, uri ->
+                    when (type) {
+                        AttachmentType.PHOTO -> onPhoto(name, uri)
+                        AttachmentType.VIDEO -> onVideo(name, uri)
+                        AttachmentType.FILE -> onFile(name, uri)
+                    }
+                },
+            )
+        }
     }
 }
 
@@ -272,8 +507,76 @@ private fun SimpleField(field: OperationField, value: String, onValue: (String) 
 @Composable private fun SimpleCard(content: @Composable ColumnScope.() -> Unit) { Card(Modifier.fillMaxWidth(), RoundedCornerShape(24.dp), CardDefaults.cardColors(Color.White), elevation = CardDefaults.cardElevation(5.dp)) { Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp), content = content) } }
 @Composable private fun SimpleSectionTitle(text: String) = Text(text, color = SimpleText, fontSize = 19.sp, fontWeight = FontWeight.ExtraBold, modifier = Modifier.padding(top = 8.dp))
 @Composable private fun SimpleEmpty(text: String) { Surface(color = Color.White, shape = RoundedCornerShape(18.dp), modifier = Modifier.fillMaxWidth()) { Text(text, color = SimpleMuted, modifier = Modifier.padding(16.dp)) } }
-@Composable private fun SimpleMetric(value: String, label: String, modifier: Modifier = Modifier, dark: Boolean = false) { Column(modifier.background(if (dark) Color.White.copy(.13f) else Color.White, RoundedCornerShape(15.dp)).padding(11.dp)) { Text(value, color = if (dark) Color.White else SimpleText, fontSize = 20.sp, fontWeight = FontWeight.ExtraBold); Text(label, color = if (dark) Color(0xFFD9F1E5) else SimpleMuted, fontSize = 11.sp) } }
-@Composable private fun SimpleBadge(text: String, color: Color) { Surface(color = color.copy(.13f), shape = RoundedCornerShape(99.dp)) { Text(text, color = color, fontWeight = FontWeight.ExtraBold, fontSize = 12.sp, modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)) } }
+@Composable private fun SimpleMetric(value: String, label: String, modifier: Modifier = Modifier, dark: Boolean = false) { Column(modifier.background(if (dark) Color.White.copy(.12f) else Color.White, RoundedCornerShape(13.dp)).padding(horizontal = 9.dp, vertical = 7.dp)) { Text(value, color = if (dark) Color.White else SimpleText, fontSize = 17.sp, fontWeight = FontWeight.ExtraBold); Text(label, color = if (dark) Color(0xFFD9F1E5) else SimpleMuted, fontSize = 10.sp) } }
+@Composable
+private fun SimplePriorityBadge(priority: Priority) {
+    val (background, content) = when (priority) {
+        Priority.URGENT -> Color(0xFFFFE4E4) to Color(0xFFB42323)
+        Priority.HIGH -> Color(0xFFFFEDC2) to Color(0xFF804B00)
+        Priority.NORMAL -> Color(0xFFE3F4EB) to Color(0xFF12633F)
+    }
+    Surface(
+        color = background,
+        shape = RoundedCornerShape(99.dp),
+        border = BorderStroke(1.dp, content.copy(alpha = 0.28f)),
+    ) {
+        Text(
+            text = priority.title,
+            color = content,
+            fontWeight = FontWeight.ExtraBold,
+            style = MaterialTheme.typography.labelMedium,
+            modifier = Modifier.padding(horizontal = 11.dp, vertical = 6.dp),
+        )
+    }
+}
+@Composable
+private fun SimpleBadge(text: String, color: Color) {
+    Surface(color = Color.White, shape = RoundedCornerShape(99.dp), border = BorderStroke(1.dp, color.copy(alpha = .35f))) {
+        Text(text, color = color, fontWeight = FontWeight.ExtraBold, fontSize = 12.sp, modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp))
+    }
+}
 @Composable private fun SimpleButton(text: String, onClick: () -> Unit, modifier: Modifier = Modifier, secondary: Boolean = false, enabled: Boolean = true) { Button(onClick, modifier.heightIn(min = 50.dp), enabled = enabled, shape = RoundedCornerShape(16.dp), colors = ButtonDefaults.buttonColors(containerColor = if (secondary) Color(0xFFE4ECE8) else SimpleGreen, contentColor = if (secondary) SimpleDarkGreen else Color.White)) { Text(text, fontWeight = FontWeight.ExtraBold, fontSize = 16.sp) } }
 private fun isRfidField(field: OperationField) = field.id.contains("rfid", true)
 private fun defaultValue(field: OperationField) = when (field.type) { FieldType.BOOLEAN -> "false"; FieldType.NUMBER, FieldType.TEMPERATURE, FieldType.HOURS -> ""; FieldType.SELECT, FieldType.FEED_TYPE -> field.options.firstOrNull().orEmpty(); else -> "" }
+private fun String?.isMissingRequiredValue(): Boolean =
+    isNullOrBlank() || startsWith("Выберите", ignoreCase = true)
+
+private fun problemReasons(type: OperationType): List<String> = when (type) {
+    OperationType.INSEMINATION -> listOf(
+        "Самка не готова к осеменению",
+        "Проблема со здоровьем",
+        "RFID не считывается",
+        "Нет нужного материала",
+        "Другая причина",
+    )
+    OperationType.PALPATION -> listOf(
+        "Невозможно определить результат",
+        "Проблема со здоровьем",
+        "RFID не считывается",
+        "Животное отсутствует",
+        "Другая причина",
+    )
+    OperationType.WEIGHING -> listOf(
+        "Весы недоступны или неисправны",
+        "Некорректные показания",
+        "Объект отсутствует",
+        "Другая причина",
+    )
+    else -> listOf(
+        "Отклонение от нормы",
+        "Объект отсутствует",
+        "Оборудование неисправно",
+        "Не хватает материалов",
+        "RFID не считывается",
+        "Другая причина",
+    )
+}
+
+const val PROBLEM_REASON_KEY = "__problemReason"
+const val PROBLEM_COMMENT_KEY = "__problemComment"
+
+private fun workshopName(task: MobileTask): String =
+    MockRepository.workshop.takeIf { it.id == task.workshopId }?.name.orEmpty()
+
+private fun hangarName(task: MobileTask): String =
+    MockRepository.workshop.hangars.firstOrNull { it.id == task.hangarId }?.name.orEmpty()

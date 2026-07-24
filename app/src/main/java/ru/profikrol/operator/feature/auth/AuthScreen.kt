@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
@@ -60,22 +61,15 @@ fun AuthScreen(
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         Image(
-            painter = painterResource(R.drawable.ic_profikrol_logo),
+            painter = painterResource(R.drawable.profikrol_auth_logo),
             contentDescription = stringResource(R.string.auth_brand_title),
-            modifier = Modifier.size(144.dp),
+            contentScale = ContentScale.Fit,
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(132.dp),
         )
 
         Spacer(Modifier.height(Spacing.md))
-
-        // Название продукта
-        Text(
-            text = stringResource(R.string.auth_brand_title),
-            style = MaterialTheme.typography.headlineMedium,
-            fontWeight = FontWeight.Bold,
-            color = MaterialTheme.colorScheme.primary,
-        )
-
-        Spacer(Modifier.height(Spacing.xs))
 
         // Подзаголовок
         Text(

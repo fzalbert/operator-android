@@ -27,6 +27,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
 import ru.profikrol.operator.R
+import ru.profikrol.operator.BuildConfig
 import ru.profikrol.operator.domain.model.Rabbit
 import ru.profikrol.operator.uikit.theme.ProfikrolTheme
 import ru.profikrol.operator.uikit.tokens.Alpha
@@ -52,6 +53,8 @@ fun RabbitInfoCard(
     rabbit: Rabbit?,
     onClick: (() -> Unit)? = null,
 ) {
+    if (!BuildConfig.SHOW_RABBIT_INFO_CARDS) return
+
     // При загрузке/отсутствии кролика рисуем плейсхолдер с теми же полями.
     // Так Column всегда занимает свою «реальную» высоту, а loading совпадает с loaded.
     val displayRabbit = rabbit ?: PlaceholderRabbit

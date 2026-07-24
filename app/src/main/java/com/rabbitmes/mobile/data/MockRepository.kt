@@ -21,6 +21,11 @@ object MockRepository {
     )
 
     val allCages: List<Cage> = workshop.hangars.flatMap { it.rows }.flatMap { it.cages }
+    private val hangarACageCodes: List<String> = workshop.hangars
+        .first { it.id == "h-1" }
+        .rows
+        .flatMap { it.cages }
+        .map { it.code }
 
     val rabbits: List<Rabbit> = allCages.filter { it.occupied }.take(60).mapIndexed { index, cage ->
         Rabbit(
@@ -40,13 +45,16 @@ object MockRepository {
 
     val operationDefinitions: List<OperationDefinition> = listOf(
         OperationDefinition(OperationType.INSEMINATION, TargetType.RABBIT, true, "Осеменить", listOf(
-            OperationField("rfid", "RFID самки", FieldType.TEXT, true), OperationField("inseminated", "Самка осеменена", FieldType.BOOLEAN, true), OperationField("seedBatch", "Партия семени", FieldType.TEXT, true, placeholder = "Например: S-26-07"), OperationField("comment", "Комментарий", FieldType.TEXT)
+            OperationField("rfid", "RFID самки", FieldType.TEXT, true),
+            OperationField("inseminated", "Самка осеменена", FieldType.BOOLEAN, true),
+            OperationField("comment", "Комментарий", FieldType.TEXT)
         ), listOf(RoleId.OPERATOR), true),
         OperationDefinition(OperationType.PALPATION, TargetType.RABBIT, true, "Зафиксировать пальпацию", listOf(
             OperationField("rfid", "RFID самки", FieldType.TEXT, true), OperationField("result", "Результат", FieldType.SELECT, true, options = listOf("Сукрольная", "Не сукрольная", "Сомнительно")), OperationField("comment", "Комментарий", FieldType.TEXT)
         ), listOf(RoleId.OPERATOR)),
         OperationDefinition(OperationType.WEIGHING, TargetType.CAGE, false, "Сохранить вес", listOf(
-            OperationField("cageNumber", "Номер клетки", FieldType.NUMBER, true), OperationField("weightGrams", "Вес", FieldType.NUMBER, true, "г"), OperationField("photo", "Фото весов", FieldType.PHOTO)
+            OperationField("weightGrams", "Вес", FieldType.NUMBER, true, "г"),
+            OperationField("photo", "Фото весов", FieldType.PHOTO)
         ), listOf(RoleId.OPERATOR)),
         OperationDefinition(OperationType.NEST_PREPARATION, TargetType.CAGE, false, "Гнездо подготовлено", listOf(
             OperationField("nestReady", "Гнездо готово", FieldType.BOOLEAN, true)
@@ -54,8 +62,10 @@ object MockRepository {
         OperationDefinition(OperationType.NEST_CONTROL, TargetType.CAGE, true, "Сохранить контроль", listOf(
             OperationField("cageRfid", "RFID клетки", FieldType.TEXT, true), OperationField("fed", "Сытых", FieldType.NUMBER, true), OperationField("hungry", "Голодных", FieldType.NUMBER, true), OperationField("dead", "Мертвых", FieldType.NUMBER, true), OperationField("nestState", "Состояние гнезда", FieldType.SELECT, true, options = listOf("Норма", "Мокрое", "Мало стружки", "Нужно вмешательство"))
         ), listOf(RoleId.OPERATOR), true),
-        OperationDefinition(OperationType.NEST_SELECTION, TargetType.CAGE, true, "Выравнивание выполнено", listOf(
-            OperationField("cageRfid", "RFID клетки", FieldType.TEXT, true), OperationField("movedCount", "Переложено крольчат", FieldType.NUMBER, true), OperationField("reason", "Причина", FieldType.SELECT, true, options = listOf("Много в гнезде", "Мало в гнезде", "Голодные", "Слабые"))
+        OperationDefinition(OperationType.NEST_SELECTION, TargetType.CAGE, false, "Перемещение сохранено", listOf(
+            OperationField("sourceCage", "Из клетки", FieldType.SELECT, true, options = listOf("Выберите клетку") + hangarACageCodes),
+            OperationField("destinationCage", "В клетку", FieldType.SELECT, true, options = listOf("Выберите клетку") + hangarACageCodes),
+            OperationField("movedCount", "Количество крольчат", FieldType.NUMBER, true)
         ), listOf(RoleId.OPERATOR, RoleId.CHIEF_TECHNOLOGIST), true),
         OperationDefinition(OperationType.ANIMAL_TRANSFER, TargetType.RABBIT, true, "Перевести", listOf(OperationField("rfid", "RFID", FieldType.TEXT, true), OperationField("toCage", "Куда переведен", FieldType.TEXT, true)), listOf(RoleId.OPERATOR, RoleId.GENERAL_WORKER)),
         OperationDefinition(OperationType.ANIMAL_SETTLEMENT, TargetType.CAGE, true, "Заселить", listOf(OperationField("cageRfid", "RFID клетки", FieldType.TEXT, true), OperationField("animalCount", "Количество животных", FieldType.NUMBER, true)), listOf(RoleId.OPERATOR, RoleId.GENERAL_WORKER)),
@@ -63,7 +73,12 @@ object MockRepository {
         OperationDefinition(OperationType.LACTATION_CONTROL, TargetType.CAGE, true, "Лактация проверена", listOf(OperationField("cageRfid", "RFID клетки", FieldType.TEXT, true), OperationField("status", "Статус", FieldType.SELECT, true, options = listOf("Норма", "Недостаточно молока", "Нужна подсадка", "Нужен технолог"))), listOf(RoleId.OPERATOR, RoleId.CHIEF_TECHNOLOGIST)),
         OperationDefinition(OperationType.LIGHT_STIMULATION, TargetType.HANGAR, false, "Уставка применена", listOf(OperationField("lightHours", "Длительность светового дня", FieldType.HOURS, true, "ч"), OperationField("mode", "Режим", FieldType.SELECT, true, options = listOf("База 14:00", "Стимуляция 22:00"))), listOf(RoleId.OPERATOR)),
         OperationDefinition(OperationType.FEED_CHECK, TargetType.HANGAR, false, "Корм проверен", listOf(OperationField("feedType", "Тип корма", FieldType.FEED_TYPE, true, options = listOf("Откорм", "Отъем", "Лактация")), OperationField("feedAvailable", "Корм есть", FieldType.BOOLEAN, true)), listOf(RoleId.OPERATOR)),
-        OperationDefinition(OperationType.WATER_CHECK, TargetType.HANGAR, false, "Вода проверена", listOf(OperationField("pressure", "Давление", FieldType.SELECT, true, options = listOf("Норма", "Слабое", "Нет воды"))), listOf(RoleId.OPERATOR)),
+        OperationDefinition(OperationType.WATER_CHECK, TargetType.HANGAR, false, "Вода проверена", listOf(
+            OperationField("row1Water", "Ряд 1", FieldType.SELECT, true, options = listOf("Вода есть", "Нет воды")),
+            OperationField("row2Water", "Ряд 2", FieldType.SELECT, true, options = listOf("Вода есть", "Нет воды")),
+            OperationField("row3Water", "Ряд 3", FieldType.SELECT, true, options = listOf("Вода есть", "Нет воды")),
+            OperationField("pressure", "Общее давление", FieldType.SELECT, true, options = listOf("Норма", "Слабое", "Нет воды"))
+        ), listOf(RoleId.OPERATOR)),
         OperationDefinition(OperationType.LIGHTING_CHECK, TargetType.HANGAR, false, "Свет проверен", listOf(OperationField("allLamps", "Все лампы горят", FieldType.BOOLEAN, true), OperationField("lightHours", "Фактический световой день", FieldType.HOURS, true, "ч"), OperationField("broken", "Перегоревшие лампы", FieldType.NUMBER)), listOf(RoleId.OPERATOR)),
         OperationDefinition(OperationType.MORTALITY_ROUND, TargetType.HANGAR, false, "Обход завершен", listOf(OperationField("deadCount", "Падеж", FieldType.NUMBER, true), OperationField("ammonia", "NH₃", FieldType.NUMBER, false, "ppm")), listOf(RoleId.OPERATOR)),
         OperationDefinition(OperationType.MORTALITY_JOURNAL, TargetType.HANGAR, false, "Запись сохранена", listOf(OperationField("journalEntry", "Запись в журнал", FieldType.TEXT, true)), listOf(RoleId.OPERATOR)),
@@ -106,7 +121,7 @@ object MockRepository {
         MobileTask("task-7", "Дезинфекция ангара", OperationType.DISINFECTION, "ws-1", "h-2", "emp-3", "2026-07-09", "14:00", 180, Priority.NORMAL, TaskStatus.NEW, emptyList(), true, RoleId.CHIEF_TECHNOLOGIST, AcceptanceStatus.NOT_REQUIRED),
         MobileTask("task-8", "Приемка ангара", OperationType.HANGAR_ACCEPTANCE, "ws-1", "h-2", "emp-2", "2026-07-09", "17:00", 60, Priority.HIGH, TaskStatus.NEW, emptyList(), false),
         MobileTask("task-9", "Пальпация", OperationType.PALPATION, "ws-1", "h-1", "emp-1", "2026-07-09", "16:00", 120, Priority.NORMAL, TaskStatus.NEW, rabbitChecklist("pal", 10), false),
-        MobileTask("task-10", "Выравнивание гнезд", OperationType.NEST_SELECTION, "ws-1", "h-1", "emp-1", "2026-07-09", "16:40", 90, Priority.HIGH, TaskStatus.NEW, cageChecklist("sel", 10), true, RoleId.CHIEF_TECHNOLOGIST, AcceptanceStatus.NOT_REQUIRED),
+        MobileTask("task-10", "Выравнивание гнезд", OperationType.NEST_SELECTION, "ws-1", "h-1", "emp-1", "2026-07-09", "16:40", 90, Priority.HIGH, TaskStatus.NEW, cageNumberChecklist("sel", 10), true, RoleId.CHIEF_TECHNOLOGIST, AcceptanceStatus.NOT_REQUIRED),
         MobileTask("task-11", "Проверка корма", OperationType.FEED_CHECK, "ws-1", "h-1", "emp-1", "2026-07-09", "07:30", 20, Priority.NORMAL, TaskStatus.NEW, emptyList(), false),
         MobileTask("task-12", "Проверка воды", OperationType.WATER_CHECK, "ws-1", "h-1", "emp-1", "2026-07-09", "07:40", 20, Priority.NORMAL, TaskStatus.NEW, emptyList(), false)
     )

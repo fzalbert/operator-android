@@ -35,7 +35,10 @@ fun RabbitMesApp(vm: MobileMesViewModel) {
                 onBack = { vm.navigate(AppScreen.Tasks) },
                 onBegin = { vm.beginTask(task.id) },
                 onScan = { rfid, values -> vm.scanRfidAndCompleteItem(task.id, rfid, values) },
-                onOpenRfidScanner = { values -> vm.navigate(AppScreen.RfidScan(task.id, values)) },
+                onOpenRfidScanner = { values ->
+                    values.forEach { (key, value) -> vm.updateTaskValue(task.id, key, value) }
+                    vm.navigate(AppScreen.RfidScan(task.id, values))
+                },
                 onValue = { key, value -> vm.updateTaskValue(task.id, key, value) },
                 onPhoto = { name, uri -> vm.addPhoto(task.id, name, uri) },
                 onVideo = { name, uri -> vm.addVideo(task.id, name, uri) },

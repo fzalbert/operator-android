@@ -115,8 +115,8 @@ fun AppHeader(title: String, subtitle: String? = null, onBack: (() -> Unit)? = n
                 Icon(Icons.AutoMirrored.Filled.ArrowBack, null, tint = Color.White)
             }
             Column(Modifier.weight(1f)) {
-                if (subtitle != null) Text(subtitle, color = Color(0xFFA7DCC2), fontSize = 13.sp, maxLines = 1)
-                Text(title, color = Color.White, fontSize = 26.sp, lineHeight = 30.sp, fontWeight = FontWeight.Black)
+                if (subtitle != null) Text(subtitle, color = Color(0xFFA7DCC2), style = MaterialTheme.typography.bodySmall)
+                Text(title, color = Color.White, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Black)
             }
             Row(content = trailing)
         }
@@ -212,14 +212,21 @@ fun BottomNav(current: String, syncCount: Int = 0, onSelect: (String) -> Unit) {
             items.forEach { (key, label, icon) ->
                 val active = current == key
                 Column(
-                    modifier = Modifier.weight(1f).heightIn(min = 50.dp)
+                    modifier = Modifier.weight(1f).heightIn(min = 54.dp)
                         .background(if (active) Color(0xFFE4F5EC) else Color.Transparent, RoundedCornerShape(14.dp))
                         .clickable { onSelect(key) }.padding(vertical = 5.dp),
                     horizontalAlignment = Alignment.CenterHorizontally,
                     verticalArrangement = Arrangement.Center,
                 ) {
                     Icon(icon, null, tint = if (active) Color(0xFF1F8A5B) else Color(0xFF60726A), modifier = Modifier.size(21.dp))
-                    Text(label, color = if (active) Color(0xFF1F8A5B) else Color(0xFF60726A), fontSize = 11.sp, fontWeight = FontWeight.ExtraBold, maxLines = 1)
+                    Text(
+                        label,
+                        color = if (active) Color(0xFF1F8A5B) else Color(0xFF60726A),
+                        style = MaterialTheme.typography.labelSmall,
+                        fontWeight = FontWeight.ExtraBold,
+                        maxLines = 2,
+                        textAlign = TextAlign.Center,
+                    )
                 }
             }
         }

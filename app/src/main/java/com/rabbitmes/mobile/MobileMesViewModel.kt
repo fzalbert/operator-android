@@ -17,6 +17,8 @@ import com.rabbitmes.mobile.data.NotificationRepository
 import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.launch
 import com.rabbitmes.mobile.domain.*
+import com.rabbitmes.mobile.ui.operations.PROBLEM_COMMENT_KEY
+import com.rabbitmes.mobile.ui.operations.PROBLEM_REASON_KEY
 
 sealed class AppScreen {
     data object Login : AppScreen()
@@ -197,14 +199,17 @@ class MobileMesViewModel @Inject constructor(
         val cage = MockRepository.cageByRfid(rfid)
         val targetId = rabbit?.id ?: cage?.id
         val currentTask = tasks.first { it.id == taskId }
+        val problemReason = values[PROBLEM_REASON_KEY].orEmpty()
+        val problemComment = values[PROBLEM_COMMENT_KEY].orEmpty()
+        val resultValues = values - PROBLEM_REASON_KEY - PROBLEM_COMMENT_KEY
 
-        if (targetId == null) {
+        if (targetId == null && problemReason.isBlank()) {
             updateTask(taskId) { task ->
                 task.copy(
                     status = TaskStatus.IN_PROGRESS,
                     result = task.result.copy(
                         scannedRfid = rfid,
-                        values = task.result.values + values + ("lastScan" to rfid),
+                        values = task.result.values + resultValues + ("lastScan" to rfid),
                     ),
                 ).markOffline()
             }
@@ -212,14 +217,22 @@ class MobileMesViewModel @Inject constructor(
             return
         }
 
-        val matchingItem = currentTask.checklist.firstOrNull { it.targetId == targetId }
+        val scannedItem = targetId?.let { scannedTargetId ->
+            currentTask.checklist.firstOrNull { it.targetId == scannedTargetId }
+        }
+        val matchingItem = if (problemReason.isNotBlank()) {
+            scannedItem?.takeIf { it.status == ChecklistStatus.PENDING }
+                ?: currentTask.checklist.firstOrNull { it.status == ChecklistStatus.PENDING }
+        } else {
+            scannedItem
+        }
         if (matchingItem == null) {
             updateTask(taskId) { task ->
                 task.copy(
                     status = TaskStatus.IN_PROGRESS,
                     result = task.result.copy(
                         scannedRfid = rfid,
-                        values = task.result.values + values + ("lastScan" to rfid),
+                        values = task.result.values + resultValues + ("lastScan" to rfid),
                     ),
                 ).markOffline()
             }
@@ -232,11 +245,35 @@ class MobileMesViewModel @Inject constructor(
         }
         updateTask(taskId) { task ->
             val checklist = task.checklist.map { item ->
-                if (item.targetId == targetId) item.copy(status = ChecklistStatus.DONE, result = item.result.copy(values = item.result.values + values, scannedRfid = rfid, completedAt = "now")) else item
+                if (item.targetId == targetId) {
+                    item.copy(
+                        status = if (problemReason.isBlank()) ChecklistStatus.DONE else ChecklistStatus.PROBLEM,
+                        result = item.result.copy(
+                            values = item.result.values + resultValues,
+                            scannedRfid = rfid,
+                            completedAt = "now",
+                            problemReason = problemReason.ifBlank { null },
+                            comment = problemComment,
+                        ),
+                    )
+                } else item
             }
-            task.copy(status = TaskStatus.IN_PROGRESS, checklist = checklist, result = task.result.copy(scannedRfid = rfid, values = task.result.values + ("lastScan" to rfid))).markOffline()
+            task.copy(
+                status = TaskStatus.IN_PROGRESS,
+                checklist = checklist,
+                result = task.result.copy(
+                    scannedRfid = rfid,
+                    values = (task.result.values - PROBLEM_REASON_KEY - PROBLEM_COMMENT_KEY) +
+                        resultValues +
+                        ("lastScan" to rfid),
+                ),
+            ).markOffline()
         }
-        lastMessage = "Скан принят: $rfid. Пункт чек-листа закрыт автоматически."
+        lastMessage = if (problemReason.isBlank()) {
+            "Скан принят: $rfid. Пункт чек-листа закрыт автоматически."
+        } else {
+            "Замечание сохранено: $problemReason"
+        }
     }
 
     fun markChecklistItem(taskId: String, itemId: String, status: ChecklistStatus, reason: String = "", comment: String = "") = updateTask(taskId) { task ->
