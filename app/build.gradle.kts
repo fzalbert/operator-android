@@ -21,7 +21,7 @@ android {
 
         // Android Emulator reaches services running on the development PC via 10.0.2.2.
         // For a physical device replace this host with the PC's LAN address.
-        buildConfigField("String", "NOTIFICATIONS_GRPC_HOST", "\"10.0.2.2\"")
+        buildConfigField("String", "NOTIFICATIONS_GRPC_HOST", "\"192.168.31.184\"")
         buildConfigField("int", "NOTIFICATIONS_GRPC_PORT", "5217")
         buildConfigField("boolean", "NOTIFICATIONS_GRPC_TLS", "false")
         buildConfigField("boolean", "SHOW_RABBIT_INFO_CARDS", "false")

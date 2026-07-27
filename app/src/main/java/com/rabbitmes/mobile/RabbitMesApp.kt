@@ -1,6 +1,7 @@
 package com.rabbitmes.mobile
 
 import android.util.Log
+import androidx.activity.compose.BackHandler
 import androidx.compose.runtime.Composable
 import com.rabbitmes.mobile.data.MockRepository
 import com.rabbitmes.mobile.domain.ChecklistStatus
@@ -13,6 +14,25 @@ import ru.profikrol.operator.feature.rabbitprofile.RabbitProfileScreen
 
 @Composable
 fun RabbitMesApp(vm: MobileMesViewModel) {
+    val currentScreen = vm.screen
+    BackHandler(enabled = currentScreen != AppScreen.Login) {
+        when (currentScreen) {
+            AppScreen.Login -> Unit
+            AppScreen.Shift -> Unit
+            AppScreen.Tasks,
+            AppScreen.Map,
+            AppScreen.Sync,
+            AppScreen.Profile,
+            AppScreen.Notifications -> vm.navigate(AppScreen.Shift)
+            AppScreen.AcceptanceQueue -> vm.navigate(AppScreen.Tasks)
+            is AppScreen.TaskExecution -> vm.navigate(AppScreen.Tasks)
+            is AppScreen.RfidScan -> vm.navigate(AppScreen.TaskExecution(currentScreen.taskId))
+            is AppScreen.Acceptance -> vm.navigate(AppScreen.AcceptanceQueue)
+            is AppScreen.AnimalHistory -> vm.navigate(AppScreen.Tasks)
+            is AppScreen.RabbitProfile -> vm.navigate(AppScreen.TaskExecution(currentScreen.taskId))
+        }
+    }
+
     fun bottom(current: String): @Composable () -> Unit = { BottomNav(current, vm.shift.pendingSyncEvents) { key ->
         when(key) { "shift" -> vm.navigate(AppScreen.Shift); "tasks" -> vm.navigate(AppScreen.Tasks); "accept" -> vm.navigate(AppScreen.AcceptanceQueue); "sync" -> vm.navigate(AppScreen.Sync); "profile" -> vm.navigate(AppScreen.Profile) }
     } }
