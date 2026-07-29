@@ -145,6 +145,7 @@ class MobileMesViewModel @Inject constructor(
         return when (item.targetType) {
             TargetType.RABBIT -> rabbits.firstOrNull { it.id == item.targetId }?.rfid
             TargetType.CAGE -> allCages.firstOrNull { it.id == item.targetId }?.rfid
+            TargetType.ROW,
             TargetType.HANGAR -> null
         }
     }

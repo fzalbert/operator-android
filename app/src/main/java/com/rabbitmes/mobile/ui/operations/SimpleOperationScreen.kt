@@ -80,8 +80,14 @@ fun SimpleOperationScreen(
             onCancel = { activeItemId = null },
             onSubmit = { values, problem, reason, comment ->
                 values.forEach(onValue)
-                if (problem) {
-                    onChecklistProblem(activeItem.id, reason, comment)
+                val hasNoWater = task.operationType == OperationType.WATER_CHECK &&
+                    values["waterStatus"] == "Нет воды"
+                if (problem || hasNoWater) {
+                    onChecklistProblem(
+                        activeItem.id,
+                        if (hasNoWater) "Нет воды" else reason,
+                        comment,
+                    )
                     if (comment.isNotBlank()) onComment(comment)
                 }
                 else onChecklistDoneWithValues(activeItem.id, values)
@@ -560,6 +566,12 @@ private fun problemReasons(type: OperationType): List<String> = when (type) {
         "Весы недоступны или неисправны",
         "Некорректные показания",
         "Объект отсутствует",
+        "Другая причина",
+    )
+    OperationType.WATER_CHECK -> listOf(
+        "Нет воды",
+        "Слабый напор",
+        "Неисправность линии водопоения",
         "Другая причина",
     )
     else -> listOf(

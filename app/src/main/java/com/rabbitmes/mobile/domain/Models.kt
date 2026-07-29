@@ -8,7 +8,7 @@ enum class TaskStatus(val title: String) { NEW("Новая"), IN_PROGRESS("В р
 enum class ChecklistStatus(val title: String) { PENDING("Ожидает"), DONE("Готово"), PROBLEM("Проблема"), SKIPPED("Пропущено") }
 enum class ReviewStatus(val title: String) { NOT_REVIEWED("Не проверено"), ACCEPTED("Принято"), REJECTED("Замечание") }
 enum class AcceptanceStatus(val title: String) { NOT_REQUIRED("Не требуется"), WAITING("Ожидает"), ACCEPTED("Принята"), REJECTED("Отклонена") }
-enum class TargetType { RABBIT, CAGE, HANGAR }
+enum class TargetType { RABBIT, CAGE, ROW, HANGAR }
 enum class Priority(val title: String, val weight: Int) { URGENT("Срочно", 0), HIGH("Важно", 1), NORMAL("Планово", 2) }
 
 enum class OperationType(val title: String) {

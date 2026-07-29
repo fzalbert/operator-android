@@ -73,11 +73,8 @@ object MockRepository {
         OperationDefinition(OperationType.LACTATION_CONTROL, TargetType.CAGE, true, "Лактация проверена", listOf(OperationField("cageRfid", "RFID клетки", FieldType.TEXT, true), OperationField("status", "Статус", FieldType.SELECT, true, options = listOf("Норма", "Недостаточно молока", "Нужна подсадка", "Нужен технолог"))), listOf(RoleId.OPERATOR, RoleId.CHIEF_TECHNOLOGIST)),
         OperationDefinition(OperationType.LIGHT_STIMULATION, TargetType.HANGAR, false, "Уставка применена", listOf(OperationField("lightHours", "Длительность светового дня", FieldType.HOURS, true, "ч"), OperationField("mode", "Режим", FieldType.SELECT, true, options = listOf("База 14:00", "Стимуляция 22:00"))), listOf(RoleId.OPERATOR)),
         OperationDefinition(OperationType.FEED_CHECK, TargetType.HANGAR, false, "Корм проверен", listOf(OperationField("feedType", "Тип корма", FieldType.FEED_TYPE, true, options = listOf("Откорм", "Отъем", "Лактация")), OperationField("feedAvailable", "Корм есть", FieldType.BOOLEAN, true)), listOf(RoleId.OPERATOR)),
-        OperationDefinition(OperationType.WATER_CHECK, TargetType.HANGAR, false, "Вода проверена", listOf(
-            OperationField("row1Water", "Ряд 1", FieldType.SELECT, true, options = listOf("Вода есть", "Нет воды")),
-            OperationField("row2Water", "Ряд 2", FieldType.SELECT, true, options = listOf("Вода есть", "Нет воды")),
-            OperationField("row3Water", "Ряд 3", FieldType.SELECT, true, options = listOf("Вода есть", "Нет воды")),
-            OperationField("pressure", "Общее давление", FieldType.SELECT, true, options = listOf("Норма", "Слабое", "Нет воды"))
+        OperationDefinition(OperationType.WATER_CHECK, TargetType.ROW, false, "Сохранить проверку", listOf(
+            OperationField("waterStatus", "Наличие воды", FieldType.SELECT, true, options = listOf("Вода есть", "Нет воды"))
         ), listOf(RoleId.OPERATOR)),
         OperationDefinition(OperationType.LIGHTING_CHECK, TargetType.HANGAR, false, "Свет проверен", listOf(OperationField("allLamps", "Все лампы горят", FieldType.BOOLEAN, true), OperationField("lightHours", "Фактический световой день", FieldType.HOURS, true, "ч"), OperationField("broken", "Перегоревшие лампы", FieldType.NUMBER)), listOf(RoleId.OPERATOR)),
         OperationDefinition(OperationType.MORTALITY_ROUND, TargetType.HANGAR, false, "Обход завершен", listOf(OperationField("deadCount", "Падеж", FieldType.NUMBER, true), OperationField("ammonia", "NH₃", FieldType.NUMBER, false, "ppm")), listOf(RoleId.OPERATOR)),
@@ -110,6 +107,19 @@ object MockRepository {
     private fun weighingChecklist(count: Int = 4) = allCages.take(count).mapIndexed { index, cage ->
         ChecklistItem("weight-c-${index + 1}", "Ряд ${cage.rowNumber} · клетка ${cage.number}", TargetType.CAGE, cage.id)
     }
+    private fun waterRowChecklist(hangarId: String): List<ChecklistItem> =
+        workshop.hangars
+            .firstOrNull { it.id == hangarId }
+            ?.rows
+            .orEmpty()
+            .map { row ->
+                ChecklistItem(
+                    id = "water-${hangarId}-${row.id}",
+                    label = "Ряд ${row.number}",
+                    targetType = TargetType.ROW,
+                    targetId = row.id,
+                )
+            }
 
     fun initialTasks(): List<MobileTask> = listOf(
         MobileTask("task-1", "Осеменение самок", OperationType.INSEMINATION, "ws-1", "h-1", "emp-1", "2026-07-09", "08:30", 180, Priority.URGENT, TaskStatus.NEW, rabbitChecklist("ins", 4), true, RoleId.CHIEF_TECHNOLOGIST, AcceptanceStatus.NOT_REQUIRED),
@@ -123,6 +133,6 @@ object MockRepository {
         MobileTask("task-9", "Пальпация", OperationType.PALPATION, "ws-1", "h-1", "emp-1", "2026-07-09", "16:00", 120, Priority.NORMAL, TaskStatus.NEW, rabbitChecklist("pal", 10), false),
         MobileTask("task-10", "Выравнивание гнезд", OperationType.NEST_SELECTION, "ws-1", "h-1", "emp-1", "2026-07-09", "16:40", 90, Priority.HIGH, TaskStatus.NEW, cageNumberChecklist("sel", 10), true, RoleId.CHIEF_TECHNOLOGIST, AcceptanceStatus.NOT_REQUIRED),
         MobileTask("task-11", "Проверка корма", OperationType.FEED_CHECK, "ws-1", "h-1", "emp-1", "2026-07-09", "07:30", 20, Priority.NORMAL, TaskStatus.NEW, emptyList(), false),
-        MobileTask("task-12", "Проверка воды", OperationType.WATER_CHECK, "ws-1", "h-1", "emp-1", "2026-07-09", "07:40", 20, Priority.NORMAL, TaskStatus.NEW, emptyList(), false)
+        MobileTask("task-12", "Проверка воды", OperationType.WATER_CHECK, "ws-1", "h-1", "emp-1", "2026-07-09", "07:40", 20, Priority.NORMAL, TaskStatus.NEW, waterRowChecklist("h-1"), false)
     )
 }
