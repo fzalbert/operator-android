@@ -3,19 +3,24 @@ package com.rabbitmes.mobile.ui.screens
 import androidx.compose.foundation.background
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.ExperimentalLayoutApi
-import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ExpandLess
+import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.Sync
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.rabbitmes.mobile.domain.*
 import com.rabbitmes.mobile.ui.components.*
@@ -127,7 +132,6 @@ fun SyncQueueScreen(shift: ShiftState, tasks: List<MobileTask>, onSync: () -> Un
 }
 
 @Composable
-@OptIn(ExperimentalLayoutApi::class)
 fun ProfileScreen(employee: Employee, tasks: List<MobileTask>, operations: List<OperationDefinition>, onLogout: () -> Unit, bottomBar: @Composable () -> Unit) {
     val allowedOperations = operations
         .filter { employee.role in it.allowedRoles }
@@ -149,15 +153,7 @@ fun ProfileScreen(employee: Employee, tasks: List<MobileTask>, operations: List<
                         fontWeight = FontWeight.Bold,
                     )
                     Spacer(Modifier.height(MesSpacing.contentGap))
-                    FlowRow(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(MesSpacing.smallGap),
-                        verticalArrangement = Arrangement.spacedBy(MesSpacing.smallGap),
-                    ) {
-                        allowedOperations.forEach { operation ->
-                            OperationReadOnlyChip(operation.type.title)
-                        }
-                    }
+                    AllowedOperationsDropdown(allowedOperations.map { it.type.title })
                 }
             }
         }
@@ -165,8 +161,12 @@ fun ProfileScreen(employee: Employee, tasks: List<MobileTask>, operations: List<
 }
 
 @Composable
-private fun OperationReadOnlyChip(title: String) {
+private fun AllowedOperationsDropdown(operations: List<String>) {
+    var expanded by remember { mutableStateOf(false) }
     Surface(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable(enabled = operations.isNotEmpty()) { expanded = !expanded },
         color = MaterialTheme.colorScheme.surface,
         contentColor = MaterialTheme.colorScheme.onSurface,
         shape = RoundedCornerShape(18.dp),
@@ -175,12 +175,49 @@ private fun OperationReadOnlyChip(title: String) {
             color = MaterialTheme.colorScheme.primary.copy(alpha = 0.45f),
         ),
     ) {
-        Text(
-            text = title,
-            style = MaterialTheme.typography.bodyMedium,
-            fontWeight = FontWeight.Medium,
-            modifier = Modifier.padding(horizontal = 14.dp, vertical = 9.dp),
-        )
+        Column(Modifier.padding(horizontal = 14.dp, vertical = 12.dp)) {
+            Row(
+                Modifier.fillMaxWidth(),
+                verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
+            ) {
+                Column(Modifier.weight(1f)) {
+                    Text(
+                        text = "${operations.size} операций",
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = MaterialTheme.colorScheme.primary,
+                        fontWeight = FontWeight.Bold,
+                    )
+                    if (operations.isEmpty()) {
+                        Text(
+                            text = "Нет доступных операций",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                    }
+                }
+                if (operations.isNotEmpty()) {
+                    Icon(
+                        imageVector = if (expanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary,
+                    )
+                }
+            }
+            if (expanded) {
+                Spacer(Modifier.height(MesSpacing.smallGap))
+                operations.forEach { title ->
+                    Text(
+                        text = title,
+                        style = MaterialTheme.typography.bodyMedium,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.padding(vertical = 5.dp),
+                    )
+                }
+            }
+        }
     }
 }
 

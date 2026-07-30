@@ -15,8 +15,10 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.rabbitmes.mobile.domain.*
@@ -36,6 +38,9 @@ object MesSpacing {
     val tinyGap = 4.dp
 }
 val LocalMesCardBorderEnabled = compositionLocalOf { true }
+
+@Composable
+fun isAccessibilityFontScale(): Boolean = LocalDensity.current.fontScale >= 1.3f
 
 @Composable
 fun MesCard(
@@ -100,6 +105,8 @@ fun SelectionDropdown(
 
 @Composable
 fun AppHeader(title: String, subtitle: String? = null, onBack: (() -> Unit)? = null, trailing: @Composable RowScope.() -> Unit = {}) {
+    val accessibilityFontScale = isAccessibilityFontScale()
+
     Surface(
         color = Color(0xFF0B2F24),
         contentColor = Color.White,
@@ -115,8 +122,23 @@ fun AppHeader(title: String, subtitle: String? = null, onBack: (() -> Unit)? = n
                 Icon(Icons.AutoMirrored.Filled.ArrowBack, null, tint = Color.White)
             }
             Column(Modifier.weight(1f)) {
-                if (subtitle != null) Text(subtitle, color = Color(0xFFA7DCC2), style = MaterialTheme.typography.bodySmall)
-                Text(title, color = Color.White, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Black)
+                if (subtitle != null) {
+                    Text(
+                        subtitle,
+                        color = Color(0xFFA7DCC2),
+                        style = MaterialTheme.typography.bodySmall,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                    )
+                }
+                Text(
+                    title,
+                    color = Color.White,
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Black,
+                    maxLines = if (accessibilityFontScale) 2 else 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
             }
             Row(content = trailing)
         }
@@ -197,6 +219,7 @@ fun operationAccent(type: OperationType): Color = when(type) {
 
 @Composable
 fun BottomNav(current: String, syncCount: Int = 0, onSelect: (String) -> Unit) {
+    val accessibilityFontScale = isAccessibilityFontScale()
     val items = listOf(
         Triple("shift", "Смена", Icons.Default.Home),
         Triple("tasks", "Задачи", Icons.AutoMirrored.Filled.Assignment),
@@ -205,30 +228,84 @@ fun BottomNav(current: String, syncCount: Int = 0, onSelect: (String) -> Unit) {
         Triple("profile", "Профиль", Icons.Default.Person),
     )
     Surface(color = Color.White, shadowElevation = 12.dp, modifier = Modifier.fillMaxWidth()) {
-        Row(
-            Modifier.navigationBarsPadding().padding(horizontal = 8.dp, vertical = 10.dp),
-            horizontalArrangement = Arrangement.spacedBy(4.dp),
-        ) {
-            items.forEach { (key, label, icon) ->
-                val active = current == key
-                Column(
-                    modifier = Modifier.weight(1f).heightIn(min = 54.dp)
-                        .background(if (active) Color(0xFFE4F5EC) else Color.Transparent, RoundedCornerShape(14.dp))
-                        .clickable { onSelect(key) }.padding(vertical = 5.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    verticalArrangement = Arrangement.Center,
-                ) {
-                    Icon(icon, null, tint = if (active) Color(0xFF1F8A5B) else Color(0xFF60726A), modifier = Modifier.size(21.dp))
-                    Text(
-                        label,
-                        color = if (active) Color(0xFF1F8A5B) else Color(0xFF60726A),
-                        style = MaterialTheme.typography.labelSmall,
-                        fontWeight = FontWeight.ExtraBold,
-                        maxLines = 2,
-                        textAlign = TextAlign.Center,
+        if (accessibilityFontScale) {
+            Column(
+                Modifier.navigationBarsPadding().padding(horizontal = 8.dp, vertical = 10.dp),
+                verticalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+                items.chunked(3).forEach { rowItems ->
+                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        rowItems.forEach { (key, label, icon) ->
+                            BottomNavItem(
+                                key = key,
+                                label = label,
+                                icon = icon,
+                                active = current == key,
+                                accessibilityFontScale = true,
+                                onSelect = onSelect,
+                                modifier = Modifier.weight(1f),
+                            )
+                        }
+                        repeat(3 - rowItems.size) {
+                            Spacer(Modifier.weight(1f))
+                        }
+                    }
+                }
+            }
+        } else {
+            Row(
+                Modifier.navigationBarsPadding().padding(horizontal = 8.dp, vertical = 10.dp),
+                horizontalArrangement = Arrangement.spacedBy(4.dp),
+            ) {
+                items.forEach { (key, label, icon) ->
+                    BottomNavItem(
+                        key = key,
+                        label = label,
+                        icon = icon,
+                        active = current == key,
+                        accessibilityFontScale = false,
+                        onSelect = onSelect,
+                        modifier = Modifier.weight(1f),
                     )
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun BottomNavItem(
+    key: String,
+    label: String,
+    icon: ImageVector,
+    active: Boolean,
+    accessibilityFontScale: Boolean,
+    onSelect: (String) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Column(
+        modifier = modifier
+            .heightIn(min = if (accessibilityFontScale) 64.dp else 54.dp)
+            .background(if (active) Color(0xFFE4F5EC) else Color.Transparent, RoundedCornerShape(14.dp))
+            .clickable { onSelect(key) }
+            .padding(horizontal = 4.dp, vertical = if (accessibilityFontScale) 8.dp else 5.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center,
+    ) {
+        Icon(
+            icon,
+            null,
+            tint = if (active) Color(0xFF1F8A5B) else Color(0xFF60726A),
+            modifier = Modifier.size(if (accessibilityFontScale) 24.dp else 21.dp),
+        )
+        Text(
+            label,
+            color = if (active) Color(0xFF1F8A5B) else Color(0xFF60726A),
+            style = if (accessibilityFontScale) MaterialTheme.typography.labelMedium else MaterialTheme.typography.labelSmall,
+            fontWeight = FontWeight.ExtraBold,
+            maxLines = if (accessibilityFontScale) 1 else 2,
+            overflow = TextOverflow.Ellipsis,
+            textAlign = TextAlign.Center,
+        )
     }
 }

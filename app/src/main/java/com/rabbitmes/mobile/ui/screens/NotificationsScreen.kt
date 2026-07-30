@@ -58,7 +58,7 @@ fun NotificationsScreen(
                     onBack = onBack,
                     trailing = {
                         TextButton(onClick = onReadAll, enabled = unreadCount > 0) {
-                            Text("Прочитать все")
+                            Text("Все", maxLines = 1)
                         }
                     },
                 )

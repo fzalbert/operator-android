@@ -24,7 +24,7 @@ android {
         buildConfigField("String", "NOTIFICATIONS_GRPC_HOST", "\"10.0.2.2\"")
         buildConfigField("int", "NOTIFICATIONS_GRPC_PORT", "5217")
         buildConfigField("boolean", "NOTIFICATIONS_GRPC_TLS", "false")
-        buildConfigField("boolean", "SHOW_RABBIT_INFO_CARDS", "false")
+        buildConfigField("boolean", "SHOW_RABBIT_INFO_CARDS", "true")
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }

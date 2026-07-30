@@ -18,6 +18,7 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.platform.LocalDensity
@@ -96,6 +97,7 @@ fun SimpleOperationScreen(
             onPhoto = onPhoto,
             onVideo = onVideo,
             onFile = onFile,
+            attachments = task.result.attachments,
         )
         return
     }
@@ -169,8 +171,10 @@ fun SimpleOperationScreen(
                         task = task,
                         definition = definition,
                         scannedRfid = scannedRfid,
+                        allProcessed = allProcessed,
                         onOpenScanner = onOpenRfidScanner,
                         onScan = onScan,
+                        onComplete = onComplete,
                         onPhoto = onPhoto,
                         onVideo = onVideo,
                         onFile = onFile,
@@ -201,7 +205,7 @@ fun SimpleOperationScreen(
             item { SimpleSectionTitle("Результаты") }
             if (closed.isEmpty()) item { SimpleEmpty("Пока нет выполненных пунктов") }
             closed.forEach { checklistItem -> item(key = "closed-${checklistItem.id}") { SimpleResultCard(checklistItem, definition) } }
-            item {
+            if (!definition.requiresScan) item {
                 SimpleButton(
                     if (task.requiresAcceptance) "Завершить и отправить на приёмку" else "Завершить задачу",
                     onComplete,
@@ -219,8 +223,10 @@ private fun SimpleScanPanel(
     task: MobileTask,
     definition: OperationDefinition,
     scannedRfid: String?,
+    allProcessed: Boolean,
     onOpenScanner: (Map<String, String>) -> Unit,
     onScan: (String, Map<String, String>) -> Unit,
+    onComplete: () -> Unit,
     onPhoto: (String, String) -> Unit,
     onVideo: (String, String) -> Unit,
     onFile: (String, String) -> Unit,
@@ -244,6 +250,11 @@ private fun SimpleScanPanel(
         mutableStateOf(task.result.values[PROBLEM_COMMENT_KEY].orEmpty())
     }
     var error by remember(task.id) { mutableStateOf("") }
+
+    LaunchedEffect(scannedRfid) {
+        if (!scannedRfid.isNullOrBlank()) error = ""
+    }
+
     SimpleCard {
         Text("Сканирование RFID", color = SimpleText, fontSize = 20.sp, fontWeight = FontWeight.Black)
         Text("Сканируйте метку объекта, заполните несколько полей и сохраните результат.", color = SimpleMuted, fontSize = 14.sp)
@@ -262,6 +273,7 @@ private fun SimpleScanPanel(
         )
         if (!scannedRfid.isNullOrBlank()) {
             val scannedRabbit = MockRepository.rabbitByRfid(scannedRfid)
+            SimpleScanStatus(scannedRfid, scannedRabbit != null)
             if (scannedRabbit != null) {
                 RabbitInfoCard(
                     isLoading = false,
@@ -275,11 +287,6 @@ private fun SimpleScanPanel(
                     ),
                     onClick = { onOpenAnimal(scannedRabbit.rfid) },
                 )
-            } else {
-                Column(Modifier.fillMaxWidth().background(Color(0xFFEAF7F0), RoundedCornerShape(18.dp)).border(1.dp, Color(0xFFB7DEC9), RoundedCornerShape(18.dp)).padding(14.dp)) {
-                    Text("Метка считана", color = SimpleGreen, fontWeight = FontWeight.ExtraBold, fontSize = 13.sp)
-                    Text(scannedRfid, color = SimpleText, fontWeight = FontWeight.Black, fontSize = 19.sp)
-                }
             }
         }
         definition.fields.filterNot(::isRfidField).forEach { field -> SimpleField(field, values[field.id].orEmpty()) { values[field.id] = it } }
@@ -300,11 +307,20 @@ private fun SimpleScanPanel(
             onPhoto = onPhoto,
             onVideo = onVideo,
             onFile = onFile,
+            attachments = task.result.attachments,
         )
         if (error.isNotBlank()) Text(error, color = SimpleRed, fontWeight = FontWeight.Bold)
         SimpleButton(
-            if (hasProblem) "Зафиксировать проблему" else definition.completionLabel,
+            when {
+                allProcessed -> if (task.requiresAcceptance) "Завершить и отправить на приёмку" else "Завершить задачу"
+                hasProblem -> "Зафиксировать проблему"
+                else -> definition.completionLabel
+            },
             {
+                if (allProcessed) {
+                    onComplete()
+                    return@SimpleButton
+                }
                 val missing = definition.fields.filter { it.required && !isRfidField(it) && values[it.id].isNullOrBlank() }
                 when {
                     hasProblem && problemReason.isBlank() -> error = "Выберите причину замечания"
@@ -327,6 +343,33 @@ private fun SimpleScanPanel(
 }
 
 @Composable
+private fun SimpleScanStatus(
+    rfid: String,
+    rabbitFound: Boolean,
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(Color(0xFFEAF7F0), RoundedCornerShape(18.dp))
+            .border(1.dp, Color(0xFF66C291), RoundedCornerShape(18.dp))
+            .padding(14.dp),
+    ) {
+        Text(
+            text = if (rabbitFound) "RFID успешно считан" else "Метка считана, кролик не найден",
+            color = SimpleGreen,
+            fontWeight = FontWeight.ExtraBold,
+            fontSize = 13.sp,
+        )
+        Text(
+            text = rfid,
+            color = SimpleText,
+            fontWeight = FontWeight.Black,
+            fontSize = 19.sp,
+        )
+    }
+}
+
+@Composable
 private fun SimpleItemForm(
     task: MobileTask,
     definition: OperationDefinition,
@@ -336,8 +379,15 @@ private fun SimpleItemForm(
     onPhoto: (String, String) -> Unit,
     onVideo: (String, String) -> Unit,
     onFile: (String, String) -> Unit,
+    attachments: List<MediaAttachment>,
 ) {
-    val values = remember(item.id) { mutableStateMapOf<String, String>().apply { definition.fields.forEach { put(it.id, defaultValue(it)) } } }
+    val values = remember(item.id) {
+        mutableStateMapOf<String, String>().apply {
+            definition.fields.forEach { field ->
+                put(field.id, item.defaultValueForField(definition, field))
+            }
+        }
+    }
     var problem by remember(item.id) { mutableStateOf(false) }
     var reason by remember(item.id) { mutableStateOf("") }
     var comment by remember(item.id) { mutableStateOf("") }
@@ -350,7 +400,16 @@ private fun SimpleItemForm(
             }
         }
         item { SimpleReadonly("Объект чек-листа", item.label) }
-        definition.fields.forEach { field -> item(field.id) { SimpleField(field, values[field.id].orEmpty()) { values[field.id] = it } } }
+        definition.fields.filterNot { definition.shouldAutoCompleteField(it) }.forEach { field ->
+            item(field.id) {
+                SimpleField(
+                    field = field,
+                    value = values[field.id].orEmpty(),
+                    readOnly = definition.type == OperationType.NEST_SELECTION && field.id == "sourceCage",
+                    onValue = { values[field.id] = it },
+                )
+            }
+        }
         item {
             SimpleProblemBlock(
                 problem = problem,
@@ -369,6 +428,7 @@ private fun SimpleItemForm(
                 onPhoto = onPhoto,
                 onVideo = onVideo,
                 onFile = onFile,
+                attachments = task.result.attachments,
             )
         }
         if (error.isNotBlank()) item { Text(error, color = SimpleRed, fontWeight = FontWeight.Bold) }
@@ -391,7 +451,7 @@ private fun SimpleItemForm(
                         definition.type == OperationType.NEST_SELECTION &&
                         (values["movedCount"]?.toIntOrNull() ?: 0) <= 0
                     ) error = "Укажите количество крольчат больше нуля"
-                    else onSubmit(values.toMap(), problem, reason, comment)
+                    else onSubmit(values.withAutoCompleteValues(definition), problem, reason, comment)
                 }, Modifier.weight(1f))
             }
         }
@@ -410,18 +470,33 @@ private fun SimpleStandaloneForm(task: MobileTask, definition: OperationDefiniti
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun SimpleField(field: OperationField, value: String, onValue: (String) -> Unit) {
+private fun SimpleField(
+    field: OperationField,
+    value: String,
+    readOnly: Boolean = false,
+    onValue: (String) -> Unit,
+) {
     when (field.type) {
-        FieldType.BOOLEAN -> Row(Modifier.fillMaxWidth().background(Color(0xFFF6F9F7), RoundedCornerShape(16.dp)).clickable { onValue((value != "true").toString()) }.padding(14.dp), Arrangement.SpaceBetween, Alignment.CenterVertically) {
+        FieldType.BOOLEAN -> Row(Modifier.fillMaxWidth().background(Color(0xFFF6F9F7), RoundedCornerShape(16.dp)).clickable(enabled = !readOnly) { onValue((value != "true").toString()) }.padding(14.dp), Arrangement.SpaceBetween, Alignment.CenterVertically) {
             Text(field.title, color = SimpleText, fontWeight = FontWeight.Bold, modifier = Modifier.weight(1f)); Switch(value == "true", { onValue(it.toString()) })
         }
         FieldType.SELECT, FieldType.FEED_TYPE -> {
             var expanded by remember { mutableStateOf(false) }
             Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 Text(field.title, color = SimpleMuted, fontWeight = FontWeight.Bold, fontSize = 13.sp)
-                ExposedDropdownMenuBox(expanded, { expanded = !expanded }) {
-                    OutlinedTextField(value, {}, readOnly = true, trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded) }, modifier = Modifier.menuAnchor(MenuAnchorType.PrimaryNotEditable).fillMaxWidth(), shape = RoundedCornerShape(16.dp))
-                    ExposedDropdownMenu(expanded, { expanded = false }) { field.options.forEach { option -> DropdownMenuItem({ Text(option) }, { onValue(option); expanded = false }) } }
+                if (readOnly) {
+                    OutlinedTextField(
+                        value = value,
+                        onValueChange = {},
+                        readOnly = true,
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(16.dp),
+                    )
+                } else {
+                    ExposedDropdownMenuBox(expanded, { expanded = !expanded }) {
+                        OutlinedTextField(value, {}, readOnly = true, trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded) }, modifier = Modifier.menuAnchor(MenuAnchorType.PrimaryNotEditable).fillMaxWidth(), shape = RoundedCornerShape(16.dp))
+                        ExposedDropdownMenu(expanded, { expanded = false }) { field.options.forEach { option -> DropdownMenuItem({ Text(option) }, { onValue(option); expanded = false }) } }
+                    }
                 }
             }
         }
@@ -446,6 +521,7 @@ private fun SimpleProblemBlock(
     onPhoto: (String, String) -> Unit,
     onVideo: (String, String) -> Unit,
     onFile: (String, String) -> Unit,
+    attachments: List<MediaAttachment>,
 ) {
     var expanded by remember { mutableStateOf(false) }
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -503,8 +579,63 @@ private fun SimpleProblemBlock(
                     }
                 },
             )
+            SimpleAttachmentList(attachments)
         }
     }
+}
+
+@Composable
+private fun SimpleAttachmentList(
+    attachments: List<MediaAttachment>,
+) {
+    if (attachments.isEmpty()) return
+
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(Color(0xFFF6F9F7), RoundedCornerShape(16.dp))
+            .border(1.dp, SimpleBorder, RoundedCornerShape(16.dp))
+            .padding(12.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        Text(
+            text = "Добавлено: ${attachments.size}",
+            color = SimpleGreen,
+            fontWeight = FontWeight.ExtraBold,
+            fontSize = 13.sp,
+        )
+        attachments.forEach { attachment ->
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    text = "${attachment.type.title}: ${attachment.name.shortAttachmentName()}",
+                    color = SimpleText,
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 14.sp,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f),
+                )
+                Text(
+                    text = attachment.createdAt,
+                    color = SimpleMuted,
+                    fontSize = 12.sp,
+                    modifier = Modifier.padding(start = 8.dp),
+                )
+            }
+        }
+    }
+}
+
+private fun String.shortAttachmentName(maxLength: Int = 18): String {
+    if (length <= maxLength) return this
+    val extensionStart = lastIndexOf('.').takeIf { it > 0 && length - it <= 6 }
+    val extension = extensionStart?.let { substring(it) }.orEmpty()
+    val visibleNameLength = maxLength - extension.length - 1
+    return take(visibleNameLength.coerceAtLeast(8)) + "…" + extension
 }
 
 @Composable private fun SimpleChecklistCard(title: String, subtitle: String, action: String, enabled: Boolean, onClick: () -> Unit) { Card(Modifier.fillMaxWidth().clickable(enabled, onClick = onClick), RoundedCornerShape(18.dp), CardDefaults.cardColors(Color.White), elevation = CardDefaults.cardElevation(4.dp)) { Row(Modifier.padding(14.dp), Arrangement.SpaceBetween, Alignment.CenterVertically) { Column(Modifier.weight(1f)) { Text(title, color = SimpleText, fontWeight = FontWeight.Bold); Text(subtitle, color = SimpleMuted, fontSize = 13.sp) }; Text(action, color = SimpleGreen, fontWeight = FontWeight.ExtraBold) } } }
@@ -543,6 +674,18 @@ private fun SimpleBadge(text: String, color: Color) {
 }
 @Composable private fun SimpleButton(text: String, onClick: () -> Unit, modifier: Modifier = Modifier, secondary: Boolean = false, enabled: Boolean = true) { Button(onClick, modifier.heightIn(min = 50.dp), enabled = enabled, shape = RoundedCornerShape(16.dp), colors = ButtonDefaults.buttonColors(containerColor = if (secondary) Color(0xFFE4ECE8) else SimpleGreen, contentColor = if (secondary) SimpleDarkGreen else Color.White)) { Text(text, fontWeight = FontWeight.ExtraBold, fontSize = 16.sp) } }
 private fun isRfidField(field: OperationField) = field.id.contains("rfid", true)
+private fun ChecklistItem.defaultValueForField(definition: OperationDefinition, field: OperationField): String {
+    if (definition.type == OperationType.NEST_SELECTION && field.id == "sourceCage") {
+        return MockRepository.cage(targetId)?.code ?: defaultValue(field)
+    }
+    return defaultValue(field)
+}
+private fun OperationDefinition.shouldAutoCompleteField(field: OperationField): Boolean =
+    type == OperationType.NEST_PREPARATION && field.id == "nestReady"
+
+private fun Map<String, String>.withAutoCompleteValues(definition: OperationDefinition): Map<String, String> =
+    if (definition.type == OperationType.NEST_PREPARATION) this + ("nestReady" to "true") else this
+
 private fun defaultValue(field: OperationField) = when (field.type) { FieldType.BOOLEAN -> "false"; FieldType.NUMBER, FieldType.TEMPERATURE, FieldType.HOURS -> ""; FieldType.SELECT, FieldType.FEED_TYPE -> field.options.firstOrNull().orEmpty(); else -> "" }
 private fun String?.isMissingRequiredValue(): Boolean =
     isNullOrBlank() || startsWith("Выберите", ignoreCase = true)
