@@ -82,12 +82,28 @@ class MobileMesViewModel @Inject constructor(
 
     fun navigate(target: AppScreen) { screen = target; lastMessage = null }
     fun onLoggedInFromSession() {
-        val role = sessionStore.currentUser?.role
-        currentEmployee = when (role) {
+        val sessionUser = sessionStore.currentUser
+        val role = sessionUser?.role
+        val mockEmployee = when (role) {
             UserRole.Technologist,
             UserRole.SuperAdmin -> employees.first { it.role == RoleId.CHIEF_TECHNOLOGIST }
             UserRole.Operator, null -> employees.first { it.role == RoleId.OPERATOR }
         }
+        val displayName = sessionUser?.displayName
+            .orEmpty()
+            .ifBlank { mockEmployee.fullName }
+        val initials = displayName
+            .split(" ")
+            .filter(String::isNotBlank)
+            .take(2)
+            .mapNotNull { it.firstOrNull()?.uppercase() }
+            .joinToString("")
+            .ifBlank { mockEmployee.initials }
+
+        currentEmployee = mockEmployee.copy(
+            fullName = displayName,
+            initials = initials,
+        )
         shift = ShiftState(currentEmployee.id)
         screen = defaultScreenForRole()
         lastMessage = null

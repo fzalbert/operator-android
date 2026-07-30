@@ -15,6 +15,7 @@ import ru.profikrol.operator.data.remote.auth.AuthApi
 import ru.profikrol.operator.data.remote.auth.LoginRequest
 import ru.profikrol.operator.data.remote.auth.RefreshTokenRequest
 import ru.profikrol.operator.data.remote.auth.TokenDto
+import ru.profikrol.operator.data.remote.profile.ProfileApi
 import ru.profikrol.operator.domain.model.User
 import ru.profikrol.operator.domain.model.UserRole
 import ru.profikrol.operator.domain.repository.AuthError
@@ -29,6 +30,7 @@ import kotlin.coroutines.cancellation.CancellationException
 @Singleton
 class RealAuthRepository @Inject constructor(
     @Named("authless") private val authApi: AuthApi,
+    private val profileApi: ProfileApi,
     private val sessionStore: SessionStore,
     private val json: Json,
 ) : AuthRepository {
@@ -72,7 +74,7 @@ class RealAuthRepository @Inject constructor(
                     .ifBlank { displayName }
                     .ifBlank { trimmedLogin }
 
-                val user = User(
+                var user = User(
                     id = claims.stringClaim("userId")
                         .ifBlank { claims.stringClaim("sub") }
                         .ifBlank { UUID.randomUUID().toString() },
@@ -85,6 +87,30 @@ class RealAuthRepository @Inject constructor(
                     role = roleText.toUserRole(),
                 )
                 sessionStore.save(user)
+
+                val profile = runCatching {
+                    profileApi.getMyProfile()
+                }.onFailure { error ->
+                    Log.w(TAG, "Profile request failed", error)
+                }.getOrNull()
+
+                if (profile != null) {
+                    val fullName = listOf(
+                        profile.surname,
+                        profile.name,
+                        profile.secondName,
+                    )
+                        .filter(String::isNotBlank)
+                        .joinToString(" ")
+
+                    user = user.copy(
+                        displayName = fullName.ifBlank { user.displayName },
+                        email = profile.email,
+                        phone = profile.phoneNumber ?: profile.contactNumber,
+                    )
+                    sessionStore.save(user)
+                }
+
                 Result.success(user)
             } catch (error: CancellationException) {
                 throw error
