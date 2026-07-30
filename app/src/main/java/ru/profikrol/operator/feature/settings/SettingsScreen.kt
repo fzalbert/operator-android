@@ -110,7 +110,7 @@ private fun UserRole.displayString(): String = when (this) {
 
 // ---------- Previews ----------
 
-@Preview(name = "SettingsScreen — оператор", showBackground = true)
+@Preview(name = "Настройки — оператор", showBackground = true)
 @Composable
 private fun SettingsContentOperatorPreview() {
     ProfikrolTheme {
@@ -134,7 +134,7 @@ private fun SettingsContentOperatorPreview() {
     }
 }
 
-@Preview(name = "SettingsScreen — без сессии", showBackground = true)
+@Preview(name = "Настройки — без сессии", showBackground = true)
 @Composable
 private fun SettingsContentEmptyPreview() {
     ProfikrolTheme {

@@ -53,7 +53,7 @@ fun ShiftScreen(
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             item {
-                AppHeader("Смена", "Rabbit MES Mobile${if (shift.pendingSyncEvents > 0) " · ${shift.pendingSyncEvents} в очереди" else ""}", trailing = {
+                AppHeader("Смена", "Профикроль${if (shift.pendingSyncEvents > 0) " · ${shift.pendingSyncEvents} в очереди" else ""}", trailing = {
                     IconButton(onClick = onOpenNotifications) { BadgedBox({ if (unreadNotifications > 0) Badge { Text(unreadNotifications.toString()) } }) { Icon(Icons.Default.Notifications, null, tint = Color.White) } }
                     Icon(if (shift.isOnline) Icons.Default.CloudDone else Icons.Default.CloudOff, null, tint = Color(0xFF48D491), modifier = Modifier.padding(12.dp).size(26.dp))
                     IconButton(onClick = onLogout) { Icon(Icons.AutoMirrored.Filled.Logout, null, tint = Color.White) }

@@ -25,7 +25,7 @@ fun TaskListScreen(tasks: List<MobileTask>, nextTask: MobileTask?, message: Stri
     val largeFont = LocalDensity.current.fontScale >= 1.3f
     Scaffold(bottomBar = bottomBar, containerColor = MaterialTheme.colorScheme.background) { padding ->
         LazyColumn(Modifier.fillMaxSize().padding(padding), contentPadding = PaddingValues(bottom = 24.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            item { AppHeader("Мои задачи", "Rabbit MES Mobile", onBack) }
+            item { AppHeader("Мои задачи", "Профикроль", onBack) }
             item {
                 if (largeFont) {
                     Text(
