@@ -319,7 +319,11 @@ class MobileMesViewModel @Inject constructor(
 
     fun completeTask(taskId: String) {
         val currentTask = tasks.first { it.id == taskId }
-        val checklist = currentTask.checklist
+        val checklist = if (currentTask.operationType == OperationType.NEST_CONTROL) {
+            currentTask.checklist.map { item ->
+                if (item.status == ChecklistStatus.PENDING) item.copy(status = ChecklistStatus.DONE) else item
+            }
+        } else currentTask.checklist
         val pending = checklist.count { it.status == ChecklistStatus.PENDING }
         if (pending > 0) {
             lastMessage = "Нельзя завершить задачу: осталось $pending необработанных пунктов чек-листа"

@@ -59,9 +59,16 @@ object MockRepository {
         OperationDefinition(OperationType.NEST_PREPARATION, TargetType.CAGE, false, "Гнездо подготовлено", listOf(
             OperationField("nestReady", "Гнездо готово", FieldType.BOOLEAN, true)
         ), listOf(RoleId.OPERATOR), true),
-        OperationDefinition(OperationType.NEST_CONTROL, TargetType.CAGE, true, "Сохранить контроль", listOf(
-            OperationField("cageRfid", "RFID клетки", FieldType.TEXT, true), OperationField("fed", "Сытых", FieldType.NUMBER, true), OperationField("hungry", "Голодных", FieldType.NUMBER, true), OperationField("dead", "Мертвых", FieldType.NUMBER, true), OperationField("nestState", "Состояние гнезда", FieldType.SELECT, true, options = listOf("Норма", "Мокрое", "Мало стружки", "Нужно вмешательство"))
+        OperationDefinition(OperationType.NEST_CONTROL, TargetType.CAGE, false, "Добавить замечание", listOf(
+            OperationField("issue", "Проблема в клетке", FieldType.SELECT, true, options = listOf("Мертвые крольчата", "Голодные крольчата", "Мокрое гнездо", "Мало подстилки", "Требуется вмешательство", "Другая проблема")),
+            OperationField("count", "Количество", FieldType.NUMBER),
+            OperationField("comment", "Комментарий", FieldType.TEXT)
         ), listOf(RoleId.OPERATOR), true),
+        OperationDefinition(OperationType.CUSTOM_TASK, TargetType.HANGAR, false, "Завершить поручение", listOf(
+            OperationField("result", "Результат проверки", FieldType.SELECT, true, options = listOf("Выполнено, замечаний нет", "Выполнено, есть замечание")),
+            OperationField("report", "Комментарий оператора", FieldType.TEXT, placeholder = "Опишите результат или замечание"),
+            OperationField("photo", "Фото", FieldType.PHOTO)
+        ), listOf(RoleId.OPERATOR, RoleId.CHIEF_TECHNOLOGIST, RoleId.GENERAL_WORKER)),
         OperationDefinition(OperationType.NEST_SELECTION, TargetType.CAGE, false, "Перемещение сохранено", listOf(
             OperationField("sourceCage", "Из клетки", FieldType.SELECT, true, options = listOf("Выберите клетку") + hangarACageCodes),
             OperationField("destinationCage", "В клетку", FieldType.SELECT, true, options = listOf("Выберите клетку") + hangarACageCodes),
@@ -125,7 +132,7 @@ object MockRepository {
         MobileTask("task-1", "Осеменение самок", OperationType.INSEMINATION, "ws-1", "h-1", "emp-1", "2026-07-09", "08:30", 180, Priority.URGENT, TaskStatus.NEW, rabbitChecklist("ins", 4), true, RoleId.CHIEF_TECHNOLOGIST, AcceptanceStatus.NOT_REQUIRED),
         MobileTask("task-2", "Взвешивание контрольной группы", OperationType.WEIGHING, "ws-1", "h-1", "emp-1", "2026-07-09", "11:00", 90, Priority.HIGH, TaskStatus.NEW, weighingChecklist(), false),
         MobileTask("task-3", "Подготовка гнезд", OperationType.NEST_PREPARATION, "ws-1", "h-1", "emp-1", "2026-07-09", "13:00", 120, Priority.HIGH, TaskStatus.NEW, cageNumberChecklist("nestprep", 18), true, RoleId.CHIEF_TECHNOLOGIST, AcceptanceStatus.NOT_REQUIRED),
-        MobileTask("task-4", "Контроль гнезд", OperationType.NEST_CONTROL, "ws-1", "h-1", "emp-1", "2026-07-09", "15:00", 150, Priority.NORMAL, TaskStatus.NEW, cageChecklist("nestctl", 12), true, RoleId.CHIEF_TECHNOLOGIST, AcceptanceStatus.NOT_REQUIRED),
+        MobileTask("task-4", "Контроль лактации", OperationType.NEST_CONTROL, "ws-1", "h-1", "emp-1", "2026-07-09", "15:00", 150, Priority.NORMAL, TaskStatus.NEW, cageChecklist("nestctl", 12), true, RoleId.CHIEF_TECHNOLOGIST, AcceptanceStatus.NOT_REQUIRED),
         MobileTask("task-5", "Проверка светового режима", OperationType.LIGHTING_CHECK, "ws-1", "h-1", "emp-1", "2026-07-09", "06:05", 20, Priority.NORMAL, TaskStatus.NEW, emptyList(), false),
         MobileTask("task-6", "Мойка ангара после цикла", OperationType.WASHING, "ws-1", "h-2", "emp-3", "2026-07-09", "09:00", 240, Priority.HIGH, TaskStatus.DONE, emptyList(), true, RoleId.CHIEF_TECHNOLOGIST, AcceptanceStatus.WAITING),
         MobileTask("task-7", "Дезинфекция ангара", OperationType.DISINFECTION, "ws-1", "h-2", "emp-3", "2026-07-09", "14:00", 180, Priority.NORMAL, TaskStatus.NEW, emptyList(), true, RoleId.CHIEF_TECHNOLOGIST, AcceptanceStatus.NOT_REQUIRED),
@@ -133,6 +140,7 @@ object MockRepository {
         MobileTask("task-9", "Пальпация", OperationType.PALPATION, "ws-1", "h-1", "emp-1", "2026-07-09", "16:00", 120, Priority.NORMAL, TaskStatus.NEW, rabbitChecklist("pal", 10), false),
         MobileTask("task-10", "Выравнивание гнезд", OperationType.NEST_SELECTION, "ws-1", "h-1", "emp-1", "2026-07-09", "16:40", 90, Priority.HIGH, TaskStatus.NEW, cageNumberChecklist("sel", 10), true, RoleId.CHIEF_TECHNOLOGIST, AcceptanceStatus.NOT_REQUIRED),
         MobileTask("task-11", "Проверка корма", OperationType.FEED_CHECK, "ws-1", "h-1", "emp-1", "2026-07-09", "07:30", 20, Priority.NORMAL, TaskStatus.NEW, emptyList(), false),
-        MobileTask("task-12", "Проверка воды", OperationType.WATER_CHECK, "ws-1", "h-1", "emp-1", "2026-07-09", "07:40", 20, Priority.NORMAL, TaskStatus.NEW, waterRowChecklist("h-1"), false)
+        MobileTask("task-12", "Проверка воды", OperationType.WATER_CHECK, "ws-1", "h-1", "emp-1", "2026-07-09", "07:40", 20, Priority.NORMAL, TaskStatus.NEW, waterRowChecklist("h-1"), false),
+        MobileTask("task-13", "Проверить крепление поилки в ряду 2", OperationType.CUSTOM_TASK, "ws-1", "h-1", "emp-1", "2026-07-09", "17:20", 20, Priority.HIGH, TaskStatus.NEW, emptyList(), false, description = "Проверьте клетку Р2-К7. Если крепление ослаблено — зафиксируйте замечание и приложите фото.")
     )
 }

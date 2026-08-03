@@ -57,6 +57,10 @@ fun SimpleOperationScreen(
     onOpenAnimal: (String) -> Unit,
     canEdit: Boolean,
 ) {
+    if (task.operationType == OperationType.NEST_CONTROL) {
+        NestControlRoundScreen(task, definition, onBack, onBegin, onChecklistProblem, onComplete, canEdit)
+        return
+    }
     var activeItemId by remember(task.id) { mutableStateOf<String?>(null) }
     val activeItem = task.checklist.firstOrNull { it.id == activeItemId }
     val pending = task.checklist.filter { it.status == ChecklistStatus.PENDING }
@@ -142,6 +146,10 @@ fun SimpleOperationScreen(
                     color = Color(0xFFD6EEE2),
                     style = MaterialTheme.typography.bodyMedium,
                 )
+                if (task.description.isNotBlank()) {
+                    Spacer(Modifier.height(10.dp))
+                    Text(task.description, color = Color.White, style = MaterialTheme.typography.bodyMedium)
+                }
                 Spacer(Modifier.height(12.dp))
                 if (largeFont) {
                     Text(
@@ -214,6 +222,103 @@ fun SimpleOperationScreen(
                 )
             }
         }
+        item { Spacer(Modifier.height(24.dp)) }
+    }
+}
+
+@Composable
+private fun NestControlRoundScreen(
+    task: MobileTask,
+    definition: OperationDefinition,
+    onBack: () -> Unit,
+    onBegin: () -> Unit,
+    onChecklistProblem: (String, String, String) -> Unit,
+    onComplete: () -> Unit,
+    canEdit: Boolean,
+) {
+    val availableCages = task.checklist.filter { it.status == ChecklistStatus.PENDING }
+    val problems = task.checklist.filter { it.status == ChecklistStatus.PROBLEM }
+    var selectedItemId by remember(task.id) { mutableStateOf("") }
+    var selectedIssue by remember(task.id) { mutableStateOf("") }
+    var count by remember(task.id) { mutableStateOf("") }
+    var comment by remember(task.id) { mutableStateOf("") }
+    var cageMenu by remember { mutableStateOf(false) }
+    var issueMenu by remember { mutableStateOf(false) }
+    var error by remember { mutableStateOf("") }
+    val selectedItem = task.checklist.firstOrNull { it.id == selectedItemId }
+    val issues = definition.fields.firstOrNull { it.id == "issue" }?.options.orEmpty()
+
+    LazyColumn(
+        modifier = Modifier.fillMaxSize().background(SimpleBackground).statusBarsPadding(),
+        contentPadding = PaddingValues(18.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        item { Text("← Назад", color = SimpleGreen, fontWeight = FontWeight.ExtraBold, modifier = Modifier.clickable(onClick = onBack).padding(vertical = 4.dp)) }
+        item {
+            Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(26.dp)).background(Brush.linearGradient(listOf(SimpleGreen, SimpleDarkGreen))).padding(18.dp)) {
+                Text(task.title, color = Color.White, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Black)
+                Text("${workshopName(task)} · ${hangarName(task)}", color = Color(0xFFD6EEE2))
+                Spacer(Modifier.height(14.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(7.dp)) {
+                    SimpleMetric(problems.size.toString(), "замечаний", Modifier.weight(1f), true)
+                    SimpleMetric(task.checklist.size.toString(), "клеток", Modifier.weight(1f), true)
+                }
+                if (task.status == TaskStatus.NEW && canEdit) {
+                    Spacer(Modifier.height(14.dp))
+                    SimpleButton("Начать обход", onBegin, Modifier.fillMaxWidth())
+                }
+            }
+        }
+        if (task.status != TaskStatus.NEW && canEdit) {
+            item {
+                SimpleCard {
+                    Text("Добавить замечание", color = SimpleText, fontSize = 20.sp, fontWeight = FontWeight.Black)
+                    Text("Если в клетке всё в порядке, ничего добавлять не нужно.", color = SimpleMuted)
+                    Box {
+                        OutlinedButton(onClick = { cageMenu = true }, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(16.dp)) {
+                            Text(selectedItem?.label ?: "Выберите клетку", modifier = Modifier.weight(1f))
+                            Text("⌄")
+                        }
+                        DropdownMenu(expanded = cageMenu, onDismissRequest = { cageMenu = false }) {
+                            availableCages.forEach { cage -> DropdownMenuItem(text = { Text(cage.label) }, onClick = { selectedItemId = cage.id; cageMenu = false }) }
+                        }
+                    }
+                    Box {
+                        OutlinedButton(onClick = { issueMenu = true }, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(16.dp)) {
+                            Text(selectedIssue.ifBlank { "Выберите проблему" }, modifier = Modifier.weight(1f))
+                            Text("⌄")
+                        }
+                        DropdownMenu(expanded = issueMenu, onDismissRequest = { issueMenu = false }) {
+                            issues.forEach { issue -> DropdownMenuItem(text = { Text(issue) }, onClick = { selectedIssue = issue; issueMenu = false }) }
+                        }
+                    }
+                    OutlinedTextField(count, { count = it.filter(Char::isDigit) }, Modifier.fillMaxWidth(), label = { Text("Количество (если применимо)") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number), shape = RoundedCornerShape(16.dp))
+                    OutlinedTextField(comment, { comment = it }, Modifier.fillMaxWidth(), label = { Text("Комментарий") }, minLines = 2, shape = RoundedCornerShape(16.dp))
+                    if (error.isNotBlank()) Text(error, color = SimpleRed, fontWeight = FontWeight.Bold)
+                    SimpleButton("Добавить замечание", {
+                        when {
+                            selectedItem == null -> error = "Выберите клетку"
+                            selectedIssue.isBlank() -> error = "Выберите проблему"
+                            else -> {
+                                val details = listOfNotNull(count.takeIf(String::isNotBlank)?.let { "Количество: $it" }, comment.takeIf(String::isNotBlank)).joinToString(" · ")
+                                onChecklistProblem(selectedItem.id, selectedIssue, details)
+                                selectedItemId = ""; selectedIssue = ""; count = ""; comment = ""; error = ""
+                            }
+                        }
+                    }, Modifier.fillMaxWidth())
+                }
+            }
+            item {
+                SimpleButton(
+                    if (problems.isEmpty()) "Завершить обход — замечаний нет" else "Завершить и отправить (${problems.size})",
+                    onComplete,
+                    Modifier.fillMaxWidth(),
+                )
+            }
+        }
+        item { SimpleSectionTitle("Зафиксированные замечания") }
+        if (problems.isEmpty()) item { SimpleEmpty("Пока замечаний нет — остальные клетки считаются проверенными без проблем") }
+        problems.forEach { problem -> item(problem.id) { SimpleResultCard(problem, definition) } }
         item { Spacer(Modifier.height(24.dp)) }
     }
 }

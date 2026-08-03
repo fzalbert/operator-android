@@ -36,12 +36,13 @@ enum class OperationType(val title: String) {
     MORTALITY_JOURNAL("Запись падежа в журнал"),
     FEED_CHECK("Проверка корма"),
     WATER_CHECK("Проверка воды"),
-    NEST_CONTROL("Контроль гнезд"),
+    NEST_CONTROL("Контроль лактации"),
     DAILY_CLEANING("Ежедневная уборка проходов"),
     SECOND_ROUND("Второй обход ангара"),
     OKROL_PREPARATION("Подготовка к окролу"),
     MANUAL_FEEDING("Ручное кормление"),
-    FINAL_ROUND("Финальный обход")
+    FINAL_ROUND("Финальный обход"),
+    CUSTOM_TASK("Поручение")
 }
 
 data class Employee(val id: String, val fullName: String, val role: RoleId, val workshopIds: List<String>, val initials: String)
@@ -103,7 +104,8 @@ data class MobileTask(
     val acceptedByEmployeeId: String? = null,
     val acceptanceComment: String = "",
     val result: ExecutionResult = ExecutionResult(),
-    val offlineEvents: Int = 0
+    val offlineEvents: Int = 0,
+    val description: String = ""
 ) {
     val progress: Int get() = if (checklist.isEmpty()) 0 else checklist.count { it.status == ChecklistStatus.DONE || it.status == ChecklistStatus.PROBLEM || it.status == ChecklistStatus.SKIPPED } * 100 / checklist.size
     fun markOffline() = copy(offlineEvents = offlineEvents + 1)

@@ -240,7 +240,7 @@ fun CageScanPanel(
         }
         val cage = scannedRfid?.let { MockRepository.cageByRfid(it) }
         if (cage != null) {
-            Spacer(Modifier.height(MesSpacing.contentGap))
+            Spacer(Modifier.height  (MesSpacing.contentGap))
             Surface(color = MaterialTheme.colorScheme.background, shape = MaterialTheme.shapes.medium) {
                 Column(Modifier.padding(MesSpacing.contentGap)) {
                     Text("${cage.code} · ${cage.rfid}", fontWeight = FontWeight.Bold)
