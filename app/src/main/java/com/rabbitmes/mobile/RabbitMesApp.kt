@@ -2,6 +2,10 @@ package com.rabbitmes.mobile
 
 import android.util.Log
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.rabbitmes.mobile.data.MockRepository
 import com.rabbitmes.mobile.domain.ChecklistStatus
 import com.rabbitmes.mobile.ui.components.BottomNav
@@ -13,12 +17,31 @@ import ru.profikrol.operator.feature.rabbitprofile.RabbitProfileScreen
 
 @Composable
 fun RabbitMesApp(vm: MobileMesViewModel) {
+    val lifecycleOwner = LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner, vm) {
+        val observer = LifecycleEventObserver { _, event ->
+            when (event) {
+                Lifecycle.Event.ON_START -> vm.startTasksAutoRefresh()
+                Lifecycle.Event.ON_STOP -> vm.stopTasksAutoRefresh()
+                else -> Unit
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        if (lifecycleOwner.lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)) {
+            vm.startTasksAutoRefresh()
+        }
+        onDispose {
+            lifecycleOwner.lifecycle.removeObserver(observer)
+            vm.stopTasksAutoRefresh()
+        }
+    }
+
     fun bottom(current: String): @Composable () -> Unit = { BottomNav(current, vm.shift.pendingSyncEvents) { key ->
         when(key) { "shift" -> vm.navigate(AppScreen.Shift); "tasks" -> vm.navigate(AppScreen.Tasks); "accept" -> vm.navigate(AppScreen.AcceptanceQueue); "sync" -> vm.navigate(AppScreen.Sync); "profile" -> vm.navigate(AppScreen.Profile) }
     } }
     when(val screen = vm.screen) {
         AppScreen.Login -> AuthScreen(onLoggedIn = vm::onLoggedInFromSession)
-        AppScreen.Shift -> ShiftScreen(vm.currentEmployee, vm.shift, vm.tasksForCurrentEmployee(), vm.nextTask(), vm.lastMessage, vm.notifications.count { it.isUnread }, vm::startShift, vm::finishShift, { vm.navigate(AppScreen.TaskExecution(it)) }, { vm.navigate(AppScreen.Notifications) }, vm::logout, bottom("shift"))
+        AppScreen.Shift -> ShiftScreen(vm.currentEmployee, vm.shift, vm.tasksForCurrentEmployee(), vm.nextTask(), vm.lastMessage, vm.notifications.count { it.isUnread }, vm.isShiftActionInProgress, vm.isTasksLoading, vm::startShift, vm::finishShift, { vm.navigate(AppScreen.TaskExecution(it)) }, { vm.navigate(AppScreen.Notifications) }, vm::logout, bottom("shift"))
         AppScreen.Tasks -> TaskListScreen(vm.tasksForCurrentEmployee(), vm.nextTask(), vm.lastMessage, vm.shift.startedAt != null, { vm.navigate(AppScreen.TaskExecution(it)) }, { vm.navigate(AppScreen.Shift) }, bottom("tasks"))
         AppScreen.Map -> HangarMapScreen(vm.workshop, vm.tasksForCurrentEmployee(), { vm.navigate(AppScreen.TaskExecution(it)) }, { vm.navigate(AppScreen.Tasks) }, bottom("map"))
         AppScreen.Sync -> SyncQueueScreen(vm.shift, vm.tasks, vm::syncNow, { vm.navigate(AppScreen.Tasks) }, bottom("sync"))

@@ -33,6 +33,8 @@ fun ShiftScreen(
     nextTask: MobileTask?,
     message: String?,
     unreadNotifications: Int,
+    isShiftActionInProgress: Boolean,
+    isTasksLoading: Boolean,
     onStart: () -> Unit,
     onFinish: (String) -> Unit,
     onOpenNext: (String) -> Unit,
@@ -85,10 +87,31 @@ fun ShiftScreen(
                     Spacer(Modifier.height(12.dp))
                     Button(
                         onClick = { if (active) onFinish("Смена завершена штатно") else onStart() },
+                        enabled = !isShiftActionInProgress,
                         modifier = Modifier.fillMaxWidth().heightIn(min = 50.dp),
                         shape = RoundedCornerShape(16.dp),
                         colors = ButtonDefaults.buttonColors(containerColor = if (active) Color(0xFFE4ECE8) else ShiftGreen, contentColor = if (active) ShiftDark else Color.White),
-                    ) { Text(if (active) "Закончить смену" else "Начать смену", fontWeight = FontWeight.ExtraBold) }
+                    ) {
+                        if (isShiftActionInProgress) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(22.dp),
+                                strokeWidth = 2.dp,
+                            )
+                        } else {
+                            Text(if (active) "Закончить смену" else "Начать смену", fontWeight = FontWeight.ExtraBold)
+                        }
+                    }
+                }
+            }
+            if (isTasksLoading) item {
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 18.dp, vertical = 8.dp),
+                    horizontalArrangement = Arrangement.Center,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
+                    Spacer(Modifier.width(10.dp))
+                    Text("Загружаем задачи…", color = Color(0xFF60726A))
                 }
             }
             if (active && nextTask != null) item {

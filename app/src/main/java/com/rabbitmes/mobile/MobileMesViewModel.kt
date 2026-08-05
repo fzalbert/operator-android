@@ -11,14 +11,26 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import ru.profikrol.operator.data.local.SessionStore
 import ru.profikrol.operator.domain.model.UserRole
 import ru.profikrol.operator.domain.repository.AuthRepository
+import ru.profikrol.operator.data.remote.profile.ProfileApi
+import ru.profikrol.operator.data.remote.profile.ShiftDto
+import ru.profikrol.operator.data.remote.worktask.WorkTaskApi
+import ru.profikrol.operator.data.remote.worktask.WorkTaskDto
 import javax.inject.Inject
 import com.rabbitmes.mobile.data.MockRepository
 import com.rabbitmes.mobile.data.NotificationRepository
 import androidx.lifecycle.viewModelScope
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import com.rabbitmes.mobile.domain.*
 import com.rabbitmes.mobile.ui.operations.PROBLEM_COMMENT_KEY
 import com.rabbitmes.mobile.ui.operations.PROBLEM_REASON_KEY
+import java.io.IOException
+import retrofit2.HttpException
+
+private const val API_LOG_TAG = "RabbitApi"
+private const val TASKS_REFRESH_INTERVAL_MS = 30_000L
 
 sealed class AppScreen {
     data object Login : AppScreen()
@@ -39,11 +51,122 @@ sealed class AppScreen {
     data class RabbitProfile(val rfidCode: String, val taskId: String) : AppScreen()
 }
 
+private fun ShiftDto?.toShiftState(employeeId: String, previous: ShiftState): ShiftState =
+    if (this == null) {
+        ShiftState(
+            employeeId = employeeId,
+            isOnline = previous.isOnline,
+            pendingSyncEvents = previous.pendingSyncEvents,
+        )
+    } else {
+        ShiftState(
+            employeeId = employeeId,
+            startedAt = openedAt,
+            finishedAt = closedAt,
+            isOnline = previous.isOnline,
+            pendingSyncEvents = previous.pendingSyncEvents,
+        )
+    }
+
+private fun WorkTaskDto.toMobileTask(employeeId: String): MobileTask {
+    val operationType = resolveOperationType()
+    val targetType = MockRepository.operation(operationType).targetType
+    val checklist = subtasks.map { subtask ->
+        ChecklistItem(
+            id = subtask.id.toString(),
+            label = subtask.name.ifBlank { "Подзадача ${subtask.id}" },
+            targetType = targetType,
+            targetId = subtask.id.toString(),
+            status = subtask.status.toChecklistStatus(),
+            result = ExecutionResult(
+                completedAt = subtask.completedAt,
+                problemReason = subtask.report?.abortReason ?: subtask.skipReason,
+            ),
+        )
+    }
+    val taskStatus = status.toTaskStatus()
+    return MobileTask(
+        id = id.toString(),
+        title = operationName.ifBlank { programName.ifBlank { "Задача $id" } },
+        operationType = operationType,
+        workshopId = manufactureId?.toString().orEmpty(),
+        hangarId = manufactureId?.toString().orEmpty(),
+        assignedEmployeeId = employeeId,
+        dueDate = scheduledDate,
+        plannedStart = startedAt.toDisplayTime(),
+        plannedDurationMinutes = 0,
+        priority = Priority.NORMAL,
+        status = taskStatus,
+        checklist = checklist,
+        requiresAcceptance = requiresAcceptance,
+        acceptanceStatus = when {
+            !requiresAcceptance -> AcceptanceStatus.NOT_REQUIRED
+            completedAt != null -> AcceptanceStatus.WAITING
+            else -> AcceptanceStatus.NOT_REQUIRED
+        },
+        result = ExecutionResult(
+            completedAt = completedAt,
+        ),
+        description = subtasks.map { it.description.trim() }
+            .filter(String::isNotBlank)
+            .distinct()
+            .joinToString("\n"),
+    )
+}
+
+private fun WorkTaskDto.resolveOperationType(): OperationType {
+    val candidates = listOf(operationId, operationName, operationCategory)
+        .map(String::trim)
+        .filter(String::isNotBlank)
+    return OperationType.entries.firstOrNull { type ->
+        candidates.any { candidate ->
+            candidate.equals(type.name, ignoreCase = true) ||
+                candidate.equals(type.title, ignoreCase = true)
+        }
+    } ?: OperationType.CUSTOM_TASK
+}
+
+private fun String.toTaskStatus(): TaskStatus = when (normalizedStatus()) {
+    "NEW", "CREATED", "PLANNED", "PENDING" -> TaskStatus.NEW
+    "IN_PROGRESS", "STARTED", "OPEN", "OPENED" -> TaskStatus.IN_PROGRESS
+    "BLOCKED", "PROBLEM", "FAILED", "ABORTED" -> TaskStatus.BLOCKED
+    "DONE", "COMPLETED", "FINISHED" -> TaskStatus.DONE
+    "SENT", "ACCEPTED", "APPROVED" -> TaskStatus.SENT
+    "SKIPPED", "CANCELLED", "CANCELED" -> TaskStatus.SKIPPED
+    else -> TaskStatus.NEW
+}
+
+private fun String.toChecklistStatus(): ChecklistStatus = when (normalizedStatus()) {
+    "DONE", "COMPLETED", "FINISHED", "ACCEPTED", "APPROVED" -> ChecklistStatus.DONE
+    "PROBLEM", "FAILED", "BLOCKED", "ABORTED", "REJECTED" -> ChecklistStatus.PROBLEM
+    "SKIPPED", "CANCELLED", "CANCELED" -> ChecklistStatus.SKIPPED
+    else -> ChecklistStatus.PENDING
+}
+
+private fun String.normalizedStatus(): String = trim()
+    .uppercase()
+    .replace('-', '_')
+    .replace(' ', '_')
+
+private fun String?.toDisplayTime(): String = this
+    ?.substringAfter('T', "")
+    ?.take(5)
+    ?.takeIf(String::isNotBlank)
+    ?: "—"
+
+private fun Throwable.toUserMessage(fallback: String): String = when (this) {
+    is HttpException -> "$fallback: ошибка сервера ${code()}"
+    is IOException -> "$fallback: нет соединения с сервером"
+    else -> fallback
+}
+
 @HiltViewModel
 class MobileMesViewModel @Inject constructor(
     private val sessionStore: SessionStore,
     private val authRepository: AuthRepository,
     private val notificationRepository: NotificationRepository,
+    private val profileApi: ProfileApi,
+    private val workTaskApi: WorkTaskApi,
 ) : ViewModel() {
     var screen: AppScreen by mutableStateOf(AppScreen.Login)
         private set
@@ -51,8 +174,15 @@ class MobileMesViewModel @Inject constructor(
         private set
     var shift: ShiftState by mutableStateOf(ShiftState(currentEmployee.id))
         private set
-    var tasks: List<MobileTask> by mutableStateOf(MockRepository.initialTasks())
+    var tasks: List<MobileTask> by mutableStateOf(emptyList())
         private set
+    var isShiftActionInProgress: Boolean by mutableStateOf(false)
+        private set
+    var isTasksLoading: Boolean by mutableStateOf(false)
+        private set
+    private var isTasksRequestInProgress = false
+    private var hasLoadedRemoteTasks = false
+    private var tasksAutoRefreshJob: Job? = null
     var remarks: List<AcceptanceRemark> by mutableStateOf(emptyList())
         private set
 
@@ -101,22 +231,101 @@ class MobileMesViewModel @Inject constructor(
             .ifBlank { mockEmployee.initials }
 
         currentEmployee = mockEmployee.copy(
+            id = sessionUser?.id ?: mockEmployee.id,
             fullName = displayName,
             initials = initials,
         )
         shift = ShiftState(currentEmployee.id)
         screen = defaultScreenForRole()
         lastMessage = null
+        refreshProfileAndTasks()
+        startTasksAutoRefresh()
     }
     fun logout() {
+        stopTasksAutoRefresh()
         notificationRepository.clear()
         screen = AppScreen.Login
         viewModelScope.launch {
             authRepository.logout()
         }
     }
-    fun startShift() { shift = shift.copy(startedAt = "08:00", finishedAt = null) }
-    fun finishShift(reason: String) { shift = shift.copy(finishedAt = "18:00"); lastMessage = "Смена завершена: $reason" }
+    fun startShift() {
+        if (isShiftActionInProgress) return
+        viewModelScope.launch {
+            isShiftActionInProgress = true
+            runCatching { profileApi.openShift() }
+                .onSuccess { remoteShift ->
+                    shift = remoteShift.toShiftState(currentEmployee.id, shift)
+                    lastMessage = "Смена открыта"
+                    loadMyTasks()
+                }
+                .onFailure { error ->
+                    Log.e(API_LOG_TAG, "Open shift failed", error)
+                    lastMessage = error.toUserMessage("Не удалось открыть смену")
+                }
+            isShiftActionInProgress = false
+        }
+    }
+    fun finishShift(reason: String) {
+        if (isShiftActionInProgress) return
+        viewModelScope.launch {
+            isShiftActionInProgress = true
+            runCatching { profileApi.closeShift() }
+                .onSuccess { remoteShift ->
+                    shift = remoteShift.toShiftState(currentEmployee.id, shift)
+                    lastMessage = "Смена завершена"
+                }
+                .onFailure { error ->
+                    Log.e(API_LOG_TAG, "Close shift failed. reason=$reason", error)
+                    lastMessage = error.toUserMessage("Не удалось закрыть смену")
+                }
+            isShiftActionInProgress = false
+        }
+    }
+
+    private fun refreshProfileAndTasks() {
+        viewModelScope.launch {
+            runCatching { profileApi.getMyProfile() }
+                .onSuccess { profile ->
+                    shift = profile.shift.toShiftState(currentEmployee.id, shift)
+                }
+                .onFailure { error -> Log.e(API_LOG_TAG, "Profile refresh failed", error) }
+            loadMyTasks()
+        }
+    }
+
+    private suspend fun loadMyTasks(showLoading: Boolean = true) {
+        if (isTasksRequestInProgress) return
+        isTasksRequestInProgress = true
+        if (showLoading) isTasksLoading = true
+        runCatching { workTaskApi.getMyWorkTasks() }
+            .onSuccess { page ->
+                tasks = page.items.map { it.toMobileTask(currentEmployee.id) }
+                hasLoadedRemoteTasks = true
+            }
+            .onFailure { error ->
+                Log.e(API_LOG_TAG, "Work tasks request failed", error)
+                lastMessage = error.toUserMessage("Не удалось загрузить задачи")
+            }
+        isTasksRequestInProgress = false
+        if (showLoading) isTasksLoading = false
+    }
+
+    fun startTasksAutoRefresh() {
+        if (sessionStore.currentUser == null || tasksAutoRefreshJob?.isActive == true) return
+        tasksAutoRefreshJob = viewModelScope.launch {
+            loadMyTasks(showLoading = false)
+            while (isActive) {
+                delay(TASKS_REFRESH_INTERVAL_MS)
+                loadMyTasks(showLoading = false)
+            }
+        }
+    }
+
+    fun stopTasksAutoRefresh() {
+        tasksAutoRefreshJob?.cancel()
+        tasksAutoRefreshJob = null
+    }
     fun setOnline(isOnline: Boolean) {
         if (shift.isOnline == isOnline) return
         val pending = shift.pendingSyncEvents
@@ -166,9 +375,13 @@ class MobileMesViewModel @Inject constructor(
         }
     }
     fun canReviewAcceptance() = tasks.any { it.acceptanceRole == currentEmployee.role }
-    fun tasksForCurrentEmployee() = tasks.filter { task ->
-        task.assignedEmployeeId == currentEmployee.id &&
-            definition(task.operationType).allowedRoles.contains(currentEmployee.role)
+    fun tasksForCurrentEmployee() = if (hasLoadedRemoteTasks) {
+        tasks
+    } else {
+        tasks.filter { task ->
+            task.assignedEmployeeId == currentEmployee.id &&
+                definition(task.operationType).allowedRoles.contains(currentEmployee.role)
+        }
     }
     fun tasksForAcceptance() = tasks.filter { it.requiresAcceptance && it.status == TaskStatus.DONE && it.acceptanceStatus == AcceptanceStatus.WAITING && it.acceptanceRole == currentEmployee.role }
     fun nextTask() = tasksForCurrentEmployee().filter { it.status != TaskStatus.DONE && it.status != TaskStatus.SENT && it.status != TaskStatus.SKIPPED }.minWithOrNull(compareBy<MobileTask> { it.priority.weight }.thenBy { it.plannedStart })
