@@ -13,6 +13,8 @@ import ru.profikrol.operator.domain.model.UserRole
 import ru.profikrol.operator.domain.repository.AuthRepository
 import ru.profikrol.operator.data.remote.profile.ProfileApi
 import ru.profikrol.operator.data.remote.profile.ShiftDto
+import ru.profikrol.operator.data.remote.rabbit.RabbitApi
+import ru.profikrol.operator.data.remote.rabbit.RabbitDto
 import ru.profikrol.operator.data.remote.worktask.WorkTaskApi
 import ru.profikrol.operator.data.remote.worktask.WorkTaskDto
 import javax.inject.Inject
@@ -31,6 +33,7 @@ import retrofit2.HttpException
 
 private const val API_LOG_TAG = "RabbitApi"
 private const val TASKS_REFRESH_INTERVAL_MS = 30_000L
+private const val RABBITS_PAGE_SIZE = 100
 
 sealed class AppScreen {
     data object Login : AppScreen()
@@ -68,21 +71,30 @@ private fun ShiftDto?.toShiftState(employeeId: String, previous: ShiftState): Sh
         )
     }
 
-private fun WorkTaskDto.toMobileTask(employeeId: String): MobileTask {
+private fun WorkTaskDto.toMobileTask(
+    employeeId: String,
+    rabbits: List<RabbitDto> = emptyList(),
+): MobileTask {
     val operationType = resolveOperationType()
     val targetType = MockRepository.operation(operationType).targetType
-    val checklist = subtasks.map { subtask ->
-        ChecklistItem(
-            id = subtask.id.toString(),
-            label = subtask.name.ifBlank { "Подзадача ${subtask.id}" },
-            targetType = targetType,
-            targetId = subtask.id.toString(),
-            status = subtask.status.toChecklistStatus(),
-            result = ExecutionResult(
-                completedAt = subtask.completedAt,
-                problemReason = subtask.report?.abortReason ?: subtask.skipReason,
-            ),
-        )
+    val checklist = if (subtasks.isNotEmpty()) {
+        subtasks.map { subtask ->
+            ChecklistItem(
+                id = subtask.id.toString(),
+                label = subtask.name.ifBlank { "Подзадача ${subtask.id}" },
+                targetType = targetType,
+                targetId = subtask.id.toString(),
+                status = subtask.status.toChecklistStatus(),
+                result = ExecutionResult(
+                    completedAt = subtask.completedAt,
+                    problemReason = subtask.report?.abortReason ?: subtask.skipReason,
+                ),
+            )
+        }
+    } else if (targetType == TargetType.RABBIT) {
+        rabbits.toRabbitChecklist(taskId = id)
+    } else {
+        emptyList()
     }
     val taskStatus = status.toTaskStatus()
     return MobileTask(
@@ -118,13 +130,39 @@ private fun WorkTaskDto.resolveOperationType(): OperationType {
     val candidates = listOf(operationId, operationName, operationCategory)
         .map(String::trim)
         .filter(String::isNotBlank)
-    return OperationType.entries.firstOrNull { type ->
-        candidates.any { candidate ->
-            candidate.equals(type.name, ignoreCase = true) ||
-                candidate.equals(type.title, ignoreCase = true)
-        }
-    } ?: OperationType.CUSTOM_TASK
+    return OPERATION_ID_ALIASES[operationId.trim().lowercase()]
+        ?: OperationType.entries.firstOrNull { type ->
+            candidates.any { candidate ->
+                candidate.equals(type.name, ignoreCase = true) ||
+                    candidate.equals(type.title, ignoreCase = true)
+            }
+        } ?: OperationType.CUSTOM_TASK
 }
+
+private val OPERATION_ID_ALIASES = mapOf(
+    "animal_placement" to OperationType.ANIMAL_SETTLEMENT,
+    "females_delivery" to OperationType.FEMALE_DELIVERY,
+    "culling" to OperationType.ANIMAL_DEPARTURE,
+)
+
+private fun List<RabbitDto>.toRabbitChecklist(taskId: Long): List<ChecklistItem> =
+    asSequence()
+        .mapNotNull { rabbit ->
+            val rfid = rabbit.rfid?.trim().orEmpty()
+            if (rfid.isBlank()) return@mapNotNull null
+            ChecklistItem(
+                id = "task-$taskId-rabbit-${rabbit.id ?: rfid}",
+                label = buildString {
+                    append("RFID: ")
+                    append(rfid)
+                    if (rabbit.age > 0) append(" · Возраст: ${rabbit.age}")
+                },
+                targetType = TargetType.RABBIT,
+                targetId = rfid,
+            )
+        }
+        .distinctBy { it.targetId.lowercase() }
+        .toList()
 
 private fun String.toTaskStatus(): TaskStatus = when (normalizedStatus()) {
     "NEW", "CREATED", "PLANNED", "PENDING" -> TaskStatus.NEW
@@ -167,6 +205,7 @@ class MobileMesViewModel @Inject constructor(
     private val notificationRepository: NotificationRepository,
     private val profileApi: ProfileApi,
     private val workTaskApi: WorkTaskApi,
+    private val rabbitApi: RabbitApi,
 ) : ViewModel() {
     var screen: AppScreen by mutableStateOf(AppScreen.Login)
         private set
@@ -300,7 +339,18 @@ class MobileMesViewModel @Inject constructor(
         if (showLoading) isTasksLoading = true
         runCatching { workTaskApi.getMyWorkTasks() }
             .onSuccess { page ->
-                tasks = page.items.map { it.toMobileTask(currentEmployee.id) }
+                val needsRabbitChecklist = page.items.any { task ->
+                    task.subtasks.isEmpty() &&
+                        MockRepository.operation(task.resolveOperationType()).targetType == TargetType.RABBIT
+                }
+                val rabbits = if (needsRabbitChecklist) {
+                    runCatching { loadAllRabbits() }
+                        .onFailure { error -> Log.e(API_LOG_TAG, "Rabbits request failed", error) }
+                        .getOrDefault(emptyList())
+                } else {
+                    emptyList()
+                }
+                tasks = page.items.map { it.toMobileTask(currentEmployee.id, rabbits) }
                 hasLoadedRemoteTasks = true
             }
             .onFailure { error ->
@@ -309,6 +359,23 @@ class MobileMesViewModel @Inject constructor(
             }
         isTasksRequestInProgress = false
         if (showLoading) isTasksLoading = false
+    }
+
+    private suspend fun loadAllRabbits(): List<RabbitDto> {
+        val result = mutableListOf<RabbitDto>()
+        val knownKeys = mutableSetOf<String>()
+        var page = 1
+        while (true) {
+            val batch = rabbitApi.getRabbits(page = page, pageSize = RABBITS_PAGE_SIZE)
+            val newItems = batch.filter { rabbit ->
+                val key = rabbit.id?.toString() ?: rabbit.rfid?.trim()?.lowercase().orEmpty()
+                key.isNotBlank() && knownKeys.add(key)
+            }
+            result += newItems
+            if (batch.size < RABBITS_PAGE_SIZE || newItems.isEmpty()) break
+            page += 1
+        }
+        return result
     }
 
     fun startTasksAutoRefresh() {
@@ -425,10 +492,13 @@ class MobileMesViewModel @Inject constructor(
         Log.d("RFID_TEST", "MobileMesViewModel получил: $rfid")
         rememberScannedRfid(taskId, rfid)
 
+        val currentTask = tasks.first { it.id == taskId }
+        val serverRabbitTarget = currentTask.checklist.firstOrNull { item ->
+            item.targetType == TargetType.RABBIT && item.targetId.equals(rfid, ignoreCase = true)
+        }
         val rabbit = MockRepository.rabbitByRfid(rfid)
         val cage = MockRepository.cageByRfid(rfid)
-        val targetId = rabbit?.id ?: cage?.id
-        val currentTask = tasks.first { it.id == taskId }
+        val targetId = rabbit?.id ?: cage?.id ?: serverRabbitTarget?.targetId
         val problemReason = values[PROBLEM_REASON_KEY].orEmpty()
         val problemComment = values[PROBLEM_COMMENT_KEY].orEmpty()
         val resultValues = values - PROBLEM_REASON_KEY - PROBLEM_COMMENT_KEY
@@ -475,7 +545,7 @@ class MobileMesViewModel @Inject constructor(
         }
         updateTask(taskId) { task ->
             val checklist = task.checklist.map { item ->
-                if (item.targetId == targetId) {
+                if (item.targetId.equals(targetId, ignoreCase = true)) {
                     item.copy(
                         status = if (problemReason.isBlank()) ChecklistStatus.DONE else ChecklistStatus.PROBLEM,
                         result = item.result.copy(
