@@ -64,11 +64,14 @@ object MockRepository {
             OperationField("count", "Количество", FieldType.NUMBER),
             OperationField("comment", "Комментарий", FieldType.TEXT)
         ), listOf(RoleId.OPERATOR), true),
-        OperationDefinition(OperationType.CUSTOM_TASK, TargetType.HANGAR, false, "Завершить поручение", listOf(
-            OperationField("result", "Результат проверки", FieldType.SELECT, true, options = listOf("Выполнено, замечаний нет", "Выполнено, есть замечание")),
-            OperationField("report", "Комментарий оператора", FieldType.TEXT, placeholder = "Опишите результат или замечание"),
-            OperationField("photo", "Фото", FieldType.PHOTO)
-        ), listOf(RoleId.OPERATOR, RoleId.CHIEF_TECHNOLOGIST, RoleId.GENERAL_WORKER)),
+        OperationDefinition(
+            OperationType.CUSTOM_TASK,
+            TargetType.HANGAR,
+            false,
+            "Выполнить пункт",
+            emptyList(),
+            listOf(RoleId.OPERATOR, RoleId.CHIEF_TECHNOLOGIST, RoleId.GENERAL_WORKER),
+        ),
         OperationDefinition(OperationType.NEST_SELECTION, TargetType.CAGE, false, "Перемещение сохранено", listOf(
             OperationField("sourceCage", "Из клетки", FieldType.SELECT, true, options = listOf("Выберите клетку") + hangarACageCodes),
             OperationField("destinationCage", "В клетку", FieldType.SELECT, true, options = listOf("Выберите клетку") + hangarACageCodes),

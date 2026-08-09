@@ -1,7 +1,12 @@
 package ru.profikrol.operator.data.remote.worktask
 
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.EncodeDefault
+import kotlinx.serialization.ExperimentalSerializationApi
 import retrofit2.http.GET
+import retrofit2.http.Body
+import retrofit2.http.POST
+import retrofit2.http.Path
 import retrofit2.http.Query
 
 interface WorkTaskApi {
@@ -15,7 +20,39 @@ interface WorkTaskApi {
         @Query("limit") limit: Int = 50,
         @Query("offset") offset: Int = 0,
     ): WorkTaskPageDto
+
+    @POST("api/v1/work-subtasks/{subtaskId}/complete")
+    suspend fun completeWorkSubtask(
+        @Path("subtaskId") subtaskId: Long,
+        @Body request: CompleteWorkSubtaskRequest,
+    ): WorkSubtaskDto
+
+    @POST("api/v1/work-tasks/{id}/start")
+    suspend fun startWorkTask(
+        @Path("id") id: Long,
+    ): WorkTaskDto
+
+    @POST("api/v1/work-tasks/{id}/complete")
+    suspend fun completeWorkTask(
+        @Path("id") id: Long,
+        @Body request: CompleteWorkTaskRequest,
+    ): WorkTaskDto
 }
+
+@Serializable
+@OptIn(ExperimentalSerializationApi::class)
+data class CompleteWorkSubtaskRequest(
+    val abortReason: String? = null,
+    val comment: String? = null,
+    @EncodeDefault
+    val params: Map<String, String>? = null,
+)
+
+@Serializable
+data class CompleteWorkTaskRequest(
+    val abortReason: String? = null,
+    val comment: String? = null,
+)
 
 @Serializable
 data class WorkTaskPageDto(

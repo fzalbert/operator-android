@@ -78,6 +78,7 @@ data class ChecklistItem(
     val label: String,
     val targetType: TargetType,
     val targetId: String,
+    val serverType: String = "",
     val status: ChecklistStatus = ChecklistStatus.PENDING,
     val reviewStatus: ReviewStatus = ReviewStatus.NOT_REVIEWED,
     val result: ExecutionResult = ExecutionResult(),

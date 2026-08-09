@@ -3,6 +3,7 @@ package com.rabbitmes.mobile
 import android.util.Log
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
@@ -49,9 +50,13 @@ fun RabbitMesApp(vm: MobileMesViewModel) {
         AppScreen.Notifications -> NotificationsScreen(vm.notifications, { vm.navigate(AppScreen.Shift) }, vm::markNotificationAsRead, vm::markAllNotificationsAsRead)
         AppScreen.AcceptanceQueue -> AcceptanceQueueScreen(vm.tasksForAcceptance(), { vm.navigate(AppScreen.Acceptance(it)) }, { vm.navigate(AppScreen.Tasks) }, bottom("accept"))
         is AppScreen.TaskExecution -> {
-            val task = vm.task(screen.taskId)
-            val canEdit = vm.nextTask()?.id == task.id
-            OperationScreenFactory(
+            val task = vm.taskOrNull(screen.taskId)
+            if (task == null) {
+                LaunchedEffect(screen.taskId) { vm.navigate(AppScreen.Tasks) }
+                TaskListScreen(vm.tasksForCurrentEmployee(), vm.nextTask(), vm.lastMessage, vm.shift.startedAt != null, { vm.navigate(AppScreen.TaskExecution(it)) }, { vm.navigate(AppScreen.Shift) }, bottom("tasks"))
+            } else {
+                val canEdit = vm.nextTask()?.id == task.id
+                OperationScreenFactory(
                 task = task,
                 definition = vm.definition(task.operationType),
                 scannedRfid = vm.scannedRfidForTask(task.id),
@@ -74,8 +79,9 @@ fun RabbitMesApp(vm: MobileMesViewModel) {
                 onComplete = { vm.completeTask(task.id); vm.navigate(AppScreen.Tasks) },
                 onSkip = { vm.skipTask(task.id, it); vm.navigate(AppScreen.Tasks) },
                 onOpenAnimal = { rfid -> vm.navigate(AppScreen.RabbitProfile(rfid, task.id)) },
-                canEdit = canEdit,
-            )
+                    canEdit = canEdit,
+                )
+            }
         }
         is AppScreen.RfidScan -> {
             RfidScanScreen(
@@ -90,8 +96,13 @@ fun RabbitMesApp(vm: MobileMesViewModel) {
             )
         }
         is AppScreen.Acceptance -> {
-            val task = vm.task(screen.taskId)
-            AcceptanceScreen(task, vm.remarks, { vm.navigate(AppScreen.AcceptanceQueue) }, { vm.acceptTask(task.id, it); vm.navigate(AppScreen.AcceptanceQueue) }, { vm.rejectTask(task.id, it); vm.navigate(AppScreen.AcceptanceQueue) }, { itemId, reason, comment, attachments -> vm.addRemark(task.id, itemId, reason, comment, attachments) })
+            val task = vm.taskOrNull(screen.taskId)
+            if (task == null) {
+                LaunchedEffect(screen.taskId) { vm.navigate(AppScreen.AcceptanceQueue) }
+                AcceptanceQueueScreen(vm.tasksForAcceptance(), { vm.navigate(AppScreen.Acceptance(it)) }, { vm.navigate(AppScreen.Tasks) }, bottom("accept"))
+            } else {
+                AcceptanceScreen(task, vm.remarks, { vm.navigate(AppScreen.AcceptanceQueue) }, { vm.acceptTask(task.id, it); vm.navigate(AppScreen.AcceptanceQueue) }, { vm.rejectTask(task.id, it); vm.navigate(AppScreen.AcceptanceQueue) }, { itemId, reason, comment, attachments -> vm.addRemark(task.id, itemId, reason, comment, attachments) })
+            }
         }
         is AppScreen.AnimalHistory -> {
             val rabbit = vm.rabbits.firstOrNull { it.id == screen.rabbitId } ?: vm.rabbits.first()

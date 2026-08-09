@@ -17,6 +17,8 @@ import ru.profikrol.operator.data.remote.rabbit.RabbitApi
 import ru.profikrol.operator.data.remote.rabbit.RabbitDto
 import ru.profikrol.operator.data.remote.worktask.WorkTaskApi
 import ru.profikrol.operator.data.remote.worktask.WorkTaskDto
+import ru.profikrol.operator.data.remote.worktask.CompleteWorkSubtaskRequest
+import ru.profikrol.operator.data.remote.worktask.CompleteWorkTaskRequest
 import javax.inject.Inject
 import com.rabbitmes.mobile.data.MockRepository
 import com.rabbitmes.mobile.data.NotificationRepository
@@ -84,6 +86,7 @@ private fun WorkTaskDto.toMobileTask(
                 label = subtask.name.ifBlank { "Подзадача ${subtask.id}" },
                 targetType = targetType,
                 targetId = subtask.id.toString(),
+                serverType = subtask.type,
                 status = subtask.status.toChecklistStatus(),
                 result = ExecutionResult(
                     completedAt = subtask.completedAt,
@@ -113,6 +116,7 @@ private fun WorkTaskDto.toMobileTask(
         requiresAcceptance = requiresAcceptance,
         acceptanceStatus = when {
             !requiresAcceptance -> AcceptanceStatus.NOT_REQUIRED
+            status.normalizedStatus() == "AWAITING_ACCEPTANCE" -> AcceptanceStatus.WAITING
             completedAt != null -> AcceptanceStatus.WAITING
             else -> AcceptanceStatus.NOT_REQUIRED
         },
@@ -127,6 +131,14 @@ private fun WorkTaskDto.toMobileTask(
 }
 
 private fun WorkTaskDto.resolveOperationType(): OperationType {
+    // Category/type defines the UI contract. operationId only identifies the
+    // business operation and must not select a specialized form for GENERAL.
+    val isGeneral = operationCategory.trim().equals("general", ignoreCase = true) ||
+        subtasks.any { it.type.trim().equals("general", ignoreCase = true) }
+    if (isGeneral) {
+        return OperationType.CUSTOM_TASK
+    }
+
     val candidates = listOf(operationId, operationName, operationCategory)
         .map(String::trim)
         .filter(String::isNotBlank)
@@ -168,7 +180,7 @@ private fun String.toTaskStatus(): TaskStatus = when (normalizedStatus()) {
     "NEW", "CREATED", "PLANNED", "PENDING" -> TaskStatus.NEW
     "IN_PROGRESS", "STARTED", "OPEN", "OPENED" -> TaskStatus.IN_PROGRESS
     "BLOCKED", "PROBLEM", "FAILED", "ABORTED" -> TaskStatus.BLOCKED
-    "DONE", "COMPLETED", "FINISHED" -> TaskStatus.DONE
+    "DONE", "COMPLETED", "FINISHED", "AWAITING_ACCEPTANCE" -> TaskStatus.DONE
     "SENT", "ACCEPTED", "APPROVED" -> TaskStatus.SENT
     "SKIPPED", "CANCELLED", "CANCELED" -> TaskStatus.SKIPPED
     else -> TaskStatus.NEW
@@ -339,7 +351,16 @@ class MobileMesViewModel @Inject constructor(
         if (showLoading) isTasksLoading = true
         runCatching { workTaskApi.getMyWorkTasks() }
             .onSuccess { page ->
-                val needsRabbitChecklist = page.items.any { task ->
+                val latestTasks = page.items
+                    .groupBy { task -> task.scheduledDate to task.operationId }
+                    .values
+                    .mapNotNull { duplicates ->
+                        duplicates.maxWithOrNull(
+                            compareBy<WorkTaskDto> { it.programScheduleId ?: Long.MIN_VALUE }
+                                .thenBy { it.id },
+                        )
+                    }
+                val needsRabbitChecklist = latestTasks.any { task ->
                     task.subtasks.isEmpty() &&
                         MockRepository.operation(task.resolveOperationType()).targetType == TargetType.RABBIT
                 }
@@ -350,7 +371,9 @@ class MobileMesViewModel @Inject constructor(
                 } else {
                     emptyList()
                 }
-                tasks = page.items.map { it.toMobileTask(currentEmployee.id, rabbits) }
+                val remoteTasks = latestTasks
+                    .map { it.toMobileTask(currentEmployee.id, rabbits) }
+                tasks = remoteTasks
                 hasLoadedRemoteTasks = true
             }
             .onFailure { error ->
@@ -472,7 +495,29 @@ class MobileMesViewModel @Inject constructor(
         }
         shift = queueOfflineChange()
     }
-    fun beginTask(taskId: String) = updateTask(taskId) { it.copy(status = TaskStatus.IN_PROGRESS).markOffline() }
+    fun beginTask(taskId: String) {
+        val remoteTaskId = taskId.toLongOrNull()
+        if (remoteTaskId == null) {
+            updateTask(taskId) { it.copy(status = TaskStatus.IN_PROGRESS).markOffline() }
+            return
+        }
+        viewModelScope.launch {
+            runCatching { workTaskApi.startWorkTask(remoteTaskId) }
+                .onSuccess { remoteTask ->
+                    updateTask(taskId) { task ->
+                        task.copy(
+                            status = remoteTask.status.toTaskStatus(),
+                            plannedStart = remoteTask.startedAt.toDisplayTime(),
+                        )
+                    }
+                    lastMessage = "Задача начата"
+                }
+                .onFailure { error ->
+                    Log.e(API_LOG_TAG, "Start work task failed. taskId=$remoteTaskId", error)
+                    lastMessage = error.toUserMessage("Не удалось начать задачу")
+                }
+        }
+    }
 
     fun updateTaskValue(taskId: String, key: String, value: String) = updateTask(taskId) { it.copy(result = it.result.copy(values = it.result.values + (key to value))).markOffline() }
     private fun media(type: AttachmentType, label: String, localUri: String) = MediaAttachment(
@@ -576,20 +621,92 @@ class MobileMesViewModel @Inject constructor(
         }
     }
 
-    fun markChecklistItem(taskId: String, itemId: String, status: ChecklistStatus, reason: String = "", comment: String = "") = updateTask(taskId) { task ->
-        task.copy(checklist = task.checklist.map { if (it.id == itemId) it.copy(status = status, result = it.result.copy(problemReason = reason, comment = comment)) else it }).markOffline()
+    fun markChecklistItem(
+        taskId: String,
+        itemId: String,
+        status: ChecklistStatus,
+        reason: String = "",
+        comment: String = "",
+    ) {
+        if (status == ChecklistStatus.DONE || status == ChecklistStatus.PROBLEM) {
+            completeChecklistItemOnServer(
+                taskId = taskId,
+                itemId = itemId,
+                status = status,
+                reason = reason,
+                comment = comment,
+            )
+            return
+        }
+        updateChecklistItemLocally(taskId, itemId, status, reason, comment)
     }
 
-    fun completeChecklistItem(taskId: String, itemId: String, values: Map<String, String>) = updateTask(taskId) { task ->
+    fun completeChecklistItem(taskId: String, itemId: String, values: Map<String, String>) {
+        completeChecklistItemOnServer(
+            taskId = taskId,
+            itemId = itemId,
+            status = ChecklistStatus.DONE,
+            values = values,
+        )
+    }
+
+    private fun completeChecklistItemOnServer(
+        taskId: String,
+        itemId: String,
+        status: ChecklistStatus,
+        reason: String = "",
+        comment: String = "",
+        values: Map<String, String> = emptyMap(),
+    ) {
+        val subtaskId = itemId.toLongOrNull()
+        val isRemoteTask = taskId.toLongOrNull() != null
+        if (subtaskId == null || !isRemoteTask) {
+            updateChecklistItemLocally(taskId, itemId, status, reason, comment, values)
+            return
+        }
+
+        viewModelScope.launch {
+            runCatching {
+                workTaskApi.completeWorkSubtask(
+                    subtaskId = subtaskId,
+                    request = CompleteWorkSubtaskRequest(
+                        abortReason = reason.ifBlank { null },
+                        comment = comment.ifBlank { null },
+                    ),
+                )
+            }.onSuccess {
+                updateChecklistItemLocally(taskId, itemId, status, reason, comment, values)
+                lastMessage = if (reason.isBlank()) {
+                    "Подзадача выполнена"
+                } else {
+                    "Подзадача завершена с замечанием"
+                }
+            }.onFailure { error ->
+                Log.e(API_LOG_TAG, "Complete work subtask failed. subtaskId=$subtaskId", error)
+                lastMessage = error.toUserMessage("Не удалось завершить подзадачу")
+            }
+        }
+    }
+
+    private fun updateChecklistItemLocally(
+        taskId: String,
+        itemId: String,
+        status: ChecklistStatus,
+        reason: String = "",
+        comment: String = "",
+        values: Map<String, String> = emptyMap(),
+    ) = updateTask(taskId) { task ->
         task.copy(
             status = TaskStatus.IN_PROGRESS,
             checklist = task.checklist.map { item ->
                 if (item.id == itemId) {
                     item.copy(
-                        status = ChecklistStatus.DONE,
+                        status = status,
                         result = item.result.copy(
                             values = item.result.values + values,
                             completedAt = "now",
+                            problemReason = reason.ifBlank { null },
+                            comment = comment,
                         ),
                     )
                 } else {
@@ -612,14 +729,47 @@ class MobileMesViewModel @Inject constructor(
             lastMessage = "Нельзя завершить задачу: осталось $pending необработанных пунктов чек-листа"
             return
         }
-        updateTask(taskId) { current ->
-            val acceptance = if (current.requiresAcceptance) AcceptanceStatus.WAITING else AcceptanceStatus.NOT_REQUIRED
-            current.copy(
-                status = if (current.requiresAcceptance) TaskStatus.DONE else TaskStatus.SENT,
-                acceptanceStatus = acceptance,
-                checklist = checklist,
-                result = current.result.copy(completedAt = "now")
-            ).markOffline()
+        val remoteTaskId = taskId.toLongOrNull()
+        if (remoteTaskId == null) {
+            updateTask(taskId) { current ->
+                val acceptance = if (current.requiresAcceptance) AcceptanceStatus.WAITING else AcceptanceStatus.NOT_REQUIRED
+                current.copy(
+                    status = TaskStatus.DONE,
+                    acceptanceStatus = acceptance,
+                    checklist = checklist,
+                    result = current.result.copy(completedAt = "now"),
+                ).markOffline()
+            }
+            return
+        }
+
+        viewModelScope.launch {
+            runCatching {
+                workTaskApi.completeWorkTask(
+                    id = remoteTaskId,
+                    request = CompleteWorkTaskRequest(
+                        abortReason = currentTask.result.problemReason,
+                        comment = currentTask.result.comment.ifBlank { null },
+                    ),
+                )
+            }.onSuccess { remoteTask ->
+                updateTask(taskId) { current ->
+                    current.copy(
+                        status = remoteTask.status.toTaskStatus(),
+                        acceptanceStatus = if (current.requiresAcceptance) {
+                            AcceptanceStatus.WAITING
+                        } else {
+                            AcceptanceStatus.NOT_REQUIRED
+                        },
+                        checklist = checklist,
+                        result = current.result.copy(completedAt = remoteTask.completedAt ?: "now"),
+                    )
+                }
+                lastMessage = "Задача завершена"
+            }.onFailure { error ->
+                Log.e(API_LOG_TAG, "Complete work task failed. taskId=$remoteTaskId", error)
+                lastMessage = error.toUserMessage("Не удалось завершить задачу")
+            }
         }
     }
 

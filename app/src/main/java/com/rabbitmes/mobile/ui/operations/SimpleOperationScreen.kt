@@ -25,6 +25,7 @@ import androidx.compose.ui.platform.LocalDensity
 import com.rabbitmes.mobile.domain.*
 import com.rabbitmes.mobile.data.MockRepository
 import com.rabbitmes.mobile.ui.components.AttachmentPickerButtons
+import com.rabbitmes.mobile.ui.components.SelectionDropdown
 import ru.profikrol.operator.domain.model.Rabbit as RabbitInfo
 import ru.profikrol.operator.feature.rfidscanresult.RabbitInfoCard
 
@@ -57,6 +58,22 @@ fun SimpleOperationScreen(
     onOpenAnimal: (String) -> Unit,
     canEdit: Boolean,
 ) {
+    if (task.operationType == OperationType.ANIMAL_SETTLEMENT) {
+        AnimalSettlementScreen(
+            task = task,
+            definition = definition,
+            onBack = onBack,
+            onBegin = onBegin,
+            onValue = onValue,
+            onComplete = onComplete,
+            onPhoto = onPhoto,
+            onVideo = onVideo,
+            onFile = onFile,
+            onComment = onComment,
+            canEdit = canEdit,
+        )
+        return
+    }
     if (task.operationType == OperationType.NEST_CONTROL) {
         NestControlRoundScreen(task, definition, onBack, onBegin, onChecklistProblem, onComplete, canEdit)
         return
@@ -68,6 +85,9 @@ fun SimpleOperationScreen(
     val doneCount = task.checklist.count { it.status == ChecklistStatus.DONE }
     val problemCount = task.checklist.count { it.status == ChecklistStatus.PROBLEM }
     val allProcessed = task.checklist.isEmpty() || pending.isEmpty()
+    val requiresScan = definition.requiresScan && task.checklist.none {
+        it.serverType.equals("general", ignoreCase = true)
+    }
     val listState = rememberLazyListState()
     val largeFont = LocalDensity.current.fontScale >= 1.3f
     var previousProcessedCount by remember(task.id) { mutableIntStateOf(closed.size) }
@@ -77,7 +97,7 @@ fun SimpleOperationScreen(
         previousProcessedCount = closed.size
     }
 
-    if (activeItem != null && !definition.requiresScan) {
+    if (activeItem != null && !requiresScan) {
         SimpleItemForm(
             task = task,
             definition = definition,
@@ -173,7 +193,7 @@ fun SimpleOperationScreen(
         }
 
         if (task.status != TaskStatus.NEW && canEdit) {
-            if (definition.requiresScan) {
+            if (requiresScan) {
                 item {
                     SimpleScanPanel(
                         task = task,
@@ -198,22 +218,22 @@ fun SimpleOperationScreen(
         }
 
         if (task.checklist.isNotEmpty()) {
-            item { SimpleSectionTitle(if (definition.requiresScan) "Чек-лист закрывается сканированием" else "К исполнению") }
+            item { SimpleSectionTitle(if (requiresScan) "Чек-лист закрывается сканированием" else "К исполнению") }
             if (pending.isEmpty()) item { SimpleEmpty("Все пункты обработаны") }
             pending.forEach { checklistItem ->
                 item(key = checklistItem.id) {
                     SimpleChecklistCard(
                         title = checklistItem.label,
-                        subtitle = if (definition.requiresScan) "Ожидает сканирования" else "Открыть короткую форму",
-                        action = if (definition.requiresScan) "RFID" else "Открыть",
-                        enabled = !definition.requiresScan && canEdit,
+                        subtitle = if (requiresScan) "Ожидает сканирования" else "Открыть короткую форму",
+                        action = if (requiresScan) "RFID" else "Открыть",
+                        enabled = !requiresScan && canEdit,
                     ) { activeItemId = checklistItem.id }
                 }
             }
             item { SimpleSectionTitle("Результаты") }
             if (closed.isEmpty()) item { SimpleEmpty("Пока нет выполненных пунктов") }
             closed.forEach { checklistItem -> item(key = "closed-${checklistItem.id}") { SimpleResultCard(checklistItem, definition) } }
-            if (!definition.requiresScan) item {
+            if (!requiresScan) item {
                 SimpleButton(
                     if (task.requiresAcceptance) "Завершить и отправить на приёмку" else "Завершить задачу",
                     onComplete,
@@ -221,6 +241,175 @@ fun SimpleOperationScreen(
                     enabled = allProcessed && task.status != TaskStatus.SENT && canEdit,
                 )
             }
+        }
+        item { Spacer(Modifier.height(24.dp)) }
+    }
+}
+
+private val animalSettlementProblemReasons = listOf(
+    "Самка отсутствует",
+    "Клетка занята",
+    "Клетка не готова",
+    "RFID не считывается",
+    "Другая причина",
+)
+
+@Composable
+private fun AnimalSettlementScreen(
+    task: MobileTask,
+    definition: OperationDefinition,
+    onBack: () -> Unit,
+    onBegin: () -> Unit,
+    onValue: (String, String) -> Unit,
+    onComplete: () -> Unit,
+    onPhoto: (String, String) -> Unit,
+    onVideo: (String, String) -> Unit,
+    onFile: (String, String) -> Unit,
+    onComment: (String) -> Unit,
+    canEdit: Boolean,
+) {
+    val females = MockRepository.rabbits.filter { it.sex.equals("Самка", ignoreCase = true) }
+    val cells = MockRepository.allCages.filterNot { it.occupied }
+    var femaleId by remember(task.id) { mutableStateOf(task.result.values["femaleId"].orEmpty()) }
+    var cellId by remember(task.id) { mutableStateOf(task.result.values["cellId"].orEmpty()) }
+    var hasProblem by remember(task.id) { mutableStateOf(false) }
+    var problemReason by remember(task.id) { mutableStateOf(animalSettlementProblemReasons.first()) }
+    var problemComment by remember(task.id) { mutableStateOf(task.result.comment) }
+
+    val selectedFemale = females.firstOrNull { it.id == femaleId }
+    val selectedCell = cells.firstOrNull { it.id == cellId }
+    val canSubmit = femaleId.isNotBlank() && cellId.isNotBlank() && task.status != TaskStatus.NEW
+
+    LazyColumn(
+        modifier = Modifier.fillMaxSize().background(SimpleBackground).statusBarsPadding(),
+        contentPadding = PaddingValues(horizontal = 18.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
+        item {
+            Text(
+                "← Назад",
+                color = SimpleGreen,
+                fontWeight = FontWeight.ExtraBold,
+                modifier = Modifier.padding(vertical = 10.dp).clickable(onClick = onBack),
+            )
+        }
+        item {
+            Column(
+                Modifier.fillMaxWidth()
+                    .clip(RoundedCornerShape(26.dp))
+                    .background(Brush.linearGradient(listOf(SimpleGreen, SimpleDarkGreen)))
+                    .padding(18.dp),
+            ) {
+                Row(Modifier.fillMaxWidth(), Arrangement.SpaceBetween, Alignment.CenterVertically) {
+                    SimplePriorityBadge(task.priority)
+                    Text(
+                        "${task.plannedStart} · ${task.plannedDurationMinutes} мин",
+                        color = Color(0xFFD6EEE2),
+                        fontSize = 13.sp,
+                    )
+                }
+                Spacer(Modifier.height(12.dp))
+                Text("Заселение животных", color = Color.White, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Black)
+                Spacer(Modifier.height(5.dp))
+                Text(
+                    listOf(definition.type.title, workshopName(task), hangarName(task))
+                        .filter(String::isNotBlank)
+                        .joinToString(" · "),
+                    color = Color(0xFFD6EEE2),
+                )
+                Spacer(Modifier.height(12.dp))
+                Text("Исполнитель: оператор", color = Color.White, fontWeight = FontWeight.Bold)
+                Text("Приёмка: главный технолог", color = Color(0xFFD6EEE2))
+                if (task.status == TaskStatus.NEW && canEdit) {
+                    Spacer(Modifier.height(14.dp))
+                    SimpleButton("Приступить", onBegin, Modifier.fillMaxWidth())
+                }
+            }
+        }
+
+        if (task.status != TaskStatus.NEW && canEdit) {
+            item {
+                SimpleCard {
+                    SimpleSectionTitle("Размещение животного")
+                    Text(
+                        "Выберите самку и свободную клетку. После публикации API списки будут загружаться с сервера.",
+                        color = SimpleMuted,
+                    )
+                    SelectionDropdown(
+                        value = femaleId,
+                        onValueChange = { selectedId ->
+                            femaleId = selectedId
+                            onValue("femaleId", selectedId)
+                        },
+                        options = females.map { it.id },
+                        label = "Самка (FemaleId)",
+                    )
+                    selectedFemale?.let { female ->
+                        SimpleReadonly("Выбранная самка", "RFID ${female.rfid} · ID ${female.id}")
+                    }
+                    SelectionDropdown(
+                        value = cellId,
+                        onValueChange = { selectedId ->
+                            cellId = selectedId
+                            onValue("cellId", selectedId)
+                        },
+                        options = cells.map { it.id },
+                        label = "Клетка (CellId)",
+                    )
+                    selectedCell?.let { cell ->
+                        SimpleReadonly("Выбранная клетка", "${cell.code} · ID ${cell.id}")
+                    }
+                }
+            }
+            item {
+                SimpleCard {
+                    SimpleSectionTitle("Данные для отправки")
+                    SimpleReadonly("FemaleId", femaleId.ifBlank { "Не выбрана" })
+                    SimpleReadonly("CellId", cellId.ifBlank { "Не выбрана" })
+                }
+            }
+            item {
+                SimpleCard {
+                    SimpleProblemBlock(
+                        problem = hasProblem,
+                        onProblem = { hasProblem = it },
+                        reason = problemReason,
+                        onReason = {
+                            problemReason = it
+                            onValue("problemReason", it)
+                        },
+                        comment = problemComment,
+                        onComment = {
+                            problemComment = it
+                            onValue("problemComment", it)
+                        },
+                        reasons = animalSettlementProblemReasons,
+                        onPhoto = onPhoto,
+                        onVideo = onVideo,
+                        onFile = onFile,
+                        attachments = task.result.attachments,
+                    )
+                }
+            }
+            item {
+                SimpleButton(
+                    text = if (task.requiresAcceptance) "Завершить и отправить на приёмку" else "Завершить заселение",
+                    onClick = {
+                        onValue("femaleId", femaleId)
+                        onValue("cellId", cellId)
+                        if (hasProblem) {
+                            onValue("problemReason", problemReason)
+                            if (problemComment.isNotBlank()) onComment(problemComment)
+                        }
+                        onComplete()
+                    },
+                    modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+                    enabled = canSubmit,
+                )
+            }
+        }
+        if (!canEdit) {
+            item { SimpleEmpty("Задача доступна только для просмотра") }
         }
         item { Spacer(Modifier.height(24.dp)) }
     }
