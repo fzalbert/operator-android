@@ -32,7 +32,7 @@ object MesSpacing {
     val cardVertical = 8.dp
     val cardInner = 18.dp
     val headerHorizontal = 18.dp
-    val headerVertical = 16.dp
+    val headerVertical = 8.dp
     val contentGap = 12.dp
     val smallGap = 8.dp
     val tinyGap = 4.dp
@@ -110,8 +110,8 @@ fun AppHeader(title: String, subtitle: String? = null, onBack: (() -> Unit)? = n
     Surface(
         color = Color(0xFF0B2F24),
         contentColor = Color.White,
-        shape = RoundedCornerShape(bottomStart = 26.dp, bottomEnd = 26.dp),
-        shadowElevation = 14.dp,
+        shape = RoundedCornerShape(bottomStart = 20.dp, bottomEnd = 20.dp),
+        shadowElevation = 8.dp,
         modifier = Modifier.fillMaxWidth(),
     ) {
         Row(
