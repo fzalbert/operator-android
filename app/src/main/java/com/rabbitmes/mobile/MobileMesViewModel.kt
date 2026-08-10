@@ -23,7 +23,10 @@ import javax.inject.Inject
 import com.rabbitmes.mobile.data.MockRepository
 import com.rabbitmes.mobile.data.NotificationRepository
 import androidx.lifecycle.viewModelScope
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
@@ -36,6 +39,11 @@ import retrofit2.HttpException
 private const val API_LOG_TAG = "RabbitApi"
 private const val TASKS_REFRESH_INTERVAL_MS = 30_000L
 private const val RABBITS_PAGE_SIZE = 100
+
+data class AppErrorMessage(
+    val id: Long,
+    val message: String,
+)
 
 sealed class AppScreen {
     data object Login : AppScreen()
@@ -219,6 +227,11 @@ class MobileMesViewModel @Inject constructor(
     private val workTaskApi: WorkTaskApi,
     private val rabbitApi: RabbitApi,
 ) : ViewModel() {
+    private var nextErrorId = 0L
+    private val globalErrorHandler = CoroutineExceptionHandler { _, error ->
+        handleError(error, "Произошла непредвиденная ошибка", "Unhandled coroutine error")
+    }
+
     var screen: AppScreen by mutableStateOf(AppScreen.Login)
         private set
     var currentEmployee: Employee by mutableStateOf(MockRepository.employees.first())
@@ -241,6 +254,8 @@ class MobileMesViewModel @Inject constructor(
     private val scannedRfidByTaskId = mutableStateMapOf<String, String>()
     var lastMessage: String? by mutableStateOf(null)
         private set
+    var appError: AppErrorMessage? by mutableStateOf(null)
+        private set
     val notifications = mutableStateListOf<NotificationUi>()
 
     val employees = MockRepository.employees
@@ -250,7 +265,7 @@ class MobileMesViewModel @Inject constructor(
     val operations = MockRepository.operationDefinitions
 
     init {
-        viewModelScope.launch {
+        safeLaunch("Notification subscription failed") {
             notificationRepository.notifications.collect { items ->
                 notifications.clear()
                 notifications.addAll(items)
@@ -258,6 +273,39 @@ class MobileMesViewModel @Inject constructor(
         }
         if (sessionStore.currentUser != null) {
             onLoggedInFromSession()
+        }
+    }
+
+    fun consumeAppError(id: Long) {
+        if (appError?.id == id) appError = null
+    }
+
+    private fun safeLaunch(
+        logMessage: String,
+        fallbackMessage: String = "Произошла непредвиденная ошибка",
+        block: suspend () -> Unit,
+    ): Job = viewModelScope.launch(globalErrorHandler) {
+        try {
+            block()
+        } catch (cancelled: CancellationException) {
+            throw cancelled
+        } catch (error: Throwable) {
+            handleError(error, fallbackMessage, logMessage)
+        }
+    }
+
+    private fun handleError(
+        error: Throwable,
+        fallbackMessage: String,
+        logMessage: String,
+        showToUser: Boolean = true,
+    ) {
+        if (error is CancellationException) throw error
+        Log.e(API_LOG_TAG, logMessage, error)
+        val message = error.toUserMessage(fallbackMessage)
+        lastMessage = message
+        if (showToUser) {
+            appError = AppErrorMessage(++nextErrorId, message)
         }
     }
 
@@ -296,51 +344,55 @@ class MobileMesViewModel @Inject constructor(
         stopTasksAutoRefresh()
         notificationRepository.clear()
         screen = AppScreen.Login
-        viewModelScope.launch {
+        safeLaunch("Logout failed", fallbackMessage = "Не удалось выйти из профиля") {
             authRepository.logout()
         }
     }
     fun startShift() {
         if (isShiftActionInProgress) return
-        viewModelScope.launch {
+        safeLaunch("Open shift action failed", fallbackMessage = "Не удалось открыть смену") {
             isShiftActionInProgress = true
-            runCatching { profileApi.openShift() }
-                .onSuccess { remoteShift ->
-                    shift = remoteShift.toShiftState(currentEmployee.id, shift)
-                    lastMessage = "Смена открыта"
-                    loadMyTasks()
-                }
-                .onFailure { error ->
-                    Log.e(API_LOG_TAG, "Open shift failed", error)
-                    lastMessage = error.toUserMessage("Не удалось открыть смену")
-                }
-            isShiftActionInProgress = false
+            try {
+                runCatching { profileApi.openShift() }
+                    .onSuccess { remoteShift ->
+                        shift = remoteShift.toShiftState(currentEmployee.id, shift)
+                        lastMessage = "Смена открыта"
+                        loadMyTasks()
+                    }
+                    .onFailure { error ->
+                        handleError(error, "Не удалось открыть смену", "Open shift failed")
+                    }
+            } finally {
+                isShiftActionInProgress = false
+            }
         }
     }
     fun finishShift(reason: String) {
         if (isShiftActionInProgress) return
-        viewModelScope.launch {
+        safeLaunch("Close shift action failed", fallbackMessage = "Не удалось закрыть смену") {
             isShiftActionInProgress = true
-            runCatching { profileApi.closeShift() }
-                .onSuccess { remoteShift ->
-                    shift = remoteShift.toShiftState(currentEmployee.id, shift)
-                    lastMessage = "Смена завершена"
-                }
-                .onFailure { error ->
-                    Log.e(API_LOG_TAG, "Close shift failed. reason=$reason", error)
-                    lastMessage = error.toUserMessage("Не удалось закрыть смену")
-                }
-            isShiftActionInProgress = false
+            try {
+                runCatching { profileApi.closeShift() }
+                    .onSuccess { remoteShift ->
+                        shift = remoteShift.toShiftState(currentEmployee.id, shift)
+                        lastMessage = "Смена завершена"
+                    }
+                    .onFailure { error ->
+                        handleError(error, "Не удалось закрыть смену", "Close shift failed. reason=$reason")
+                    }
+            } finally {
+                isShiftActionInProgress = false
+            }
         }
     }
 
     private fun refreshProfileAndTasks() {
-        viewModelScope.launch {
+        safeLaunch("Profile and tasks refresh failed") {
             runCatching { profileApi.getMyProfile() }
                 .onSuccess { profile ->
                     shift = profile.shift.toShiftState(currentEmployee.id, shift)
                 }
-                .onFailure { error -> Log.e(API_LOG_TAG, "Profile refresh failed", error) }
+                .onFailure { error -> handleError(error, "Не удалось обновить профиль", "Profile refresh failed") }
             loadMyTasks()
         }
     }
@@ -349,39 +401,53 @@ class MobileMesViewModel @Inject constructor(
         if (isTasksRequestInProgress) return
         isTasksRequestInProgress = true
         if (showLoading) isTasksLoading = true
-        runCatching { workTaskApi.getMyWorkTasks() }
-            .onSuccess { page ->
-                val latestTasks = page.items
-                    .groupBy { task -> task.scheduledDate to task.operationId }
-                    .values
-                    .mapNotNull { duplicates ->
-                        duplicates.maxWithOrNull(
-                            compareBy<WorkTaskDto> { it.programScheduleId ?: Long.MIN_VALUE }
-                                .thenBy { it.id },
-                        )
+        try {
+            runCatching { workTaskApi.getMyWorkTasks() }
+                .onSuccess { page ->
+                    val latestTasks = page.items
+                        .groupBy { task -> task.scheduledDate to task.operationId }
+                        .values
+                        .mapNotNull { duplicates ->
+                            duplicates.maxWithOrNull(
+                                compareBy<WorkTaskDto> { it.programScheduleId ?: Long.MIN_VALUE }
+                                    .thenBy { it.id },
+                            )
+                        }
+                    val needsRabbitChecklist = latestTasks.any { task ->
+                        task.subtasks.isEmpty() &&
+                            MockRepository.operation(task.resolveOperationType()).targetType == TargetType.RABBIT
                     }
-                val needsRabbitChecklist = latestTasks.any { task ->
-                    task.subtasks.isEmpty() &&
-                        MockRepository.operation(task.resolveOperationType()).targetType == TargetType.RABBIT
+                    val rabbits = if (needsRabbitChecklist) {
+                        runCatching { loadAllRabbits() }
+                            .onFailure { error ->
+                                handleError(
+                                    error = error,
+                                    fallbackMessage = "Не удалось загрузить список кроликов",
+                                    logMessage = "Rabbits request failed",
+                                    showToUser = showLoading,
+                                )
+                            }
+                            .getOrDefault(emptyList())
+                    } else {
+                        emptyList()
+                    }
+                    val remoteTasks = latestTasks
+                        .map { it.toMobileTask(currentEmployee.id, rabbits) }
+                    tasks = remoteTasks
+                    hasLoadedRemoteTasks = true
                 }
-                val rabbits = if (needsRabbitChecklist) {
-                    runCatching { loadAllRabbits() }
-                        .onFailure { error -> Log.e(API_LOG_TAG, "Rabbits request failed", error) }
-                        .getOrDefault(emptyList())
-                } else {
-                    emptyList()
+                .onFailure { error ->
+                    handleError(
+                        error = error,
+                        fallbackMessage = "Не удалось загрузить задачи",
+                        logMessage = "Work tasks request failed",
+                        showToUser = showLoading,
+                    )
                 }
-                val remoteTasks = latestTasks
-                    .map { it.toMobileTask(currentEmployee.id, rabbits) }
-                tasks = remoteTasks
-                hasLoadedRemoteTasks = true
-            }
-            .onFailure { error ->
-                Log.e(API_LOG_TAG, "Work tasks request failed", error)
-                lastMessage = error.toUserMessage("Не удалось загрузить задачи")
-            }
-        isTasksRequestInProgress = false
-        if (showLoading) isTasksLoading = false
+        } finally {
+            isTasksRequestInProgress = false
+            if (showLoading) isTasksLoading = false
+        }
     }
 
     private suspend fun loadAllRabbits(): List<RabbitDto> {
@@ -403,9 +469,9 @@ class MobileMesViewModel @Inject constructor(
 
     fun startTasksAutoRefresh() {
         if (sessionStore.currentUser == null || tasksAutoRefreshJob?.isActive == true) return
-        tasksAutoRefreshJob = viewModelScope.launch {
+        tasksAutoRefreshJob = safeLaunch("Tasks auto refresh failed", fallbackMessage = "Не удалось обновить задачи") {
             loadMyTasks(showLoading = false)
-            while (isActive) {
+            while (currentCoroutineContext().isActive) {
                 delay(TASKS_REFRESH_INTERVAL_MS)
                 loadMyTasks(showLoading = false)
             }
@@ -501,7 +567,7 @@ class MobileMesViewModel @Inject constructor(
             updateTask(taskId) { it.copy(status = TaskStatus.IN_PROGRESS).markOffline() }
             return
         }
-        viewModelScope.launch {
+        safeLaunch("Start work task action failed", fallbackMessage = "Не удалось начать задачу") {
             runCatching { workTaskApi.startWorkTask(remoteTaskId) }
                 .onSuccess { remoteTask ->
                     updateTask(taskId) { task ->
@@ -513,8 +579,7 @@ class MobileMesViewModel @Inject constructor(
                     lastMessage = "Задача начата"
                 }
                 .onFailure { error ->
-                    Log.e(API_LOG_TAG, "Start work task failed. taskId=$remoteTaskId", error)
-                    lastMessage = error.toUserMessage("Не удалось начать задачу")
+                    handleError(error, "Не удалось начать задачу", "Start work task failed. taskId=$remoteTaskId")
                 }
         }
     }
@@ -665,7 +730,7 @@ class MobileMesViewModel @Inject constructor(
             return
         }
 
-        viewModelScope.launch {
+        safeLaunch("Complete work subtask action failed", fallbackMessage = "Не удалось завершить подзадачу") {
             runCatching {
                 workTaskApi.completeWorkSubtask(
                     subtaskId = subtaskId,
@@ -682,8 +747,7 @@ class MobileMesViewModel @Inject constructor(
                     "Подзадача завершена с замечанием"
                 }
             }.onFailure { error ->
-                Log.e(API_LOG_TAG, "Complete work subtask failed. subtaskId=$subtaskId", error)
-                lastMessage = error.toUserMessage("Не удалось завершить подзадачу")
+                handleError(error, "Не удалось завершить подзадачу", "Complete work subtask failed. subtaskId=$subtaskId")
             }
         }
     }
@@ -743,7 +807,7 @@ class MobileMesViewModel @Inject constructor(
             return
         }
 
-        viewModelScope.launch {
+        safeLaunch("Complete work task action failed", fallbackMessage = "Не удалось завершить задачу") {
             runCatching {
                 workTaskApi.completeWorkTask(
                     id = remoteTaskId,
@@ -767,8 +831,7 @@ class MobileMesViewModel @Inject constructor(
                 }
                 lastMessage = "Задача завершена"
             }.onFailure { error ->
-                Log.e(API_LOG_TAG, "Complete work task failed. taskId=$remoteTaskId", error)
-                lastMessage = error.toUserMessage("Не удалось завершить задачу")
+                handleError(error, "Не удалось завершить задачу", "Complete work task failed. taskId=$remoteTaskId")
             }
         }
     }
