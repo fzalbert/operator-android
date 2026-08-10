@@ -87,6 +87,7 @@ class RealAuthRepository @Inject constructor(
                     role = roleText.toUserRole(),
                 )
                 sessionStore.save(user)
+                Log.i(TAG, "Authenticated user. userId=${user.id}, login=${user.login}, role=${user.role}")
 
                 val profile = runCatching {
                     profileApi.getMyProfile()
@@ -109,6 +110,7 @@ class RealAuthRepository @Inject constructor(
                         phone = profile.phoneNumber ?: profile.contactNumber,
                     )
                     sessionStore.save(user)
+                    Log.i(TAG, "Profile loaded. userId=${user.id}, displayName=${user.displayName}")
                 }
 
                 Result.success(user)

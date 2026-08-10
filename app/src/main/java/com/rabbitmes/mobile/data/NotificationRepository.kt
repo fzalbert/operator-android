@@ -13,12 +13,12 @@ import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
-import kotlinx.coroutines.awaitCancellation
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.collectLatest
-import kotlinx.coroutines.flow.flow
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.mapNotNull
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
@@ -34,6 +34,7 @@ import java.util.Locale
 import java.util.concurrent.TimeUnit
 import java.security.SecureRandom
 import java.security.cert.X509Certificate
+import javax.net.ssl.HostnameVerifier
 import javax.net.ssl.SSLContext
 import javax.net.ssl.X509TrustManager
 import javax.inject.Inject
@@ -51,15 +52,23 @@ class NotificationRepository @Inject constructor(
 
     init {
         scope.launch {
-            sessionStore.user.collectLatest { user ->
-                val token = user?.token?.takeIf(::looksLikeJwt) ?: return@collectLatest
-                connectWithRetry(token)
-            }
+            sessionStore.user
+                .mapNotNull { user ->
+                    val token = user?.token?.takeIf(::looksLikeJwt) ?: return@mapNotNull null
+                    user.id to token
+                }
+                .distinctUntilChanged()
+                .collectLatest { (userId, token) ->
+                    Log.d(TAG, "Starting notification stream. userId=$userId")
+                    connectWithRetry(token)
+                }
         }
     }
 
-    fun markAsRead(id: Long) = update { list ->
-        list.map { if (it.id == id) it.copy(isUnread = false) else it }
+    fun markAsRead(id: Long) {
+        update { list ->
+            list.map { if (it.id == id) it.copy(isUnread = false) else it }
+        }
     }
 
     fun markAllAsRead() = update { list -> list.map { it.copy(isUnread = false) } }
@@ -72,13 +81,13 @@ class NotificationRepository @Inject constructor(
             val channel = newChannel()
             try {
                 val stub = NotificationServiceGrpcKt.NotificationServiceCoroutineStub(channel)
-                val requests = flow {
-                    emit(notificationClientMessage { this.token = token })
-                    // Keep the request half of the bidirectional stream open.
-                    awaitCancellation()
-                }
-                stub.notificationStream(requests).collect { message ->
+                val request = notificationClientMessage { this.token = token }
+                stub.notificationStream(request).collect { message ->
                     retryDelayMs = INITIAL_RETRY_MS
+                    Log.d(
+                        TAG,
+                        "Notification received. type=${message.notificationType}, category=${message.notificationCategory}",
+                    )
                     val now = System.currentTimeMillis()
                     val item = NotificationUi(
                         id = now,
@@ -91,6 +100,7 @@ class NotificationRepository @Inject constructor(
                     )
                     update { list -> listOf(item) + list }
                 }
+                Log.w(TAG, "Notification server stream completed without error")
             } catch (cancelled: CancellationException) {
                 throw cancelled
             } catch (unauthenticated: StatusException) {
@@ -98,11 +108,11 @@ class NotificationRepository @Inject constructor(
                     Log.w(TAG, "Notification stream rejected the access token")
                     return
                 }
-                Log.w(TAG, "Notification stream disconnected; reconnecting", unauthenticated)
+                Log.w(TAG, "Notification stream disconnected; reconnecting after ${retryDelayMs}ms", unauthenticated)
                 delay(retryDelayMs)
                 retryDelayMs = (retryDelayMs * 2).coerceAtMost(MAX_RETRY_MS)
             } catch (error: Throwable) {
-                Log.w(TAG, "Notification stream disconnected; reconnecting", error)
+                Log.w(TAG, "Notification stream disconnected; reconnecting after ${retryDelayMs}ms", error)
                 delay(retryDelayMs)
                 retryDelayMs = (retryDelayMs * 2).coerceAtMost(MAX_RETRY_MS)
             } finally {
@@ -115,19 +125,18 @@ class NotificationRepository @Inject constructor(
     private fun newChannel(): ManagedChannel {
         val builder = OkHttpChannelBuilder
             .forAddress(BuildConfig.NOTIFICATIONS_GRPC_HOST, BuildConfig.NOTIFICATIONS_GRPC_PORT)
-            .keepAliveTime(30, TimeUnit.SECONDS)
-            .keepAliveTimeout(10, TimeUnit.SECONDS)
-            .keepAliveWithoutCalls(true)
+            .idleTimeout(365, TimeUnit.DAYS)
+            .maxInboundMessageSize(MAX_INBOUND_MESSAGE_BYTES)
 
         if (BuildConfig.NOTIFICATIONS_GRPC_TLS) {
-            builder.useTransportSecurity().overrideAuthority("localhost")
+            builder.useTransportSecurity()
             if (BuildConfig.DEBUG) {
-                // Kestrel's local development certificate is not in Android's trust store.
-                // This bypass is compiled only into debug builds.
+                // Development endpoint uses a certificate that may not match the IP host.
                 val trustManager = DevelopmentTrustManager
                 val sslContext = SSLContext.getInstance("TLS")
                 sslContext.init(null, arrayOf(trustManager), SecureRandom())
                 builder.sslSocketFactory(sslContext.socketFactory)
+                builder.hostnameVerifier(DevelopmentHostnameVerifier)
             }
         } else {
             builder.usePlaintext()
@@ -208,6 +217,7 @@ class NotificationRepository @Inject constructor(
         const val PREFERENCES = "operator_notifications"
         const val KEY_NOTIFICATIONS = "items"
         const val MAX_STORED = 200
+        const val MAX_INBOUND_MESSAGE_BYTES = 4 * 1024 * 1024
         const val INITIAL_RETRY_MS = 1_000L
         const val MAX_RETRY_MS = 30_000L
     }
@@ -216,5 +226,9 @@ class NotificationRepository @Inject constructor(
         override fun checkClientTrusted(chain: Array<out X509Certificate>?, authType: String?) = Unit
         override fun checkServerTrusted(chain: Array<out X509Certificate>?, authType: String?) = Unit
         override fun getAcceptedIssuers(): Array<X509Certificate> = emptyArray()
+    }
+
+    private object DevelopmentHostnameVerifier : HostnameVerifier {
+        override fun verify(hostname: String?, session: javax.net.ssl.SSLSession?): Boolean = true
     }
 }

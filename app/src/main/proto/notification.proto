@@ -1,12 +1,15 @@
 syntax = "proto3";
 
+import "google/protobuf/wrappers.proto";
+import "google/protobuf/empty.proto";
+
+option csharp_namespace = "Profikrol.API.Grpc";
 option java_multiple_files = true;
 option java_package = "ru.profikrol.operator.data.remote.grpc";
 option java_outer_classname = "NotificationProto";
 
 service NotificationService {
-  rpc NotificationStream(stream NotificationClientMessage)
-      returns (stream NotificationServerMessage);
+  rpc NotificationStream(NotificationClientMessage) returns (stream NotificationServerMessage);
 }
 
 message NotificationClientMessage {
@@ -15,6 +18,6 @@ message NotificationClientMessage {
 
 message NotificationServerMessage {
   string message = 1;
-  string notification_type = 2;
-  string notification_category = 3;
+  string NotificationType = 2;
+  string NotificationCategory = 3;
 }

@@ -19,11 +19,9 @@ android {
         versionCode = 1
         versionName = "1.0"
 
-        // Android Emulator reaches services running on the development PC via 10.0.2.2.
-        // For a physical device replace this host with the PC's LAN address.
-        buildConfigField("String", "NOTIFICATIONS_GRPC_HOST", "\"10.0.2.2\"")
-        buildConfigField("int", "NOTIFICATIONS_GRPC_PORT", "5217")
-        buildConfigField("boolean", "NOTIFICATIONS_GRPC_TLS", "false")
+        buildConfigField("String", "NOTIFICATIONS_GRPC_HOST", "\"195.58.153.25\"")
+        buildConfigField("int", "NOTIFICATIONS_GRPC_PORT", "5216")
+        buildConfigField("boolean", "NOTIFICATIONS_GRPC_TLS", "true")
         buildConfigField("boolean", "SHOW_RABBIT_INFO_CARDS", "true")
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
