@@ -110,6 +110,7 @@ data class MobileTask(
     val operationTypeTitle: String = operationType.title,
     val isGeneral: Boolean = false,
     val pendingGeneralSubtaskIds: List<Long> = emptyList(),
+    val workReportId: Long? = null,
 ) {
     val progress: Int get() = if (checklist.isEmpty()) 0 else checklist.count { it.status == ChecklistStatus.DONE || it.status == ChecklistStatus.PROBLEM || it.status == ChecklistStatus.SKIPPED } * 100 / checklist.size
     fun markOffline() = copy(offlineEvents = offlineEvents + 1)

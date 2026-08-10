@@ -21,6 +21,20 @@ interface WorkTaskApi {
         @Query("offset") offset: Int = 0,
     ): WorkTaskPageDto
 
+    @GET("api/v1/work-tasks/pending-acceptance")
+    suspend fun getPendingAcceptanceTasks(
+        @Query("limit") limit: Int = 50,
+        @Query("offset") offset: Int = 0,
+    ): WorkTaskPageDto
+
+    @GET("api/v1/work-tasks")
+    suspend fun getWorkTasksForAcceptance(
+        @Query("status") status: String = "awaiting_acceptance",
+        @Query("requiresAcceptance") requiresAcceptance: Boolean = true,
+        @Query("limit") limit: Int = 50,
+        @Query("offset") offset: Int = 0,
+    ): WorkTaskPageDto
+
     @POST("api/v1/work-subtasks/{subtaskId}/complete")
     suspend fun completeWorkSubtask(
         @Path("subtaskId") subtaskId: Long,
@@ -37,6 +51,9 @@ interface WorkTaskApi {
         @Path("id") id: Long,
         @Body request: CompleteWorkTaskRequest,
     ): WorkTaskDto
+
+    @POST("api/v1/work-reports/{id}/accept")
+    suspend fun acceptWorkReport(@Path("id") id: Long): WorkReportDto
 }
 
 @Serializable
@@ -84,6 +101,19 @@ data class WorkTaskDto(
     val operationName: String? = null,
     val operationCategory: String? = null,
     val subtasks: List<WorkSubtaskDto> = emptyList(),
+    val report: WorkReportDto? = null,
+)
+
+@Serializable
+data class WorkReportDto(
+    val id: Long,
+    val status: String? = null,
+    val reportedByEmployeeId: String? = null,
+    val reportedAt: String? = null,
+    val abortReason: String? = null,
+    val comment: String? = null,
+    val acceptedByEmployeeId: String? = null,
+    val acceptedAt: String? = null,
 )
 
 @Serializable

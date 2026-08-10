@@ -148,6 +148,7 @@ private fun WorkTaskDto.toMobileTask(
         } else {
             emptyList()
         },
+        workReportId = report?.id,
     )
 }
 
@@ -422,7 +423,13 @@ class MobileMesViewModel @Inject constructor(
         isTasksRequestInProgress = true
         if (showLoading) isTasksLoading = true
         try {
-            runCatching { workTaskApi.getMyWorkTasks() }
+            runCatching {
+                if (currentEmployee.role == RoleId.CHIEF_TECHNOLOGIST) {
+                    workTaskApi.getWorkTasksForAcceptance()
+                } else {
+                    workTaskApi.getMyWorkTasks()
+                }
+            }
                 .onSuccess { page ->
                     val latestTasks = page.items
                         .groupBy { task ->
@@ -453,10 +460,25 @@ class MobileMesViewModel @Inject constructor(
                     } else {
                         emptyList()
                     }
-                    val remoteTasks = latestTasks
-                        .map { it.toMobileTask(currentEmployee.id, rabbits) }
+                    val remoteTasks = latestTasks.map { dto ->
+                        dto.toMobileTask(currentEmployee.id, rabbits).let { task ->
+                            if (currentEmployee.role == RoleId.CHIEF_TECHNOLOGIST) {
+                                task.copy(
+                                    acceptanceRole = currentEmployee.role,
+                                    acceptanceStatus = AcceptanceStatus.WAITING,
+                                )
+                            } else task
+                        }
+                    }
                     tasks = remoteTasks
                     hasLoadedRemoteTasks = true
+                    if (
+                        currentEmployee.role == RoleId.CHIEF_TECHNOLOGIST &&
+                        remoteTasks.isNotEmpty() &&
+                        screen == AppScreen.Shift
+                    ) {
+                        screen = AppScreen.AcceptanceQueue
+                    }
                 }
                 .onFailure { error ->
                     handleError(
@@ -913,8 +935,36 @@ class MobileMesViewModel @Inject constructor(
         else shift = queueOfflineChange()
     }
 
-    fun acceptTask(taskId: String, comment: String = "") = updateTask(taskId) { task ->
-        task.copy(status = TaskStatus.SENT, acceptanceStatus = AcceptanceStatus.ACCEPTED, acceptedByEmployeeId = currentEmployee.id, acceptanceComment = comment, checklist = task.checklist.map { it.copy(reviewStatus = if (it.reviewStatus == ReviewStatus.REJECTED) ReviewStatus.REJECTED else ReviewStatus.ACCEPTED) }).markOffline()
+    fun acceptTask(taskId: String, comment: String = "") {
+        val task = tasks.firstOrNull { it.id == taskId } ?: return
+        val reportId = task.workReportId
+        if (reportId == null) {
+            lastMessage = "У задачи отсутствует серверный отчёт для приёмки"
+            return
+        }
+        safeLaunch("Accept work report failed", fallbackMessage = "Не удалось подтвердить выполнение задачи") {
+            runCatching { workTaskApi.acceptWorkReport(reportId) }
+                .onSuccess { report ->
+                    updateTask(taskId) { current ->
+                        current.copy(
+                            status = TaskStatus.SENT,
+                            acceptanceStatus = AcceptanceStatus.ACCEPTED,
+                            acceptedByEmployeeId = report.acceptedByEmployeeId ?: currentEmployee.id,
+                            acceptanceComment = comment,
+                            checklist = current.checklist.map { item ->
+                                item.copy(reviewStatus = if (item.reviewStatus == ReviewStatus.REJECTED) ReviewStatus.REJECTED else ReviewStatus.ACCEPTED)
+                            },
+                        )
+                    }
+                    lastMessage = "Выполнение задачи подтверждено"
+                }
+                .onFailure { error ->
+                    handleError(error, "Не удалось подтвердить выполнение задачи", "Accept work report failed. reportId=$reportId")
+                }
+        }
     }
-    fun rejectTask(taskId: String, comment: String) = updateTask(taskId) { it.copy(status = TaskStatus.BLOCKED, acceptanceStatus = AcceptanceStatus.REJECTED, acceptedByEmployeeId = currentEmployee.id, acceptanceComment = comment).markOffline() }
+
+    fun rejectTask(taskId: String, comment: String) {
+        lastMessage = "Возврат на доработку пока не поддерживается сервером"
+    }
 }
