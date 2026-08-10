@@ -51,6 +51,9 @@ fun SimpleOperationScreen(
     onChecklistDoneWithValues: (String, Map<String, String>) -> Unit,
     onChecklistProblem: (String, String, String) -> Unit,
     onComplete: () -> Unit,
+    onSkip: (String) -> Unit,
+    onGeneralComplete: (String) -> Unit,
+    onGeneralReject: (String, String) -> Unit,
     onPhoto: (String, String) -> Unit,
     onVideo: (String, String) -> Unit,
     onFile: (String, String) -> Unit,
@@ -212,7 +215,16 @@ fun SimpleOperationScreen(
                 }
             } else if (task.checklist.isEmpty()) {
                 item {
-                    SimpleStandaloneForm(task, definition, onValue, onComplete)
+                    SimpleStandaloneForm(
+                        task = task,
+                        definition = definition,
+                        onValue = onValue,
+                        onComment = onComment,
+                        onComplete = onComplete,
+                        onSkip = onSkip,
+                        onGeneralComplete = onGeneralComplete,
+                        onGeneralReject = onGeneralReject,
+                    )
                 }
             }
         }
@@ -753,12 +765,96 @@ private fun SimpleItemForm(
 }
 
 @Composable
-private fun SimpleStandaloneForm(task: MobileTask, definition: OperationDefinition, onValue: (String, String) -> Unit, onComplete: () -> Unit) {
+private fun SimpleStandaloneForm(
+    task: MobileTask,
+    definition: OperationDefinition,
+    onValue: (String, String) -> Unit,
+    onComment: (String) -> Unit,
+    onComplete: () -> Unit,
+    onSkip: (String) -> Unit,
+    onGeneralComplete: (String) -> Unit,
+    onGeneralReject: (String, String) -> Unit,
+) {
     val values = remember(task.id) { mutableStateMapOf<String, String>().apply { definition.fields.forEach { put(it.id, task.result.values[it.id] ?: defaultValue(it)) } } }
+    var comment by remember(task.id) { mutableStateOf(task.result.comment) }
+    var showRejectDialog by remember(task.id) { mutableStateOf(false) }
+    var rejectReason by remember(task.id) { mutableStateOf("") }
+    var rejectError by remember(task.id) { mutableStateOf(false) }
+
     SimpleCard {
         Text("Выполнение задачи", color = SimpleText, fontSize = 20.sp, fontWeight = FontWeight.Black)
         definition.fields.forEach { field -> SimpleField(field, values[field.id].orEmpty()) { values[field.id] = it; onValue(field.id, it) } }
-        SimpleButton(definition.completionLabel, onComplete, Modifier.fillMaxWidth())
+        if (task.isGeneral) {
+            OutlinedTextField(
+                value = comment,
+                onValueChange = {
+                    comment = it
+                    onComment(it)
+                },
+                modifier = Modifier.fillMaxWidth(),
+                label = { Text("Комментарий к задаче") },
+                placeholder = { Text("Добавьте результат или пояснение") },
+                minLines = 3,
+                shape = RoundedCornerShape(16.dp),
+            )
+            SimpleButton(
+                "Завершить задачу",
+                { onGeneralComplete(comment.trim()) },
+                Modifier.fillMaxWidth(),
+            )
+            OutlinedButton(
+                onClick = { showRejectDialog = true },
+                modifier = Modifier.fillMaxWidth(),
+                colors = ButtonDefaults.outlinedButtonColors(contentColor = SimpleRed),
+                border = BorderStroke(1.dp, SimpleRed),
+            ) {
+                Text("Отклонить задачу", fontWeight = FontWeight.Bold)
+            }
+        } else {
+            SimpleButton(definition.completionLabel, onComplete, Modifier.fillMaxWidth())
+        }
+    }
+
+    if (task.isGeneral && showRejectDialog) {
+        AlertDialog(
+            onDismissRequest = { showRejectDialog = false },
+            title = { Text("Отклонить задачу?") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("Укажите причину. Она будет отправлена на сервер вместе с комментарием к задаче.")
+                    OutlinedTextField(
+                        value = rejectReason,
+                        onValueChange = {
+                            rejectReason = it
+                            rejectError = false
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                        label = { Text("Причина отклонения") },
+                        supportingText = if (rejectError) {
+                            { Text("Причина обязательна", color = SimpleRed) }
+                        } else null,
+                        isError = rejectError,
+                        minLines = 2,
+                    )
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        if (rejectReason.isBlank()) {
+                            rejectError = true
+                        } else {
+                            showRejectDialog = false
+                            onGeneralReject(rejectReason.trim(), comment.trim())
+                        }
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = SimpleRed),
+                ) { Text("Отклонить") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showRejectDialog = false }) { Text("Отмена") }
+            },
+        )
     }
 }
 

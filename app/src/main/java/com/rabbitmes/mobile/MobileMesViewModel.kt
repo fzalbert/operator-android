@@ -425,7 +425,9 @@ class MobileMesViewModel @Inject constructor(
             runCatching { workTaskApi.getMyWorkTasks() }
                 .onSuccess { page ->
                     val latestTasks = page.items
-                        .groupBy { task -> task.scheduledDate to task.operationId }
+                        .groupBy { task ->
+                            task.scheduledDate to (task.operationId ?: "work-task:${task.id}")
+                        }
                         .values
                         .mapNotNull { duplicates ->
                             duplicates.maxWithOrNull(
@@ -801,8 +803,9 @@ class MobileMesViewModel @Inject constructor(
         ).markOffline()
     }
 
-    fun completeTask(taskId: String) {
+    fun completeTask(taskId: String, commentOverride: String? = null) {
         val currentTask = tasks.first { it.id == taskId }
+        val completionComment = commentOverride ?: currentTask.result.comment
         val checklist = if (currentTask.operationType == OperationType.NEST_CONTROL) {
             currentTask.checklist.map { item ->
                 if (item.status == ChecklistStatus.PENDING) item.copy(status = ChecklistStatus.DONE) else item
@@ -841,7 +844,7 @@ class MobileMesViewModel @Inject constructor(
                     id = remoteTaskId,
                     request = CompleteWorkTaskRequest(
                         abortReason = currentTask.result.problemReason,
-                        comment = currentTask.result.comment.ifBlank { null },
+                        comment = completionComment.ifBlank { null },
                     ),
                 )
             }.onSuccess { remoteTask ->
@@ -865,6 +868,44 @@ class MobileMesViewModel @Inject constructor(
     }
 
     fun skipTask(taskId: String, reason: String) = updateTask(taskId) { it.copy(status = TaskStatus.SKIPPED, result = it.result.copy(problemReason = reason, comment = reason)).markOffline() }
+
+    fun rejectGeneralTask(taskId: String, reason: String, commentOverride: String? = null) {
+        val currentTask = tasks.first { it.id == taskId }
+        val rejectionComment = commentOverride ?: currentTask.result.comment
+        val remoteTaskId = taskId.toLongOrNull()
+        if (remoteTaskId == null) {
+            skipTask(taskId, reason)
+            return
+        }
+
+        updateTask(taskId) { task ->
+            task.copy(result = task.result.copy(problemReason = reason)).markOffline()
+        }
+        safeLaunch("Reject general work task action failed", fallbackMessage = "Не удалось отклонить задачу") {
+            runCatching {
+                workTaskApi.completeWorkTask(
+                    id = remoteTaskId,
+                    request = CompleteWorkTaskRequest(
+                        abortReason = reason,
+                            comment = rejectionComment.ifBlank { null },
+                    ),
+                )
+            }.onSuccess { remoteTask ->
+                updateTask(taskId) { task ->
+                    task.copy(
+                        status = remoteTask.status.toTaskStatus(),
+                        result = task.result.copy(
+                            problemReason = reason,
+                            completedAt = remoteTask.completedAt ?: "now",
+                        ),
+                    )
+                }
+                lastMessage = "Задача отклонена"
+            }.onFailure { error ->
+                handleError(error, "Не удалось отклонить задачу", "Reject general work task failed. taskId=$remoteTaskId")
+            }
+        }
+    }
 
     fun addRemark(taskId: String, itemId: String?, reason: String, comment: String, attachments: List<MediaAttachment>) {
         remarks = listOf(AcceptanceRemark("remark-${System.currentTimeMillis()}", taskId, itemId, reason, comment, attachments, "now")) + remarks

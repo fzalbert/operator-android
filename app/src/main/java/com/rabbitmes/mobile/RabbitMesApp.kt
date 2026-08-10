@@ -92,7 +92,18 @@ fun RabbitMesApp(vm: MobileMesViewModel) {
                     onChecklistProblem = { itemId, reason, comment -> vm.markChecklistItem(task.id, itemId, ChecklistStatus.PROBLEM, reason, comment) },
                     onChecklistSkip = { itemId, reason -> vm.markChecklistItem(task.id, itemId, ChecklistStatus.SKIPPED, reason, "Пропущено") },
                     onComplete = { vm.completeTask(task.id); vm.navigate(AppScreen.Tasks) },
-                    onSkip = { vm.skipTask(task.id, it); vm.navigate(AppScreen.Tasks) },
+                    onSkip = {
+                        if (task.isGeneral) vm.rejectGeneralTask(task.id, it) else vm.skipTask(task.id, it)
+                        vm.navigate(AppScreen.Tasks)
+                    },
+                    onGeneralComplete = { comment ->
+                        vm.completeTask(task.id, comment)
+                        vm.navigate(AppScreen.Tasks)
+                    },
+                    onGeneralReject = { reason, comment ->
+                        vm.rejectGeneralTask(task.id, reason, comment)
+                        vm.navigate(AppScreen.Tasks)
+                    },
                     onOpenAnimal = { rfid -> vm.navigate(AppScreen.RabbitProfile(rfid, task.id)) },
                         canEdit = canEdit,
                     )
