@@ -129,7 +129,7 @@ fun ShiftScreen(
     Card(shape = RoundedCornerShape(24.dp), colors = CardDefaults.cardColors(Color.White), elevation = CardDefaults.cardElevation(5.dp), modifier = Modifier.fillMaxWidth().padding(horizontal = 18.dp)) {
         Row { Box(Modifier.width(5.dp).height(190.dp).background(accent)); Column(Modifier.weight(1f).padding(16.dp)) {
             Row(Modifier.fillMaxWidth(), Arrangement.SpaceBetween, Alignment.CenterVertically) { StatusBadge("Следующая", accent); Text(task.plannedStart, color = Color(0xFF60726A), fontSize = 13.sp) }
-            Spacer(Modifier.height(12.dp)); Text(task.title, color = Color(0xFF10231B), fontSize = 20.sp, fontWeight = FontWeight.Black); Spacer(Modifier.height(7.dp)); Text("${task.operationType.title} · прогресс ${task.progress}%", color = Color(0xFF60726A), fontSize = 14.sp); Spacer(Modifier.height(14.dp))
+            Spacer(Modifier.height(12.dp)); Text(task.title, color = Color(0xFF10231B), fontSize = 20.sp, fontWeight = FontWeight.Black); Spacer(Modifier.height(7.dp)); Text("${task.operationTypeTitle} · прогресс ${task.progress}%", color = Color(0xFF60726A), fontSize = 14.sp); Spacer(Modifier.height(14.dp))
             Button(onOpen, Modifier.fillMaxWidth().heightIn(min = 50.dp), shape = RoundedCornerShape(16.dp), colors = ButtonDefaults.buttonColors(ShiftGreen)) { Text("Открыть задачу", fontWeight = FontWeight.ExtraBold) }
         } }
     }

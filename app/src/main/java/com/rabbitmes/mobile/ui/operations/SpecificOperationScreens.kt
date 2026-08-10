@@ -231,7 +231,27 @@ fun InseminationScreen(
 fun PalpationScreen(task: MobileTask, scannedRfid: String?, onBack: () -> Unit, onBegin: () -> Unit, onScan: (String, Map<String,String>) -> Unit, onOpenRfidScanner: (Map<String, String>) -> Unit, onValue: (String,String) -> Unit, onPhoto: (String,String)->Unit, onVideo: (String,String)->Unit, onFile: (String,String)->Unit, onComment: (String)->Unit, onChecklistDone: (String)->Unit, onChecklistProblem: (String,String,String)->Unit, onChecklistSkip: (String,String)->Unit, onComplete: () -> Unit, onSkip: (String)->Unit, onOpenAnimal: (String)->Unit, canEdit: Boolean = true) {
     var result by remember { mutableStateOf("Сукрольная") }
     TaskExecutionScaffold(task, onBack, onBegin, onComplete, onSkip, onChecklistDone, onChecklistProblem, onChecklistSkip, allowRootComplete = false, canEdit = canEdit) {
-        MesCard { Text("Результат пальпации", fontWeight = FontWeight.Bold); Row(horizontalArrangement = Arrangement.spacedBy(MesSpacing.smallGap)) { listOf("Сукрольная", "Не сукрольная", "Сомнительно").forEach { FilterChip(selected = result == it, onClick = { result = it; onValue("palpationResult", it) }, label = { Text(it) }) } } }
+        MesCard {
+            Text("Результат пальпации", fontWeight = FontWeight.Bold)
+            Column(verticalArrangement = Arrangement.spacedBy(MesSpacing.smallGap)) {
+                Row(horizontalArrangement = Arrangement.spacedBy(MesSpacing.smallGap)) {
+                    listOf("Сукрольная", "Не сукрольная").forEach { option ->
+                        FilterChip(
+                            selected = result == option,
+                            onClick = { result = option; onValue("palpationResult", option) },
+                            label = { Text(option) },
+                            modifier = Modifier.weight(1f),
+                        )
+                    }
+                }
+                FilterChip(
+                    selected = result == "Сомнительно",
+                    onClick = { result = "Сомнительно"; onValue("palpationResult", "Сомнительно") },
+                    label = { Text("Сомнительно") },
+                    modifier = Modifier.fillMaxWidth(),
+                )
+            }
+        }
         ScanPanel("RFID самки", "RFID", onScan = { rfid -> onScan(rfid, mapOf("palpationResult" to result)) }, onOpenScanner = { onOpenRfidScanner(mapOf("palpationResult" to result)) }, initialRfid = scannedRfid)
         ProblemAndMediaControls(onPhoto, onVideo, onFile, onComment)
         ExecutionEvidencePanel(task)
@@ -443,24 +463,24 @@ fun FeedOperationScreen(task: MobileTask, onBack: () -> Unit, onBegin: () -> Uni
 @Composable
 fun OperationScreenFactory(task: MobileTask, definition: OperationDefinition, onBack: () -> Unit, onBegin: () -> Unit, scannedRfid: String? = null, onScan: (String, Map<String,String>) -> Unit, onOpenRfidScanner: (Map<String, String>) -> Unit, onValue: (String,String) -> Unit, onPhoto: (String,String)->Unit, onVideo: (String,String)->Unit, onFile: (String,String)->Unit, onComment: (String)->Unit, onChecklistDone: (String)->Unit, onChecklistDoneWithValues: (String, Map<String, String>)->Unit, onChecklistProblem: (String,String,String)->Unit, onChecklistSkip: (String,String)->Unit, onComplete: () -> Unit, onSkip: (String)->Unit, onOpenAnimal: (String)->Unit, canEdit: Boolean = true) {
     SimpleOperationScreen(
-        task = task,
-        definition = definition,
-        scannedRfid = scannedRfid,
-        onBack = onBack,
-        onBegin = onBegin,
-        onScan = onScan,
-        onOpenRfidScanner = onOpenRfidScanner,
-        onValue = onValue,
-        onChecklistDone = onChecklistDone,
-        onChecklistDoneWithValues = onChecklistDoneWithValues,
-        onChecklistProblem = onChecklistProblem,
-        onComplete = onComplete,
-        onPhoto = onPhoto,
-        onVideo = onVideo,
-        onFile = onFile,
-        onComment = onComment,
-        onOpenAnimal = onOpenAnimal,
-        canEdit = canEdit,
+            task = task,
+            definition = definition,
+            scannedRfid = scannedRfid,
+            onBack = onBack,
+            onBegin = onBegin,
+            onScan = onScan,
+            onOpenRfidScanner = onOpenRfidScanner,
+            onValue = onValue,
+            onChecklistDone = onChecklistDone,
+            onChecklistDoneWithValues = onChecklistDoneWithValues,
+            onChecklistProblem = onChecklistProblem,
+            onComplete = onComplete,
+            onPhoto = onPhoto,
+            onVideo = onVideo,
+            onFile = onFile,
+            onComment = onComment,
+            onOpenAnimal = onOpenAnimal,
+            canEdit = canEdit,
     )
     return
     @Suppress("UNREACHABLE_CODE")

@@ -160,7 +160,7 @@ fun SimpleOperationScreen(
                 Text(task.title, color = Color.White, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Black)
                 Spacer(Modifier.height(5.dp))
                 Text(
-                    listOf(definition.type.title, workshopName(task), hangarName(task))
+                    listOf(task.operationTypeTitle, workshopName(task), hangarName(task))
                         .filter(String::isNotBlank)
                         .joinToString(" · "),
                     color = Color(0xFFD6EEE2),

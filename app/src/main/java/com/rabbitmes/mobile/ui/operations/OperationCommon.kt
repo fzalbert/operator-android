@@ -108,7 +108,7 @@ fun TaskExecutionScaffold(
     }
 
     LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = MesSpacing.screenBottom)) {
-        item { AppHeader(task.title, "${task.plannedStart} · ${task.operationType.title}", onBack) }
+        item { AppHeader(task.title, "${task.plannedStart} · ${task.operationTypeTitle}", onBack) }
         item {
             MesCard {
                 Row(

@@ -64,7 +64,7 @@ fun TaskCard(task: MobileTask, isNext: Boolean = false, onClick: () -> Unit) = P
             } else {
                 Row(Modifier.fillMaxWidth(), Arrangement.SpaceBetween, Alignment.CenterVertically) { TaskStatusBadge(task.status); Text("${task.plannedStart} · ${task.plannedDurationMinutes} мин", color = Color(0xFF60726A), fontSize = 12.sp) }
             }
-            Spacer(Modifier.height(12.dp)); Text(task.title, color = Color(0xFF10231B), fontSize = 18.sp, lineHeight = 22.sp, fontWeight = FontWeight.Black); Spacer(Modifier.height(6.dp)); Text(task.operationType.title, color = Color(0xFF60726A), fontSize = 13.sp)
+            Spacer(Modifier.height(12.dp)); Text(task.title, color = Color(0xFF10231B), fontSize = 18.sp, lineHeight = 22.sp, fontWeight = FontWeight.Black); Spacer(Modifier.height(6.dp)); Text(task.operationTypeTitle, color = Color(0xFF60726A), fontSize = 13.sp)
             Spacer(Modifier.height(12.dp))
             if (largeFont) {
                 Text(

@@ -116,7 +116,7 @@ fun SyncQueueScreen(shift: ShiftState, tasks: List<MobileTask>, onSync: () -> Un
                         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                             Column(Modifier.weight(1f)) {
                                 Text(task.title, fontWeight = FontWeight.Bold)
-                                Text("${task.plannedStart} · ${task.operationType.title}", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                Text("${task.plannedStart} · ${task.operationTypeTitle}", color = MaterialTheme.colorScheme.onSurfaceVariant)
                             }
                             TaskStatusBadge(task.status)
                         }

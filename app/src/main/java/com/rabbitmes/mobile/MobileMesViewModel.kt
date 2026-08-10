@@ -86,8 +86,11 @@ private fun WorkTaskDto.toMobileTask(
     rabbits: List<RabbitDto> = emptyList(),
 ): MobileTask {
     val operationType = resolveOperationType()
+    val isGeneral = operationType == OperationType.CUSTOM_TASK
     val targetType = MockRepository.operation(operationType).targetType
-    val checklist = if (subtasks.isNotEmpty()) {
+    val checklist = if (isGeneral) {
+        emptyList()
+    } else if (subtasks.isNotEmpty()) {
         subtasks.map { subtask ->
             ChecklistItem(
                 id = subtask.id.toString(),
@@ -110,14 +113,14 @@ private fun WorkTaskDto.toMobileTask(
     val taskStatus = status.toTaskStatus()
     return MobileTask(
         id = id.toString(),
-        title = operationName.ifBlank { programName.ifBlank { "Задача $id" } },
+        title = name.ifBlank { operationName.orEmpty().ifBlank { programName.orEmpty().ifBlank { "Задача $id" } } },
         operationType = operationType,
         workshopId = manufactureId?.toString().orEmpty(),
         hangarId = manufactureId?.toString().orEmpty(),
         assignedEmployeeId = employeeId,
         dueDate = scheduledDate,
         plannedStart = startedAt.toDisplayTime(),
-        plannedDurationMinutes = 0,
+        plannedDurationMinutes = durationMinutes ?: 0,
         priority = Priority.NORMAL,
         status = taskStatus,
         checklist = checklist,
@@ -131,38 +134,55 @@ private fun WorkTaskDto.toMobileTask(
         result = ExecutionResult(
             completedAt = completedAt,
         ),
-        description = subtasks.map { it.description.trim() }
-            .filter(String::isNotBlank)
-            .distinct()
-            .joinToString("\n"),
+        description = description.ifBlank {
+            subtasks.map { it.description.trim() }
+                .filter(String::isNotBlank)
+                .distinct()
+                .joinToString("\n")
+        },
+        operationTypeTitle = operationName.orEmpty().ifBlank { operationType.title },
+        isGeneral = isGeneral,
+        pendingGeneralSubtaskIds = if (isGeneral) {
+            subtasks.filterNot { it.status.normalizedStatus() in COMPLETED_SUBTASK_STATUSES }
+                .map { it.id }
+        } else {
+            emptyList()
+        },
     )
 }
 
-private fun WorkTaskDto.resolveOperationType(): OperationType {
-    // Category/type defines the UI contract. operationId only identifies the
-    // business operation and must not select a specialized form for GENERAL.
-    val isGeneral = operationCategory.trim().equals("general", ignoreCase = true) ||
-        subtasks.any { it.type.trim().equals("general", ignoreCase = true) }
-    if (isGeneral) {
-        return OperationType.CUSTOM_TASK
-    }
+private val COMPLETED_SUBTASK_STATUSES = setOf("COMPLETED", "DONE", "FINISHED", "SKIPPED")
 
+private fun WorkTaskDto.resolveOperationType(): OperationType {
     val candidates = listOf(operationId, operationName, operationCategory)
-        .map(String::trim)
+        .map { it.orEmpty().trim() }
         .filter(String::isNotBlank)
-    return OPERATION_ID_ALIASES[operationId.trim().lowercase()]
+    val resolved = OPERATION_ID_ALIASES[operationId.orEmpty().trim().lowercase()]
         ?: OperationType.entries.firstOrNull { type ->
             candidates.any { candidate ->
                 candidate.equals(type.name, ignoreCase = true) ||
                     candidate.equals(type.title, ignoreCase = true)
             }
-        } ?: OperationType.CUSTOM_TASK
+        }
+    return resolved?.takeIf(SPECIALIZED_OPERATION_TYPES::contains)
+        ?: OperationType.CUSTOM_TASK
 }
+
+private val SPECIALIZED_OPERATION_TYPES = setOf(
+    OperationType.INSEMINATION,
+    OperationType.NEST_PREPARATION,
+    OperationType.NEST_SELECTION,
+    OperationType.LACTATION_CONTROL,
+    OperationType.WEIGHING,
+    OperationType.LIGHT_STIMULATION,
+    OperationType.LIGHTING_CHECK,
+)
 
 private val OPERATION_ID_ALIASES = mapOf(
     "animal_placement" to OperationType.ANIMAL_SETTLEMENT,
     "females_delivery" to OperationType.FEMALE_DELIVERY,
     "culling" to OperationType.ANIMAL_DEPARTURE,
+    "light_check" to OperationType.LIGHTING_CHECK,
 )
 
 private fun List<RabbitDto>.toRabbitChecklist(taskId: Long): List<ChecklistItem> =
@@ -809,6 +829,14 @@ class MobileMesViewModel @Inject constructor(
 
         safeLaunch("Complete work task action failed", fallbackMessage = "Не удалось завершить задачу") {
             runCatching {
+                if (currentTask.isGeneral) {
+                    currentTask.pendingGeneralSubtaskIds.forEach { subtaskId ->
+                        workTaskApi.completeWorkSubtask(
+                            subtaskId = subtaskId,
+                            request = CompleteWorkSubtaskRequest(),
+                        )
+                    }
+                }
                 workTaskApi.completeWorkTask(
                     id = remoteTaskId,
                     request = CompleteWorkTaskRequest(
