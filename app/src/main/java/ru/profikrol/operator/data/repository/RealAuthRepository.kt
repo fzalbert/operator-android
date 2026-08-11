@@ -101,7 +101,7 @@ class RealAuthRepository @Inject constructor(
                         profile.name,
                         profile.secondName,
                     )
-                        .filter(String::isNotBlank)
+                        .mapNotNull { it?.takeIf(String::isNotBlank) }
                         .joinToString(" ")
 
                     user = user.copy(

@@ -26,8 +26,6 @@ import com.rabbitmes.mobile.domain.*
 import com.rabbitmes.mobile.data.MockRepository
 import com.rabbitmes.mobile.ui.components.AttachmentPickerButtons
 import com.rabbitmes.mobile.ui.components.SelectionDropdown
-import ru.profikrol.operator.domain.model.Rabbit as RabbitInfo
-import ru.profikrol.operator.feature.rfidscanresult.RabbitInfoCard
 
 private val SimpleGreen = Color(0xFF1F8A5B)
 private val SimpleDarkGreen = Color(0xFF0B2F24)
@@ -578,21 +576,13 @@ private fun SimpleScanPanel(
             secondary = true,
         )
         if (!scannedRfid.isNullOrBlank()) {
-            val scannedRabbit = MockRepository.rabbitByRfid(scannedRfid)
-            SimpleScanStatus(scannedRfid, scannedRabbit != null)
-            if (scannedRabbit != null) {
-                RabbitInfoCard(
-                    isLoading = false,
-                    rabbit = RabbitInfo(
-                        rfidCode = scannedRabbit.rfid,
-                        status = scannedRabbit.healthStatus,
-                        age = "${scannedRabbit.ageDays / 30} мес",
-                        cage = MockRepository.cage(scannedRabbit.cageId)?.code ?: "—",
-                        weight = "%.2f кг".format(scannedRabbit.lastWeightKg),
-                        diagnosis = scannedRabbit.healthStatus,
-                    ),
-                    onClick = { onOpenAnimal(scannedRabbit.rfid) },
-                )
+            val scannedRabbitItem = task.checklist.firstOrNull { item ->
+                item.targetType == TargetType.RABBIT &&
+                    item.targetId.equals(scannedRfid, ignoreCase = true)
+            }
+            SimpleScanStatus(scannedRfid, scannedRabbitItem != null)
+            scannedRabbitItem?.let { item ->
+                SimpleReadonly("Самка из задания", item.label)
             }
         }
         definition.fields.filterNot(::isRfidField).forEach { field -> SimpleField(field, values[field.id].orEmpty()) { values[field.id] = it } }
@@ -1066,7 +1056,7 @@ private fun SimpleBadge(text: String, color: Color) {
 private fun isRfidField(field: OperationField) = field.id.contains("rfid", true)
 private fun ChecklistItem.defaultValueForField(definition: OperationDefinition, field: OperationField): String {
     if (definition.type == OperationType.NEST_SELECTION && field.id == "sourceCage") {
-        return MockRepository.cage(targetId)?.code ?: defaultValue(field)
+        return MockRepository.cage(targetId)?.code ?: targetId.ifBlank { defaultValue(field) }
     }
     return defaultValue(field)
 }

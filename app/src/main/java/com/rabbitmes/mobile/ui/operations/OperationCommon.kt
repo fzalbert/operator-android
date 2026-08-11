@@ -225,10 +225,10 @@ fun CageScanPanel(
 
     MesCard {
         Text(title, fontWeight = FontWeight.Bold)
-        Text("Отсканируйте RFID клетки.", color = MaterialTheme.colorScheme.onSurfaceVariant)
-        OutlinedTextField(rfid, { rfid = it; scannedRfid = null }, Modifier.fillMaxWidth(), label = { Text("RFID клетки") })
+        Text("Укажите клетку.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+        OutlinedTextField(rfid, { rfid = it; scannedRfid = null }, Modifier.fillMaxWidth(), label = { Text("ID клетки") })
         Row(horizontalArrangement = Arrangement.spacedBy(MesSpacing.smallGap), modifier = Modifier.fillMaxWidth()) {
-            Button(onClick = { onOpenScanner?.invoke() ?: run { scannedRfid = rfid } }, Modifier.weight(1f)) { Text("Скан клетки") }
+            Button(onClick = { onOpenScanner?.invoke() ?: run { scannedRfid = rfid } }, Modifier.weight(1f)) { Text("Выбрать клетку") }
             OutlinedButton(
                 onClick = {
                     val mockRfid = MockRepository.allCages.first().rfid

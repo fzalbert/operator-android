@@ -15,6 +15,8 @@ import ru.profikrol.operator.data.remote.profile.ProfileApi
 import ru.profikrol.operator.data.remote.profile.ShiftDto
 import ru.profikrol.operator.data.remote.rabbit.RabbitApi
 import ru.profikrol.operator.data.remote.rabbit.RabbitDto
+import ru.profikrol.operator.data.remote.cell.CellApi
+import ru.profikrol.operator.data.remote.cell.CellDto
 import ru.profikrol.operator.data.remote.worktask.WorkTaskApi
 import ru.profikrol.operator.data.remote.worktask.WorkTaskDto
 import ru.profikrol.operator.data.remote.worktask.CompleteWorkSubtaskRequest
@@ -39,6 +41,7 @@ import retrofit2.HttpException
 private const val API_LOG_TAG = "RabbitApi"
 private const val TASKS_REFRESH_INTERVAL_MS = 30_000L
 private const val RABBITS_PAGE_SIZE = 100
+private const val CELLS_PAGE_SIZE = 100
 
 data class AppErrorMessage(
     val id: Long,
@@ -84,12 +87,20 @@ private fun ShiftDto?.toShiftState(employeeId: String, previous: ShiftState): Sh
 private fun WorkTaskDto.toMobileTask(
     employeeId: String,
     rabbits: List<RabbitDto> = emptyList(),
+    cells: List<CellDto> = emptyList(),
 ): MobileTask {
     val operationType = resolveOperationType()
     val isGeneral = operationType == OperationType.CUSTOM_TASK
     val targetType = MockRepository.operation(operationType).targetType
     val checklist = if (isGeneral) {
         emptyList()
+    } else if (operationType == OperationType.INSEMINATION) {
+        rabbits.toRabbitChecklist(taskId = id)
+    } else if (operationType == OperationType.NEST_SELECTION) {
+        cells.take(1).toCageChecklist(
+            taskId = id,
+            serverSubtaskId = subtasks.firstOrNull()?.id,
+        )
     } else if (subtasks.isNotEmpty()) {
         subtasks.map { subtask ->
             ChecklistItem(
@@ -134,8 +145,8 @@ private fun WorkTaskDto.toMobileTask(
         result = ExecutionResult(
             completedAt = completedAt,
         ),
-        description = description.ifBlank {
-            subtasks.map { it.description.trim() }
+        description = description.orEmpty().ifBlank {
+            subtasks.map { it.description.orEmpty().trim() }
                 .filter(String::isNotBlank)
                 .distinct()
                 .joinToString("\n")
@@ -155,7 +166,7 @@ private fun WorkTaskDto.toMobileTask(
 private val COMPLETED_SUBTASK_STATUSES = setOf("COMPLETED", "DONE", "FINISHED", "SKIPPED")
 
 private fun WorkTaskDto.resolveOperationType(): OperationType {
-    val candidates = listOf(operationId, operationName, operationCategory)
+    val candidates = listOf(operationId, operationName, name, operationCategory)
         .map { it.orEmpty().trim() }
         .filter(String::isNotBlank)
     val resolved = OPERATION_ID_ALIASES[operationId.orEmpty().trim().lowercase()]
@@ -173,7 +184,6 @@ private val SPECIALIZED_OPERATION_TYPES = setOf(
     OperationType.INSEMINATION,
     OperationType.NEST_PREPARATION,
     OperationType.NEST_SELECTION,
-    OperationType.LACTATION_CONTROL,
     OperationType.WEIGHING,
     OperationType.LIGHT_STIMULATION,
     OperationType.LIGHTING_CHECK,
@@ -204,6 +214,19 @@ private fun List<RabbitDto>.toRabbitChecklist(taskId: Long): List<ChecklistItem>
         }
         .distinctBy { it.targetId.lowercase() }
         .toList()
+
+private fun List<CellDto>.toCageChecklist(
+    taskId: Long,
+    serverSubtaskId: Long?,
+): List<ChecklistItem> =
+    map { cell ->
+        ChecklistItem(
+            id = serverSubtaskId?.toString() ?: "task-$taskId-cell-${cell.id}",
+            label = cell.displayName,
+            targetType = TargetType.CAGE,
+            targetId = cell.displayName,
+        )
+    }
 
 private fun String.toTaskStatus(): TaskStatus = when (normalizedStatus()) {
     "NEW", "CREATED", "PLANNED", "PENDING" -> TaskStatus.NEW
@@ -247,6 +270,7 @@ class MobileMesViewModel @Inject constructor(
     private val profileApi: ProfileApi,
     private val workTaskApi: WorkTaskApi,
     private val rabbitApi: RabbitApi,
+    private val cellApi: CellApi,
 ) : ViewModel() {
     private var nextErrorId = 0L
     private val globalErrorHandler = CoroutineExceptionHandler { _, error ->
@@ -262,6 +286,8 @@ class MobileMesViewModel @Inject constructor(
     var tasks: List<MobileTask> by mutableStateOf(emptyList())
         private set
     var isShiftActionInProgress: Boolean by mutableStateOf(false)
+        private set
+    var isServerActionInProgress: Boolean by mutableStateOf(false)
         private set
     var isTasksLoading: Boolean by mutableStateOf(false)
         private set
@@ -284,6 +310,7 @@ class MobileMesViewModel @Inject constructor(
     val rabbits = MockRepository.rabbits
     val allCages = MockRepository.allCages
     val operations = MockRepository.operationDefinitions
+    private var serverCells by mutableStateOf<List<CellDto>>(emptyList())
 
     init {
         safeLaunch("Notification subscription failed") {
@@ -312,6 +339,22 @@ class MobileMesViewModel @Inject constructor(
             throw cancelled
         } catch (error: Throwable) {
             handleError(error, fallbackMessage, logMessage)
+        }
+    }
+
+    private fun launchServerAction(
+        logMessage: String,
+        fallbackMessage: String,
+        block: suspend () -> Unit,
+    ): Job? {
+        if (isServerActionInProgress) return null
+        isServerActionInProgress = true
+        return safeLaunch(logMessage, fallbackMessage) {
+            try {
+                block()
+            } finally {
+                isServerActionInProgress = false
+            }
         }
     }
 
@@ -371,8 +414,8 @@ class MobileMesViewModel @Inject constructor(
     }
     fun startShift() {
         if (isShiftActionInProgress) return
+        isShiftActionInProgress = true
         safeLaunch("Open shift action failed", fallbackMessage = "Не удалось открыть смену") {
-            isShiftActionInProgress = true
             try {
                 runCatching { profileApi.openShift() }
                     .onSuccess { remoteShift ->
@@ -381,7 +424,23 @@ class MobileMesViewModel @Inject constructor(
                         loadMyTasks()
                     }
                     .onFailure { error ->
-                        handleError(error, "Не удалось открыть смену", "Open shift failed")
+                        if (error is HttpException && error.code() == 400) {
+                            runCatching { profileApi.getMyProfile() }
+                                .onSuccess { profile ->
+                                    if (profile.shift?.isOpen == true) {
+                                        shift = profile.shift.toShiftState(currentEmployee.id, shift)
+                                        lastMessage = "Смена уже открыта"
+                                        loadMyTasks()
+                                    } else {
+                                        handleError(error, "Не удалось открыть смену", "Open shift failed")
+                                    }
+                                }
+                                .onFailure {
+                                    handleError(error, "Не удалось открыть смену", "Open shift failed")
+                                }
+                        } else {
+                            handleError(error, "Не удалось открыть смену", "Open shift failed")
+                        }
                     }
             } finally {
                 isShiftActionInProgress = false
@@ -390,8 +449,8 @@ class MobileMesViewModel @Inject constructor(
     }
     fun finishShift(reason: String) {
         if (isShiftActionInProgress) return
+        isShiftActionInProgress = true
         safeLaunch("Close shift action failed", fallbackMessage = "Не удалось закрыть смену") {
-            isShiftActionInProgress = true
             try {
                 runCatching { profileApi.closeShift() }
                     .onSuccess { remoteShift ->
@@ -425,7 +484,12 @@ class MobileMesViewModel @Inject constructor(
         try {
             runCatching {
                 if (currentEmployee.role == RoleId.CHIEF_TECHNOLOGIST) {
-                    workTaskApi.getWorkTasksForAcceptance()
+                    val ownTasks = workTaskApi.getMyWorkTasks()
+                    val acceptanceTasks = workTaskApi.getWorkTasksForAcceptance()
+                    ru.profikrol.operator.data.remote.worktask.WorkTaskPageDto(
+                        items = (ownTasks.items + acceptanceTasks.items).distinctBy(WorkTaskDto::id),
+                        total = (ownTasks.items + acceptanceTasks.items).distinctBy(WorkTaskDto::id).size,
+                    )
                 } else {
                     workTaskApi.getMyWorkTasks()
                 }
@@ -443,8 +507,9 @@ class MobileMesViewModel @Inject constructor(
                             )
                         }
                     val needsRabbitChecklist = latestTasks.any { task ->
-                        task.subtasks.isEmpty() &&
-                            MockRepository.operation(task.resolveOperationType()).targetType == TargetType.RABBIT
+                        task.resolveOperationType() == OperationType.INSEMINATION ||
+                            (task.subtasks.isEmpty() &&
+                                MockRepository.operation(task.resolveOperationType()).targetType == TargetType.RABBIT)
                     }
                     val rabbits = if (needsRabbitChecklist) {
                         runCatching { loadAllRabbits() }
@@ -460,9 +525,31 @@ class MobileMesViewModel @Inject constructor(
                     } else {
                         emptyList()
                     }
+                    val needsCells = latestTasks.any {
+                        MockRepository.operation(it.resolveOperationType()).targetType == TargetType.CAGE
+                    }
+                    val cells = if (needsCells) {
+                        runCatching { loadAllCells() }
+                            .onSuccess { serverCells = it }
+                            .onFailure { error ->
+                                handleError(
+                                    error = error,
+                                    fallbackMessage = "Не удалось загрузить список клеток",
+                                    logMessage = "Cells request failed",
+                                    showToUser = showLoading,
+                                )
+                            }
+                            .getOrDefault(emptyList())
+                    } else {
+                        emptyList()
+                    }
                     val remoteTasks = latestTasks.map { dto ->
-                        dto.toMobileTask(currentEmployee.id, rabbits).let { task ->
-                            if (currentEmployee.role == RoleId.CHIEF_TECHNOLOGIST) {
+                        dto.toMobileTask(currentEmployee.id, rabbits, cells).let { task ->
+                            if (
+                                currentEmployee.role == RoleId.CHIEF_TECHNOLOGIST &&
+                                dto.requiresAcceptance &&
+                                dto.status.normalizedStatus() == "AWAITING_ACCEPTANCE"
+                            ) {
                                 task.copy(
                                     acceptanceRole = currentEmployee.role,
                                     acceptanceStatus = AcceptanceStatus.WAITING,
@@ -500,15 +587,27 @@ class MobileMesViewModel @Inject constructor(
         var page = 1
         while (true) {
             val batch = rabbitApi.getRabbits(page = page, pageSize = RABBITS_PAGE_SIZE)
-            val newItems = batch.filter { rabbit ->
+            val newItems = batch.items.filter { rabbit ->
                 val key = rabbit.id?.toString() ?: rabbit.rfid?.trim()?.lowercase().orEmpty()
                 key.isNotBlank() && knownKeys.add(key)
             }
             result += newItems
-            if (batch.size < RABBITS_PAGE_SIZE || newItems.isEmpty()) break
+            if (page >= batch.totalPages || newItems.isEmpty()) break
             page += 1
         }
         return result
+    }
+
+    private suspend fun loadAllCells(): List<CellDto> {
+        val result = mutableListOf<CellDto>()
+        var page = 1
+        while (true) {
+            val batch = cellApi.getCells(page = page, pageSize = CELLS_PAGE_SIZE)
+            result += batch.items
+            if (page >= batch.totalPages || batch.items.isEmpty()) break
+            page += 1
+        }
+        return result.distinctBy(CellDto::id)
     }
 
     fun startTasksAutoRefresh() {
@@ -568,7 +667,7 @@ class MobileMesViewModel @Inject constructor(
     fun nextPendingRfid(taskId: String): String? {
         val item = task(taskId).checklist.firstOrNull { it.status == ChecklistStatus.PENDING } ?: return null
         return when (item.targetType) {
-            TargetType.RABBIT -> rabbits.firstOrNull { it.id == item.targetId }?.rfid
+            TargetType.RABBIT -> item.targetId
             TargetType.CAGE -> allCages.firstOrNull { it.id == item.targetId }?.rfid
             TargetType.ROW,
             TargetType.HANGAR -> null
@@ -585,7 +684,18 @@ class MobileMesViewModel @Inject constructor(
     }
     fun tasksForAcceptance() = tasks.filter { it.requiresAcceptance && it.status == TaskStatus.DONE && it.acceptanceStatus == AcceptanceStatus.WAITING && it.acceptanceRole == currentEmployee.role }
     fun nextTask() = tasksForCurrentEmployee().filter { it.status != TaskStatus.DONE && it.status != TaskStatus.SENT && it.status != TaskStatus.SKIPPED }.minWithOrNull(compareBy<MobileTask> { it.priority.weight }.thenBy { it.plannedStart })
-    fun definition(type: OperationType) = MockRepository.operation(type)
+    fun definition(type: OperationType): OperationDefinition {
+        val definition = MockRepository.operation(type)
+        if (serverCells.isEmpty()) return definition
+        val cellOptions = serverCells.map(CellDto::displayName)
+        return definition.copy(
+            fields = definition.fields.map { field ->
+                if (field.id == "sourceCage" || field.id == "destinationCage" || field.id == "cellId") {
+                    field.copy(options = listOfNotNull(field.options.firstOrNull()) + cellOptions)
+                } else field
+            },
+        )
+    }
     private fun defaultScreenForRole(): AppScreen = when {
         currentEmployee.role == RoleId.CHIEF_TECHNOLOGIST && tasksForAcceptance().isNotEmpty() -> AppScreen.AcceptanceQueue
         else -> AppScreen.Shift
@@ -611,7 +721,7 @@ class MobileMesViewModel @Inject constructor(
             updateTask(taskId) { it.copy(status = TaskStatus.IN_PROGRESS).markOffline() }
             return
         }
-        safeLaunch("Start work task action failed", fallbackMessage = "Не удалось начать задачу") {
+        launchServerAction("Start work task action failed", fallbackMessage = "Не удалось начать задачу") {
             runCatching { workTaskApi.startWorkTask(remoteTaskId) }
                 .onSuccess { remoteTask ->
                     updateTask(taskId) { task ->
@@ -644,15 +754,20 @@ class MobileMesViewModel @Inject constructor(
 
     fun scanRfidAndCompleteItem(taskId: String, rfid: String, values: Map<String, String> = emptyMap()) {
         Log.d("RFID_TEST", "MobileMesViewModel получил: $rfid")
-        rememberScannedRfid(taskId, rfid)
 
         val currentTask = tasks.first { it.id == taskId }
-        val serverRabbitTarget = currentTask.checklist.firstOrNull { item ->
-            item.targetType == TargetType.RABBIT && item.targetId.equals(rfid, ignoreCase = true)
+        val pendingServerRabbits = currentTask.checklist.filter { item ->
+            item.targetType == TargetType.RABBIT && item.status == ChecklistStatus.PENDING
         }
-        val rabbit = MockRepository.rabbitByRfid(rfid)
-        val cage = MockRepository.cageByRfid(rfid)
-        val targetId = rabbit?.id ?: cage?.id ?: serverRabbitTarget?.targetId
+        val serverRabbitTarget = pendingServerRabbits.firstOrNull { item ->
+            item.targetType == TargetType.RABBIT && item.targetId.equals(rfid, ignoreCase = true)
+        } ?: pendingServerRabbits.singleOrNull()
+        val effectiveRfid = serverRabbitTarget?.targetId ?: rfid
+        rememberScannedRfid(taskId, effectiveRfid)
+
+        val rabbit = MockRepository.rabbitByRfid(effectiveRfid)
+        val cage = MockRepository.cageByRfid(effectiveRfid)
+        val targetId = serverRabbitTarget?.targetId ?: rabbit?.id ?: cage?.id
         val problemReason = values[PROBLEM_REASON_KEY].orEmpty()
         val problemComment = values[PROBLEM_COMMENT_KEY].orEmpty()
         val resultValues = values - PROBLEM_REASON_KEY - PROBLEM_COMMENT_KEY
@@ -662,12 +777,12 @@ class MobileMesViewModel @Inject constructor(
                 task.copy(
                     status = TaskStatus.IN_PROGRESS,
                     result = task.result.copy(
-                        scannedRfid = rfid,
-                        values = task.result.values + resultValues + ("lastScan" to rfid),
+                        scannedRfid = effectiveRfid,
+                        values = task.result.values + resultValues + ("lastScan" to effectiveRfid),
                     ),
                 ).markOffline()
             }
-            lastMessage = "RFID сохранен: $rfid"
+            lastMessage = "RFID сохранен: $effectiveRfid"
             return
         }
 
@@ -685,12 +800,12 @@ class MobileMesViewModel @Inject constructor(
                 task.copy(
                     status = TaskStatus.IN_PROGRESS,
                     result = task.result.copy(
-                        scannedRfid = rfid,
-                        values = task.result.values + resultValues + ("lastScan" to rfid),
+                        scannedRfid = effectiveRfid,
+                        values = task.result.values + resultValues + ("lastScan" to effectiveRfid),
                     ),
                 ).markOffline()
             }
-            lastMessage = "RFID сохранен: $rfid"
+            lastMessage = "RFID сохранен: $effectiveRfid"
             return
         }
         if (matchingItem.status != ChecklistStatus.PENDING) {
@@ -704,7 +819,7 @@ class MobileMesViewModel @Inject constructor(
                         status = if (problemReason.isBlank()) ChecklistStatus.DONE else ChecklistStatus.PROBLEM,
                         result = item.result.copy(
                             values = item.result.values + resultValues,
-                            scannedRfid = rfid,
+                            scannedRfid = effectiveRfid,
                             completedAt = "now",
                             problemReason = problemReason.ifBlank { null },
                             comment = problemComment,
@@ -719,12 +834,12 @@ class MobileMesViewModel @Inject constructor(
                     scannedRfid = rfid,
                     values = (task.result.values - PROBLEM_REASON_KEY - PROBLEM_COMMENT_KEY) +
                         resultValues +
-                        ("lastScan" to rfid),
+                        ("lastScan" to effectiveRfid),
                 ),
             ).markOffline()
         }
         lastMessage = if (problemReason.isBlank()) {
-            "Скан принят: $rfid. Пункт чек-листа закрыт автоматически."
+            "Скан принят: $effectiveRfid. Пункт чек-листа закрыт автоматически."
         } else {
             "Замечание сохранено: $problemReason"
         }
@@ -774,7 +889,7 @@ class MobileMesViewModel @Inject constructor(
             return
         }
 
-        safeLaunch("Complete work subtask action failed", fallbackMessage = "Не удалось завершить подзадачу") {
+        launchServerAction("Complete work subtask action failed", fallbackMessage = "Не удалось завершить подзадачу") {
             runCatching {
                 workTaskApi.completeWorkSubtask(
                     subtaskId = subtaskId,
@@ -852,7 +967,7 @@ class MobileMesViewModel @Inject constructor(
             return
         }
 
-        safeLaunch("Complete work task action failed", fallbackMessage = "Не удалось завершить задачу") {
+        launchServerAction("Complete work task action failed", fallbackMessage = "Не удалось завершить задачу") {
             runCatching {
                 if (currentTask.isGeneral) {
                     currentTask.pendingGeneralSubtaskIds.forEach { subtaskId ->
@@ -884,7 +999,27 @@ class MobileMesViewModel @Inject constructor(
                 }
                 lastMessage = "Задача завершена"
             }.onFailure { error ->
-                handleError(error, "Не удалось завершить задачу", "Complete work task failed. taskId=$remoteTaskId")
+                if (currentTask.isGeneral && error is HttpException && error.code() == 409) {
+                    updateTask(taskId) { current ->
+                        current.copy(
+                            status = TaskStatus.DONE,
+                            acceptanceStatus = if (current.requiresAcceptance) {
+                                AcceptanceStatus.WAITING
+                            } else {
+                                AcceptanceStatus.NOT_REQUIRED
+                            },
+                            checklist = checklist,
+                            result = current.result.copy(completedAt = "now"),
+                        )
+                    }
+                    lastMessage = if (currentTask.requiresAcceptance) {
+                        "Задача уже отправлена на приёмку"
+                    } else {
+                        "Задача уже завершена"
+                    }
+                } else {
+                    handleError(error, "Не удалось завершить задачу", "Complete work task failed. taskId=$remoteTaskId")
+                }
             }
         }
     }
@@ -903,7 +1038,7 @@ class MobileMesViewModel @Inject constructor(
         updateTask(taskId) { task ->
             task.copy(result = task.result.copy(problemReason = reason)).markOffline()
         }
-        safeLaunch("Reject general work task action failed", fallbackMessage = "Не удалось отклонить задачу") {
+        launchServerAction("Reject general work task action failed", fallbackMessage = "Не удалось отклонить задачу") {
             runCatching {
                 workTaskApi.completeWorkTask(
                     id = remoteTaskId,
@@ -942,7 +1077,7 @@ class MobileMesViewModel @Inject constructor(
             lastMessage = "У задачи отсутствует серверный отчёт для приёмки"
             return
         }
-        safeLaunch("Accept work report failed", fallbackMessage = "Не удалось подтвердить выполнение задачи") {
+        launchServerAction("Accept work report failed", fallbackMessage = "Не удалось подтвердить выполнение задачи") {
             runCatching { workTaskApi.acceptWorkReport(reportId) }
                 .onSuccess { report ->
                     updateTask(taskId) { current ->

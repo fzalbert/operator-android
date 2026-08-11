@@ -17,6 +17,7 @@ import ru.profikrol.operator.data.remote.auth.AuthApi
 import ru.profikrol.operator.data.remote.auth.AuthTokenInterceptor
 import ru.profikrol.operator.data.remote.profile.ProfileApi
 import ru.profikrol.operator.data.remote.rabbit.RabbitApi
+import ru.profikrol.operator.data.remote.cell.CellApi
 import ru.profikrol.operator.data.remote.worktask.WorkTaskApi
 import java.security.SecureRandom
 import java.security.cert.X509Certificate
@@ -97,6 +98,12 @@ object NetworkModule {
     fun provideRabbitApi(
         retrofit: Retrofit,
     ): RabbitApi = retrofit.create(RabbitApi::class.java)
+
+    @Provides
+    @Singleton
+    fun provideCellApi(
+        retrofit: Retrofit,
+    ): CellApi = retrofit.create(CellApi::class.java)
 
     private fun retrofit(client: OkHttpClient, json: Json): Retrofit =
         Retrofit.Builder()

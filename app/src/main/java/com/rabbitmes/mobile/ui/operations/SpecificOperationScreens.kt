@@ -55,9 +55,10 @@ fun InseminationScreen(
 
     LaunchedEffect(scannedRfid) {
         if (!scannedRfid.isNullOrBlank()) {
-            val scannedRabbit = MockRepository.rabbitByRfid(scannedRfid)
             val isPending = task.checklist.any {
-                it.targetId == scannedRabbit?.id && it.status == ChecklistStatus.PENDING
+                it.targetType == TargetType.RABBIT &&
+                    it.targetId.equals(scannedRfid, ignoreCase = true) &&
+                    it.status == ChecklistStatus.PENDING
             }
             if (isPending) {
                 rfidInput = scannedRfid
@@ -69,8 +70,11 @@ fun InseminationScreen(
         }
     }
 
-    val rabbit = selectedRfid?.let(MockRepository::rabbitByRfid)
-    val checklistItem = rabbit?.let { selected -> task.checklist.firstOrNull { it.targetId == selected.id } }
+    val checklistItem = selectedRfid?.let { selected ->
+        task.checklist.firstOrNull {
+            it.targetType == TargetType.RABBIT && it.targetId.equals(selected, ignoreCase = true)
+        }
+    }
     val scannerValues = mapOf(
         "maleMaterialCode" to maleMaterialCode,
         "inseminated" to inseminated.toString(),
@@ -116,32 +120,32 @@ fun InseminationScreen(
                 ) { Text("Скан") }
                 OutlinedButton(
                     onClick = {
-                        val nextItem = task.checklist.firstOrNull { it.status == ChecklistStatus.PENDING }
-                        val mockRfid = MockRepository.rabbits.firstOrNull { it.id == nextItem?.targetId }?.rfid
-                            ?: MockRepository.rabbits.first().rfid
-                        rfidInput = mockRfid
-                        selectedRfid = mockRfid
+                        val serverRfid = task.checklist.firstOrNull {
+                            it.targetType == TargetType.RABBIT && it.status == ChecklistStatus.PENDING
+                        }?.targetId.orEmpty()
+                        rfidInput = serverRfid
+                        selectedRfid = serverRfid.takeIf { it.isNotBlank() }
                     },
                     modifier = Modifier.weight(1f),
                 ) { Text("Mock RFID") }
             }
 
-            if (selectedRfid != null && rabbit == null) {
+            if (selectedRfid != null && checklistItem == null) {
                 Text("Самка с таким RFID не найдена", color = MaterialTheme.colorScheme.error)
             }
 
-            rabbit?.let { selected ->
+            selectedRfid?.takeIf { checklistItem != null }?.let { selected ->
                 RabbitInfoCard(
                     isLoading = false,
                     rabbit = RabbitInfo(
-                        rfidCode = selected.rfid,
-                        status = selected.healthStatus,
-                        age = "${selected.ageDays / 30} мес",
-                        cage = MockRepository.cage(selected.cageId)?.code ?: "—",
-                        weight = "%.2f кг".format(selected.lastWeightKg),
-                        diagnosis = selected.healthStatus,
+                        rfidCode = selected,
+                        status = "К работе",
+                        age = "—",
+                        cage = "—",
+                        weight = "—",
+                        diagnosis = "—",
                     ),
-                    onClick = { onOpenAnimal(selected.rfid) },
+                    onClick = { onOpenAnimal(selected) },
                 )
 
                 OutlinedTextField(
@@ -493,9 +497,9 @@ fun OperationScreenFactory(task: MobileTask, definition: OperationDefinition, on
         OperationType.WEIGHING -> WeighingScreen(task, onBack, onBegin, onChecklistDoneWithValues, onPhoto, onVideo, onFile, onComment, onChecklistDone, onChecklistProblem, onChecklistSkip, onComplete, onSkip, canEdit)
         OperationType.NEST_PREPARATION -> NestPreparationScreen(task, onBack, onBegin, onPhoto, onVideo, onFile, onComment, onChecklistDone, onChecklistProblem, onChecklistSkip, onComplete, onSkip, canEdit)
         OperationType.NEST_CONTROL -> CageOperationScreen("Клетка", task, scannedRfid, "Контроль лактации", onBack, onBegin, onScan, onOpenRfidScanner, onValue, onPhoto, onVideo, onFile, onComment, onChecklistDone, onChecklistProblem, onChecklistSkip, onComplete, onSkip, canEdit)
-        OperationType.NEST_SELECTION -> CageOperationScreen("RFID клетки", task, scannedRfid, "Выравнивание / калибровка гнезда", onBack, onBegin, onScan, onOpenRfidScanner, onValue, onPhoto, onVideo, onFile, onComment, onChecklistDone, onChecklistProblem, onChecklistSkip, onComplete, onSkip, canEdit)
-        OperationType.OKROL -> CageOperationScreen("RFID клетки", task, scannedRfid, "Окрол: учет живых и мертвых", onBack, onBegin, onScan, onOpenRfidScanner, onValue, onPhoto, onVideo, onFile, onComment, onChecklistDone, onChecklistProblem, onChecklistSkip, onComplete, onSkip, canEdit)
-        OperationType.LACTATION_CONTROL -> CageOperationScreen("RFID клетки", task, scannedRfid, "Контроль лактации", onBack, onBegin, onScan, onOpenRfidScanner, onValue, onPhoto, onVideo, onFile, onComment, onChecklistDone, onChecklistProblem, onChecklistSkip, onComplete, onSkip, canEdit)
+        OperationType.NEST_SELECTION -> CageOperationScreen("Клетка", task, scannedRfid, "Выравнивание / калибровка гнезда", onBack, onBegin, onScan, onOpenRfidScanner, onValue, onPhoto, onVideo, onFile, onComment, onChecklistDone, onChecklistProblem, onChecklistSkip, onComplete, onSkip, canEdit)
+        OperationType.OKROL -> CageOperationScreen("Клетка", task, scannedRfid, "Окрол: учет живых и мертвых", onBack, onBegin, onScan, onOpenRfidScanner, onValue, onPhoto, onVideo, onFile, onComment, onChecklistDone, onChecklistProblem, onChecklistSkip, onComplete, onSkip, canEdit)
+        OperationType.LACTATION_CONTROL -> CageOperationScreen("Клетка", task, scannedRfid, "Контроль лактации", onBack, onBegin, onScan, onOpenRfidScanner, onValue, onPhoto, onVideo, onFile, onComment, onChecklistDone, onChecklistProblem, onChecklistSkip, onComplete, onSkip, canEdit)
         OperationType.ANIMAL_TRANSFER, OperationType.ANIMAL_SETTLEMENT, OperationType.FEMALE_DELIVERY -> CageOperationScreen("RFID объекта", task, scannedRfid, task.operationType.title, onBack, onBegin, onScan, onOpenRfidScanner, onValue, onPhoto, onVideo, onFile, onComment, onChecklistDone, onChecklistProblem, onChecklistSkip, onComplete, onSkip, canEdit)
         OperationType.LIGHT_STIMULATION, OperationType.LIGHTING_CHECK -> LightAutomationTaskScreen(task, onBack, onBegin, onValue, onPhoto, onVideo, onFile, onComment, onChecklistDone, onChecklistProblem, onChecklistSkip, onComplete, onSkip, canEdit)
         OperationType.FEED_CHECK, OperationType.MANUAL_FEEDING -> FeedOperationScreen(task, onBack, onBegin, onValue, onPhoto, onVideo, onFile, onComment, onChecklistDone, onChecklistProblem, onChecklistSkip, onComplete, onSkip, canEdit)

@@ -21,7 +21,7 @@ data class ProfileDto(
     val employeeId: String,
     val name: String = "",
     val surname: String = "",
-    val secondName: String = "",
+    val secondName: String? = null,
     val phoneNumber: String? = null,
     val email: String? = null,
     val contactNumber: String? = null,

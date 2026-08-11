@@ -4,6 +4,16 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.size
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.unit.dp
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
@@ -55,6 +65,7 @@ fun RabbitMesApp(vm: MobileMesViewModel) {
     Scaffold(
         snackbarHost = { SnackbarHost(snackbarHostState) },
     ) { _ ->
+        Box(Modifier.fillMaxSize()) {
         when(val screen = vm.screen) {
             AppScreen.Login -> AuthScreen(onLoggedIn = vm::onLoggedInFromSession)
             AppScreen.Shift -> ShiftScreen(vm.currentEmployee, vm.shift, vm.tasksForCurrentEmployee(), vm.nextTask(), vm.lastMessage, vm.notifications.count { it.isUnread }, vm.isShiftActionInProgress, vm.isTasksLoading, vm::startShift, vm::finishShift, { vm.navigate(AppScreen.TaskExecution(it)) }, { vm.navigate(AppScreen.Notifications) }, vm::logout, bottom("shift"))
@@ -141,6 +152,22 @@ fun RabbitMesApp(vm: MobileMesViewModel) {
                 onMoving = { vm.navigate(AppScreen.TaskExecution(screen.taskId)) },
                 onCulling = { vm.navigate(AppScreen.TaskExecution(screen.taskId)) },
             )
+        }
+        if (vm.isServerActionInProgress || vm.isShiftActionInProgress) {
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .background(Color.Black.copy(alpha = 0.18f))
+                    .clickable(onClick = {}),
+                contentAlignment = Alignment.Center,
+            ) {
+                CircularProgressIndicator(
+                    modifier = Modifier.size(44.dp),
+                    color = Color(0xFF16794B),
+                    strokeWidth = 4.dp,
+                )
+            }
+        }
         }
     }
 }
