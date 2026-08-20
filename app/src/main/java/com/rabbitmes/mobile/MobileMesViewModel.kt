@@ -42,7 +42,7 @@ private const val API_LOG_TAG = "RabbitApi"
 private const val TASKS_REFRESH_INTERVAL_MS = 30_000L
 private const val RABBITS_PAGE_SIZE = 100
 private const val CELLS_PAGE_SIZE = 100
-private const val USE_GENERAL_TEMPLATE_FOR_ALL_OPERATIONS = true
+private const val USE_GENERAL_TEMPLATE_FOR_ALL_OPERATIONS = false
 private const val START_TASK_STATUS_POLL_ATTEMPTS = 12
 private const val START_TASK_STATUS_POLL_DELAY_MS = 500L
 
@@ -93,9 +93,7 @@ private fun WorkTaskDto.toMobileTask(
     cells: List<CellDto> = emptyList(),
 ): MobileTask {
     val operationType = resolveOperationType()
-    val isGeneral = USE_GENERAL_TEMPLATE_FOR_ALL_OPERATIONS ||
-        operationType == OperationType.CUSTOM_TASK ||
-        operationType in GENERAL_FORM_OPERATION_TYPES
+    val isGeneral = operationType == OperationType.CUSTOM_TASK
     val targetType = MockRepository.operation(operationType).targetType
     val checklist = if (isGeneral) {
         emptyList()
@@ -212,6 +210,25 @@ private val GENERAL_FORM_OPERATION_TYPES = setOf(
 
 private val OPERATION_ALIASES = mapOf(
     "animal placement" to OperationType.ANIMAL_SETTLEMENT,
+    "animal settlement" to OperationType.ANIMAL_SETTLEMENT,
+    "kindling" to OperationType.OKROL,
+    "nest equalization" to OperationType.NEST_SELECTION,
+    "female arrival" to OperationType.FEMALE_DELIVERY,
+    "aisle cleaning" to OperationType.DAILY_CLEANING,
+    "slaughter shipping" to OperationType.SLAUGHTER_SHIPMENT,
+    "light biostimulation" to OperationType.LIGHT_STIMULATION,
+    "deworming dosatron" to OperationType.DEWORMING_DOSATRON,
+    "mortality round" to OperationType.MORTALITY_ROUND,
+    "mortality journal" to OperationType.MORTALITY_JOURNAL,
+    "manual feeding" to OperationType.MANUAL_FEEDING,
+    "nest control" to OperationType.NEST_CONTROL,
+    "nest preparation" to OperationType.NEST_PREPARATION,
+    "kindling preparation" to OperationType.OKROL_PREPARATION,
+    "hangar acceptance" to OperationType.HANGAR_ACCEPTANCE,
+    "water check" to OperationType.WATER_CHECK,
+    "feed check" to OperationType.FEED_CHECK,
+    "final round" to OperationType.FINAL_ROUND,
+    "second round" to OperationType.SECOND_ROUND,
     "females delivery" to OperationType.FEMALE_DELIVERY,
     "culling" to OperationType.ANIMAL_DEPARTURE,
     "light check" to OperationType.LIGHTING_CHECK,
@@ -853,7 +870,9 @@ class MobileMesViewModel @Inject constructor(
             scannedItem?.takeIf { it.status == ChecklistStatus.PENDING }
                 ?: currentTask.checklist.firstOrNull { it.status == ChecklistStatus.PENDING }
         } else {
-            scannedItem
+            scannedItem ?: currentTask.checklist
+                .filter { it.status == ChecklistStatus.PENDING }
+                .singleOrNull()
         }
         if (matchingItem == null) {
             updateTask(taskId) { task ->
@@ -870,6 +889,17 @@ class MobileMesViewModel @Inject constructor(
         }
         if (matchingItem.status != ChecklistStatus.PENDING) {
             lastMessage = "Пункт чек-листа уже обработан: ${matchingItem.label}"
+            return
+        }
+        if (matchingItem.id.toLongOrNull() != null && taskId.toLongOrNull() != null) {
+            completeChecklistItemOnServer(
+                taskId = taskId,
+                itemId = matchingItem.id,
+                status = if (problemReason.isBlank()) ChecklistStatus.DONE else ChecklistStatus.PROBLEM,
+                reason = problemReason,
+                comment = problemComment,
+                values = resultValues + ("rfid" to effectiveRfid),
+            )
             return
         }
         updateTask(taskId) { task ->
@@ -956,6 +986,7 @@ class MobileMesViewModel @Inject constructor(
                     request = CompleteWorkSubtaskRequest(
                         abortReason = reason.ifBlank { null },
                         comment = comment.ifBlank { null },
+                        params = values.takeIf { it.isNotEmpty() },
                     ),
                 )
             }.onSuccess {
@@ -987,6 +1018,7 @@ class MobileMesViewModel @Inject constructor(
                         status = status,
                         result = item.result.copy(
                             values = item.result.values + values,
+                            scannedRfid = values["rfid"] ?: item.result.scannedRfid,
                             completedAt = "now",
                             problemReason = reason.ifBlank { null },
                             comment = comment,
@@ -1003,7 +1035,7 @@ class MobileMesViewModel @Inject constructor(
     fun completeTask(taskId: String, commentOverride: String? = null) {
         val currentTask = tasks.first { it.id == taskId }
         val completionComment = commentOverride ?: currentTask.result.comment
-        val checklist = if (USE_GENERAL_TEMPLATE_FOR_ALL_OPERATIONS || currentTask.operationType == OperationType.NEST_CONTROL) {
+        val checklist = if (USE_GENERAL_TEMPLATE_FOR_ALL_OPERATIONS) {
             currentTask.checklist.map { item ->
                 if (item.status == ChecklistStatus.PENDING) item.copy(status = ChecklistStatus.DONE) else item
             }

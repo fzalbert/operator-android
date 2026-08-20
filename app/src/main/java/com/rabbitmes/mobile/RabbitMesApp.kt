@@ -101,7 +101,9 @@ fun RabbitMesApp(vm: MobileMesViewModel) {
                     LaunchedEffect(screen.taskId) { vm.navigate(AppScreen.Tasks) }
                     TaskListScreen(vm.tasksForCurrentEmployee(), vm.nextTask(), vm.lastMessage, vm.shift.startedAt != null, { vm.navigate(AppScreen.TaskExecution(it)) }, { vm.navigate(AppScreen.Shift) }, bottom("tasks"))
                 } else {
-                    val canEdit = vm.nextTask()?.id == task.id
+                    val canEdit = task.status != com.rabbitmes.mobile.domain.TaskStatus.DONE &&
+                        task.status != com.rabbitmes.mobile.domain.TaskStatus.SENT &&
+                        task.status != com.rabbitmes.mobile.domain.TaskStatus.SKIPPED
                     OperationScreenFactory(
                     task = task,
                     definition = vm.definition(task.operationType),

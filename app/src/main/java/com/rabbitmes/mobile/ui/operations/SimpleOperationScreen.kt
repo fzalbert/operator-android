@@ -34,7 +34,7 @@ private val SimpleText = Color(0xFF10231B)
 private val SimpleMuted = Color(0xFF60726A)
 private val SimpleBorder = Color(0xFFDCE6E1)
 private val SimpleRed = Color(0xFFDC4C4C)
-private const val USE_GENERAL_TEMPLATE_FOR_ALL_OPERATIONS = true
+private const val USE_GENERAL_TEMPLATE_FOR_ALL_OPERATIONS = false
 
 @Composable
 fun SimpleOperationScreen(
