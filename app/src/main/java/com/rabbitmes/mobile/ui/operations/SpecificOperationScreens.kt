@@ -465,7 +465,11 @@ fun FeedOperationScreen(task: MobileTask, onBack: () -> Unit, onBegin: () -> Uni
 }
 
 @Composable
-fun OperationScreenFactory(task: MobileTask, definition: OperationDefinition, onBack: () -> Unit, onBegin: () -> Unit, scannedRfid: String? = null, onScan: (String, Map<String,String>) -> Unit, onOpenRfidScanner: (Map<String, String>) -> Unit, onValue: (String,String) -> Unit, onPhoto: (String,String)->Unit, onVideo: (String,String)->Unit, onFile: (String,String)->Unit, onComment: (String)->Unit, onChecklistDone: (String)->Unit, onChecklistDoneWithValues: (String, Map<String, String>)->Unit, onChecklistProblem: (String,String,String)->Unit, onChecklistSkip: (String,String)->Unit, onComplete: () -> Unit, onSkip: (String)->Unit, onGeneralComplete: (String)->Unit, onGeneralReject: (String, String)->Unit, onOpenAnimal: (String)->Unit, canEdit: Boolean = true) {
+fun OperationScreenFactory(task: MobileTask, definition: OperationDefinition, onBack: () -> Unit, onBegin: () -> Unit, scannedRfid: String? = null, onScan: (String, Map<String,String>) -> Unit, onOpenRfidScanner: (Map<String, String>) -> Unit, onValue: (String,String) -> Unit, onPhoto: (String,String)->Unit, onVideo: (String,String)->Unit, onFile: (String,String)->Unit, onComment: (String)->Unit, onChecklistDone: (String)->Unit, onChecklistDoneWithValues: (String, Map<String, String>)->Unit, onChecklistProblem: (String,String,String)->Unit, onChecklistSkip: (String,String)->Unit, onComplete: () -> Unit, onSkip: (String)->Unit, onGeneralComplete: (String)->Unit, onGeneralReject: (String, String)->Unit, onOpenAnimal: (String)->Unit, onSettlementRfid: (String?, String)->Unit, isSubmitting: Boolean = false, canEdit: Boolean = true) {
+    if (task.operationType == OperationType.ANIMAL_SETTLEMENT) {
+        ProductionAnimalSettlementScreen(task, onBack, onBegin, onSettlementRfid, onComplete, isSubmitting, canEdit)
+        return
+    }
     SimpleOperationScreen(
         task = task,
         definition = definition,

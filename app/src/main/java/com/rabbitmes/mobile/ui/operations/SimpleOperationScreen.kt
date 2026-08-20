@@ -27,11 +27,11 @@ import com.rabbitmes.mobile.data.MockRepository
 import com.rabbitmes.mobile.ui.components.AttachmentPickerButtons
 import com.rabbitmes.mobile.ui.components.SelectionDropdown
 
-private val SimpleGreen = Color(0xFF1F8A5B)
+internal val SimpleGreen = Color(0xFF1F8A5B)
 private val SimpleDarkGreen = Color(0xFF0B2F24)
-private val SimpleBackground = Color(0xFFF1F5F3)
-private val SimpleText = Color(0xFF10231B)
-private val SimpleMuted = Color(0xFF60726A)
+internal val SimpleBackground = Color(0xFFF1F5F3)
+internal val SimpleText = Color(0xFF10231B)
+internal val SimpleMuted = Color(0xFF60726A)
 private val SimpleBorder = Color(0xFFDCE6E1)
 private val SimpleRed = Color(0xFFDC4C4C)
 private const val USE_GENERAL_TEMPLATE_FOR_ALL_OPERATIONS = true
@@ -1011,7 +1011,7 @@ private fun String.shortAttachmentName(maxLength: Int = 18): String {
 @Composable private fun SimpleChecklistCard(title: String, subtitle: String, action: String, enabled: Boolean, onClick: () -> Unit) { Card(Modifier.fillMaxWidth().clickable(enabled, onClick = onClick), RoundedCornerShape(18.dp), CardDefaults.cardColors(Color.White), elevation = CardDefaults.cardElevation(4.dp)) { Row(Modifier.padding(14.dp), Arrangement.SpaceBetween, Alignment.CenterVertically) { Column(Modifier.weight(1f)) { Text(title, color = SimpleText, fontWeight = FontWeight.Bold); Text(subtitle, color = SimpleMuted, fontSize = 13.sp) }; Text(action, color = SimpleGreen, fontWeight = FontWeight.ExtraBold) } } }
 @Composable private fun SimpleResultCard(item: ChecklistItem, definition: OperationDefinition) { val problem = item.status == ChecklistStatus.PROBLEM; Card(Modifier.fillMaxWidth(), RoundedCornerShape(18.dp), CardDefaults.cardColors(Color.White), elevation = CardDefaults.cardElevation(4.dp)) { Row { Box(Modifier.width(4.dp).heightIn(min = 100.dp).background(if (problem) SimpleRed else SimpleGreen)); Row(Modifier.weight(1f).padding(14.dp), Arrangement.SpaceBetween, Alignment.CenterVertically) { Column(Modifier.weight(1f)) { Text(item.label, color = SimpleText, fontWeight = FontWeight.Bold); Text(if (problem) item.result.problemReason ?: "Есть замечание" else "Выполнено", color = SimpleMuted); val details = item.result.values.entries.joinToString(" · ") { (key, v) -> "${definition.fields.firstOrNull { it.id == key }?.title ?: key}: ${if (v == "true") "Да" else if (v == "false") "Нет" else v}" }; if (details.isNotBlank()) Text(details, color = SimpleMuted, fontSize = 12.sp) }; SimpleBadge(if (problem) "Проблема" else "OK", if (problem) SimpleRed else SimpleGreen) } } } }
 @Composable private fun SimpleReadonly(label: String, value: String) { Column(Modifier.fillMaxWidth().background(Color(0xFFF6F9F7), RoundedCornerShape(16.dp)).border(1.dp, SimpleBorder, RoundedCornerShape(16.dp)).padding(14.dp)) { Text(label, color = SimpleMuted, fontSize = 12.sp, fontWeight = FontWeight.Bold); Text(value, color = SimpleText, fontWeight = FontWeight.Bold) } }
-@Composable private fun SimpleCard(content: @Composable ColumnScope.() -> Unit) { Card(Modifier.fillMaxWidth(), RoundedCornerShape(24.dp), CardDefaults.cardColors(Color.White), elevation = CardDefaults.cardElevation(5.dp)) { Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp), content = content) } }
+@Composable internal fun SimpleCard(content: @Composable ColumnScope.() -> Unit) { Card(Modifier.fillMaxWidth(), RoundedCornerShape(24.dp), CardDefaults.cardColors(Color.White), elevation = CardDefaults.cardElevation(5.dp)) { Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp), content = content) } }
 @Composable private fun SimpleSectionTitle(text: String) = Text(text, color = SimpleText, fontSize = 19.sp, fontWeight = FontWeight.ExtraBold, modifier = Modifier.padding(top = 8.dp))
 @Composable private fun SimpleEmpty(text: String) { Surface(color = Color.White, shape = RoundedCornerShape(18.dp), modifier = Modifier.fillMaxWidth()) { Text(text, color = SimpleMuted, modifier = Modifier.padding(16.dp)) } }
 @Composable private fun SimpleMetric(value: String, label: String, modifier: Modifier = Modifier, dark: Boolean = false) { Column(modifier.background(if (dark) Color.White.copy(.12f) else Color.White, RoundedCornerShape(13.dp)).padding(horizontal = 9.dp, vertical = 7.dp)) { Text(value, color = if (dark) Color.White else SimpleText, fontSize = 17.sp, fontWeight = FontWeight.ExtraBold); Text(label, color = if (dark) Color(0xFFD9F1E5) else SimpleMuted, fontSize = 10.sp) } }
@@ -1042,7 +1042,7 @@ private fun SimpleBadge(text: String, color: Color) {
         Text(text, color = color, fontWeight = FontWeight.ExtraBold, fontSize = 12.sp, modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp))
     }
 }
-@Composable private fun SimpleButton(text: String, onClick: () -> Unit, modifier: Modifier = Modifier, secondary: Boolean = false, enabled: Boolean = true) { Button(onClick, modifier.heightIn(min = 50.dp), enabled = enabled, shape = RoundedCornerShape(16.dp), colors = ButtonDefaults.buttonColors(containerColor = if (secondary) Color(0xFFE4ECE8) else SimpleGreen, contentColor = if (secondary) SimpleDarkGreen else Color.White)) { Text(text, fontWeight = FontWeight.ExtraBold, fontSize = 16.sp) } }
+@Composable internal fun SimpleButton(text: String, onClick: () -> Unit, modifier: Modifier = Modifier, secondary: Boolean = false, enabled: Boolean = true) { Button(onClick, modifier.heightIn(min = 50.dp), enabled = enabled, shape = RoundedCornerShape(16.dp), colors = ButtonDefaults.buttonColors(containerColor = if (secondary) Color(0xFFE4ECE8) else SimpleGreen, contentColor = if (secondary) SimpleDarkGreen else Color.White)) { Text(text, fontWeight = FontWeight.ExtraBold, fontSize = 16.sp) } }
 private fun isRfidField(field: OperationField) = field.id.contains("rfid", true)
 private fun ChecklistItem.defaultValueForField(definition: OperationDefinition, field: OperationField): String {
     if (definition.type == OperationType.NEST_SELECTION && field.id == "sourceCage") {

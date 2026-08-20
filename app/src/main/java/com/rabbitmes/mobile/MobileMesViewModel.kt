@@ -21,6 +21,10 @@ import ru.profikrol.operator.data.remote.worktask.WorkTaskApi
 import ru.profikrol.operator.data.remote.worktask.WorkTaskDto
 import ru.profikrol.operator.data.remote.worktask.CompleteWorkSubtaskRequest
 import ru.profikrol.operator.data.remote.worktask.CompleteWorkTaskRequest
+import ru.profikrol.operator.data.remote.production.CompleteTargetRequest
+import ru.profikrol.operator.data.remote.production.ProductionTaskApi
+import ru.profikrol.operator.data.remote.production.ProductionTaskDetailsDto
+import ru.profikrol.operator.data.remote.production.SubmitTaskResultRequest
 import javax.inject.Inject
 import com.rabbitmes.mobile.data.MockRepository
 import com.rabbitmes.mobile.data.NotificationRepository
@@ -282,6 +286,45 @@ private fun String.toChecklistStatus(): ChecklistStatus = when (normalizedStatus
     else -> ChecklistStatus.PENDING
 }
 
+private fun ProductionTaskDetailsDto.toMobileTask(employeeId: String): MobileTask {
+    val operation = when (task.operationCode.orEmpty().operationLookupKey()) {
+        "animal placement", "animal settlement", "заселение животных", "заселение кроликов" -> OperationType.ANIMAL_SETTLEMENT
+        else -> OperationType.CUSTOM_TASK
+    }
+    return MobileTask(
+        id = task.id,
+        title = task.title.orEmpty().ifBlank { operation.title },
+        operationType = operation,
+        workshopId = task.workshopId.toString(),
+        hangarId = task.hangarId?.toString().orEmpty(),
+        assignedEmployeeId = task.assignedEmployeeId ?: employeeId,
+        dueDate = task.scheduledDate,
+        plannedStart = "—",
+        plannedDurationMinutes = task.durationMinutes ?: 0,
+        priority = Priority.NORMAL,
+        status = task.executionStatus.orEmpty().toTaskStatus(),
+        checklist = targets.map { target ->
+            ChecklistItem(
+                id = target.id,
+                label = target.displayCode.orEmpty().ifBlank { "Позиция ${target.id.take(8)}" },
+                targetType = when (target.targetType?.lowercase()) {
+                    "rabbit" -> TargetType.RABBIT
+                    "cage" -> TargetType.CAGE
+                    else -> TargetType.RABBIT
+                },
+                targetId = target.targetId ?: target.id,
+                serverType = "production-target",
+                status = target.status.orEmpty().toChecklistStatus(),
+                result = ExecutionResult(scannedRfid = target.scanIdentifier, completedAt = target.completedAt),
+            )
+        },
+        requiresAcceptance = task.requiresAcceptance,
+        description = task.description.orEmpty(),
+        operationTypeTitle = task.title.orEmpty().ifBlank { operation.title },
+        isGeneral = false,
+    )
+}
+
 private fun String.normalizedStatus(): String = trim()
     .uppercase()
     .replace('-', '_')
@@ -306,6 +349,7 @@ class MobileMesViewModel @Inject constructor(
     private val notificationRepository: NotificationRepository,
     private val profileApi: ProfileApi,
     private val workTaskApi: WorkTaskApi,
+    private val productionTaskApi: ProductionTaskApi,
     private val rabbitApi: RabbitApi,
     private val cellApi: CellApi,
 ) : ViewModel() {
@@ -507,6 +551,7 @@ class MobileMesViewModel @Inject constructor(
         safeLaunch("Profile and tasks refresh failed") {
             runCatching { profileApi.getMyProfile() }
                 .onSuccess { profile ->
+                    currentEmployee = currentEmployee.copy(id = profile.employeeId)
                     shift = profile.shift.toShiftState(currentEmployee.id, shift)
                 }
                 .onFailure { error -> handleError(error, "Не удалось обновить профиль", "Profile refresh failed") }
@@ -519,6 +564,23 @@ class MobileMesViewModel @Inject constructor(
         isTasksRequestInProgress = true
         if (showLoading) isTasksLoading = true
         try {
+            if (currentEmployee.role == RoleId.OPERATOR || currentEmployee.role == RoleId.GENERAL_WORKER) {
+                runCatching {
+                    productionTaskApi.getEmployeeTasks(currentEmployee.id)
+                        .map { productionTaskApi.getTask(it.id).toMobileTask(currentEmployee.id) }
+                }.onSuccess { productionTasks ->
+                    tasks = productionTasks.distinctBy(MobileTask::id)
+                    hasLoadedRemoteTasks = true
+                }.onFailure { error ->
+                    handleError(
+                        error = error,
+                        fallbackMessage = "Не удалось загрузить задачи оператора",
+                        logMessage = "Production tasks request failed",
+                        showToUser = showLoading,
+                    )
+                }
+                return
+            }
             runCatching {
                 if (currentEmployee.role == RoleId.CHIEF_TECHNOLOGIST) {
                     val ownTasks = workTaskApi.getMyWorkTasks()
@@ -580,7 +642,7 @@ class MobileMesViewModel @Inject constructor(
                     } else {
                         emptyList()
                     }
-                    val remoteTasks = latestTasks.map { dto ->
+                    val primaryTasks = latestTasks.map { dto ->
                         dto.toMobileTask(currentEmployee.id, rabbits, cells).let { task ->
                             if (
                                 currentEmployee.role == RoleId.CHIEF_TECHNOLOGIST &&
@@ -594,6 +656,13 @@ class MobileMesViewModel @Inject constructor(
                             } else task
                         }
                     }
+                    val productionTasks = runCatching {
+                        productionTaskApi.getEmployeeTasks(currentEmployee.id)
+                            .map { productionTaskApi.getTask(it.id).toMobileTask(currentEmployee.id) }
+                    }.onFailure { error ->
+                        Log.e(API_LOG_TAG, "Production tasks request failed", error)
+                    }.getOrDefault(emptyList())
+                    val remoteTasks = (productionTasks + primaryTasks).distinctBy(MobileTask::id)
                     tasks = remoteTasks
                     hasLoadedRemoteTasks = true
                     if (
@@ -934,6 +1003,66 @@ class MobileMesViewModel @Inject constructor(
         )
     }
 
+    fun saveSettlementRfid(taskId: String, targetId: String?, rfidInput: String) {
+        val rfid = rfidInput.trim()
+        if (rfid.isBlank()) {
+            lastMessage = "RFID не может быть пустым"
+            return
+        }
+        val task = taskOrNull(taskId) ?: return
+        if (task.checklist.any { it.result.scannedRfid.equals(rfid, ignoreCase = true) }) {
+            lastMessage = "RFID $rfid уже использован в этой задаче"
+            return
+        }
+        if (targetId != null) {
+            completeChecklistItem(taskId, targetId, mapOf("rfid" to rfid))
+            return
+        }
+        val legacyTaskId = taskId.toLongOrNull()
+        if (legacyTaskId != null) {
+            val subtaskId = task.pendingGeneralSubtaskIds.firstOrNull()
+            if (subtaskId == null) {
+                lastMessage = "У задачи нет позиции для сохранения RFID"
+                return
+            }
+            launchServerAction("Submit legacy settlement RFID failed", fallbackMessage = "Не удалось сохранить RFID") {
+                runCatching {
+                    workTaskApi.completeWorkSubtask(
+                        subtaskId,
+                        CompleteWorkSubtaskRequest(params = mapOf("rfid" to rfid)),
+                    )
+                }.onSuccess {
+                    rememberScannedRfid(taskId, rfid)
+                    updateTask(taskId) { current ->
+                        current.copy(
+                            result = current.result.copy(scannedRfid = rfid, values = current.result.values + ("rfid" to rfid)),
+                            pendingGeneralSubtaskIds = current.pendingGeneralSubtaskIds - subtaskId,
+                        )
+                    }
+                    lastMessage = "RFID сохранён: $rfid"
+                }.onFailure { error ->
+                    handleError(error, "Не удалось сохранить RFID", "Submit legacy settlement RFID failed. taskId=$legacyTaskId subtaskId=$subtaskId")
+                }
+            }
+            return
+        }
+        launchServerAction("Submit settlement result failed", fallbackMessage = "Не удалось сохранить RFID") {
+            runCatching {
+                productionTaskApi.submitTaskResult(
+                    taskId,
+                    SubmitTaskResultRequest(
+                        employeeId = currentEmployee.id,
+                        resultJson = "{\"rfid\":\"${rfid.replace("\\", "\\\\").replace("\"", "\\\"")}\"}",
+                    ),
+                )
+            }.onSuccess {
+                rememberScannedRfid(taskId, rfid)
+                updateTask(taskId) { current -> current.copy(result = current.result.copy(scannedRfid = rfid, values = current.result.values + ("rfid" to rfid))) }
+                lastMessage = "RFID сохранён: $rfid"
+            }.onFailure { error -> handleError(error, "Не удалось сохранить RFID", "Submit settlement result failed. taskId=$taskId") }
+        }
+    }
+
     private fun completeChecklistItemOnServer(
         taskId: String,
         itemId: String,
@@ -942,6 +1071,43 @@ class MobileMesViewModel @Inject constructor(
         comment: String = "",
         values: Map<String, String> = emptyMap(),
     ) {
+        val task = taskOrNull(taskId) ?: return
+        val item = task.checklist.firstOrNull { it.id == itemId } ?: return
+        if (item.serverType == "production-target") {
+            val rfid = values["rfid"].orEmpty().trim()
+            if (rfid.isBlank()) {
+                lastMessage = "RFID не может быть пустым"
+                return
+            }
+            val duplicate = task.checklist.any { other ->
+                other.id != itemId && other.result.scannedRfid.equals(rfid, ignoreCase = true)
+            }
+            if (duplicate) {
+                lastMessage = "RFID $rfid уже использован в этой задаче"
+                return
+            }
+            launchServerAction("Complete production target failed", fallbackMessage = "Не удалось сохранить RFID") {
+                runCatching {
+                    productionTaskApi.completeTarget(
+                        taskId = taskId,
+                        targetId = itemId,
+                        request = CompleteTargetRequest(employeeId = currentEmployee.id, rfid = rfid),
+                    )
+                }.onSuccess {
+                    rememberScannedRfid(taskId, rfid)
+                    updateChecklistItemLocally(taskId, itemId, ChecklistStatus.DONE, values = values)
+                    updateTask(taskId) { current ->
+                        current.copy(checklist = current.checklist.map { currentItem ->
+                            if (currentItem.id == itemId) currentItem.copy(result = currentItem.result.copy(scannedRfid = rfid)) else currentItem
+                        })
+                    }
+                    lastMessage = "RFID сохранён: $rfid"
+                }.onFailure { error ->
+                    handleError(error, "Не удалось сохранить RFID", "Complete production target failed. taskId=$taskId targetId=$itemId")
+                }
+            }
+            return
+        }
         val subtaskId = itemId.toLongOrNull()
         val isRemoteTask = taskId.toLongOrNull() != null
         if (subtaskId == null || !isRemoteTask) {
@@ -1003,7 +1169,10 @@ class MobileMesViewModel @Inject constructor(
     fun completeTask(taskId: String, commentOverride: String? = null) {
         val currentTask = tasks.first { it.id == taskId }
         val completionComment = commentOverride ?: currentTask.result.comment
-        val checklist = if (USE_GENERAL_TEMPLATE_FOR_ALL_OPERATIONS || currentTask.operationType == OperationType.NEST_CONTROL) {
+        val checklist = if (
+            (USE_GENERAL_TEMPLATE_FOR_ALL_OPERATIONS && currentTask.checklist.none { it.serverType == "production-target" }) ||
+            currentTask.operationType == OperationType.NEST_CONTROL
+        ) {
             currentTask.checklist.map { item ->
                 if (item.status == ChecklistStatus.PENDING) item.copy(status = ChecklistStatus.DONE) else item
             }
@@ -1014,6 +1183,21 @@ class MobileMesViewModel @Inject constructor(
             return
         }
         val remoteTaskId = taskId.toLongOrNull()
+        if (remoteTaskId == null && currentTask.checklist.any { it.serverType == "production-target" }) {
+            if (pending > 0) {
+                lastMessage = "Нельзя завершить задачу: осталось $pending позиций"
+                return
+            }
+            launchServerAction("Complete production task failed", fallbackMessage = "Не удалось завершить заселение") {
+                runCatching { productionTaskApi.completeTask(taskId) }
+                    .onSuccess {
+                        updateTask(taskId) { it.copy(status = TaskStatus.DONE, result = it.result.copy(completedAt = "now")) }
+                        lastMessage = "Заселение завершено"
+                    }
+                    .onFailure { error -> handleError(error, "Не удалось завершить заселение", "Complete production task failed. taskId=$taskId") }
+            }
+            return
+        }
         if (remoteTaskId == null) {
             updateTask(taskId) { current ->
                 val acceptance = if (current.requiresAcceptance) AcceptanceStatus.WAITING else AcceptanceStatus.NOT_REQUIRED

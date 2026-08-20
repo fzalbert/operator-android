@@ -10,6 +10,7 @@ interface RabbitApi {
         @Query("page") page: Int = 1,
         @Query("pageSize") pageSize: Int = 100,
     ): RabbitPageDto
+
 }
 
 @Serializable

@@ -136,6 +136,8 @@ fun RabbitMesApp(vm: MobileMesViewModel) {
                         vm.navigate(AppScreen.Tasks)
                     },
                     onOpenAnimal = { rfid -> vm.navigate(AppScreen.RabbitProfile(rfid, task.id)) },
+                        onSettlementRfid = { targetId, rfid -> vm.saveSettlementRfid(task.id, targetId, rfid) },
+                        isSubmitting = vm.isServerActionInProgress,
                         canEdit = canEdit,
                     )
                 }
