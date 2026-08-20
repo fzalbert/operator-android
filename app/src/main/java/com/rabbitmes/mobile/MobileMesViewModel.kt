@@ -42,6 +42,9 @@ private const val API_LOG_TAG = "RabbitApi"
 private const val TASKS_REFRESH_INTERVAL_MS = 30_000L
 private const val RABBITS_PAGE_SIZE = 100
 private const val CELLS_PAGE_SIZE = 100
+private const val USE_GENERAL_TEMPLATE_FOR_ALL_OPERATIONS = true
+private const val START_TASK_STATUS_POLL_ATTEMPTS = 12
+private const val START_TASK_STATUS_POLL_DELAY_MS = 500L
 
 data class AppErrorMessage(
     val id: Long,
@@ -90,7 +93,9 @@ private fun WorkTaskDto.toMobileTask(
     cells: List<CellDto> = emptyList(),
 ): MobileTask {
     val operationType = resolveOperationType()
-    val isGeneral = operationType == OperationType.CUSTOM_TASK
+    val isGeneral = USE_GENERAL_TEMPLATE_FOR_ALL_OPERATIONS ||
+        operationType == OperationType.CUSTOM_TASK ||
+        operationType in GENERAL_FORM_OPERATION_TYPES
     val targetType = MockRepository.operation(operationType).targetType
     val checklist = if (isGeneral) {
         emptyList()
@@ -169,32 +174,64 @@ private fun WorkTaskDto.resolveOperationType(): OperationType {
     val candidates = listOf(operationId, operationName, name, operationCategory)
         .map { it.orEmpty().trim() }
         .filter(String::isNotBlank)
-    val resolved = OPERATION_ID_ALIASES[operationId.orEmpty().trim().lowercase()]
+    val candidateKeys = candidates.map { it.operationLookupKey() }
+    val resolved = OPERATION_ALIASES[operationId.orEmpty().operationLookupKey()]
+        ?: candidateKeys.firstNotNullOfOrNull(OPERATION_ALIASES::get)
         ?: OperationType.entries.firstOrNull { type ->
             candidates.any { candidate ->
                 candidate.equals(type.name, ignoreCase = true) ||
-                    candidate.equals(type.title, ignoreCase = true)
+                    candidate.equals(type.title, ignoreCase = true) ||
+                    candidate.operationLookupKey() == type.title.operationLookupKey()
             }
         }
-    return resolved?.takeIf(SPECIALIZED_OPERATION_TYPES::contains)
-        ?: OperationType.CUSTOM_TASK
+    return resolved ?: OperationType.CUSTOM_TASK
 }
 
-private val SPECIALIZED_OPERATION_TYPES = setOf(
+private val GENERAL_FORM_OPERATION_TYPES = setOf(
     OperationType.INSEMINATION,
+    OperationType.PALPATION,
+    OperationType.ANIMAL_SETTLEMENT,
     OperationType.NEST_PREPARATION,
+    OperationType.OKROL,
     OperationType.NEST_SELECTION,
+    OperationType.NEST_CONTROL,
     OperationType.WEIGHING,
+    OperationType.ANIMAL_DEPARTURE,
+    OperationType.WEANING,
+    OperationType.SLAUGHTER_SHIPMENT,
+    OperationType.CLEANING,
+    OperationType.FEMALE_DELIVERY,
+    OperationType.DEWORMING_DOSATRON,
+    OperationType.MORTALITY_ROUND,
+    OperationType.FIRST_WEIGHING,
     OperationType.LIGHT_STIMULATION,
     OperationType.LIGHTING_CHECK,
+    OperationType.FEED_CHECK,
+    OperationType.MANUAL_FEEDING,
 )
 
-private val OPERATION_ID_ALIASES = mapOf(
-    "animal_placement" to OperationType.ANIMAL_SETTLEMENT,
-    "females_delivery" to OperationType.FEMALE_DELIVERY,
+private val OPERATION_ALIASES = mapOf(
+    "animal placement" to OperationType.ANIMAL_SETTLEMENT,
+    "females delivery" to OperationType.FEMALE_DELIVERY,
     "culling" to OperationType.ANIMAL_DEPARTURE,
-    "light_check" to OperationType.LIGHTING_CHECK,
+    "light check" to OperationType.LIGHTING_CHECK,
+    "управление световым днем" to OperationType.LIGHT_STIMULATION,
+    "управление световым днем в определенный ангар" to OperationType.LIGHT_STIMULATION,
+    "управление светодвым днем" to OperationType.LIGHT_STIMULATION,
+    "управление подачей кормов" to OperationType.MANUAL_FEEDING,
+    "управление подачей кормов в определенный ангар" to OperationType.MANUAL_FEEDING,
+    "подача кормов" to OperationType.MANUAL_FEEDING,
+    "дегельминтизация" to OperationType.DEWORMING_DOSATRON,
+    "first weighing" to OperationType.FIRST_WEIGHING,
+    "first weigh" to OperationType.FIRST_WEIGHING,
+    "первое взвешивание" to OperationType.FIRST_WEIGHING,
 )
+
+private fun String.operationLookupKey(): String = trim()
+    .lowercase()
+    .replace('ё', 'е')
+    .replace(Regex("[^a-zа-я0-9]+"), " ")
+    .trim()
 
 private fun List<RabbitDto>.toRabbitChecklist(taskId: Long): List<ChecklistItem> =
     asSequence()
@@ -581,6 +618,16 @@ class MobileMesViewModel @Inject constructor(
         }
     }
 
+    private suspend fun waitForTaskToOpen(taskId: String): Boolean {
+        repeat(START_TASK_STATUS_POLL_ATTEMPTS) {
+            loadMyTasks(showLoading = false)
+            val status = taskOrNull(taskId)?.status
+            if (status != null && status != TaskStatus.NEW) return true
+            delay(START_TASK_STATUS_POLL_DELAY_MS)
+        }
+        return false
+    }
+
     private suspend fun loadAllRabbits(): List<RabbitDto> {
         val result = mutableListOf<RabbitDto>()
         val knownKeys = mutableSetOf<String>()
@@ -733,7 +780,20 @@ class MobileMesViewModel @Inject constructor(
                     lastMessage = "Задача начата"
                 }
                 .onFailure { error ->
-                    handleError(error, "Не удалось начать задачу", "Start work task failed. taskId=$remoteTaskId")
+                    if (error is HttpException && error.code() == 409) {
+                        lastMessage = "Открываем задачу..."
+                        val opened = waitForTaskToOpen(taskId)
+                        if (opened) {
+                            lastMessage = "Задача открыта"
+                        } else {
+                            updateTask(taskId) { task ->
+                                task.copy(status = TaskStatus.IN_PROGRESS)
+                            }
+                            lastMessage = "Задача открыта, данные обновятся автоматически"
+                        }
+                    } else {
+                        handleError(error, "Не удалось начать задачу", "Start work task failed. taskId=$remoteTaskId")
+                    }
                 }
         }
     }
@@ -943,7 +1003,7 @@ class MobileMesViewModel @Inject constructor(
     fun completeTask(taskId: String, commentOverride: String? = null) {
         val currentTask = tasks.first { it.id == taskId }
         val completionComment = commentOverride ?: currentTask.result.comment
-        val checklist = if (currentTask.operationType == OperationType.NEST_CONTROL) {
+        val checklist = if (USE_GENERAL_TEMPLATE_FOR_ALL_OPERATIONS || currentTask.operationType == OperationType.NEST_CONTROL) {
             currentTask.checklist.map { item ->
                 if (item.status == ChecklistStatus.PENDING) item.copy(status = ChecklistStatus.DONE) else item
             }

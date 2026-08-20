@@ -467,42 +467,26 @@ fun FeedOperationScreen(task: MobileTask, onBack: () -> Unit, onBegin: () -> Uni
 @Composable
 fun OperationScreenFactory(task: MobileTask, definition: OperationDefinition, onBack: () -> Unit, onBegin: () -> Unit, scannedRfid: String? = null, onScan: (String, Map<String,String>) -> Unit, onOpenRfidScanner: (Map<String, String>) -> Unit, onValue: (String,String) -> Unit, onPhoto: (String,String)->Unit, onVideo: (String,String)->Unit, onFile: (String,String)->Unit, onComment: (String)->Unit, onChecklistDone: (String)->Unit, onChecklistDoneWithValues: (String, Map<String, String>)->Unit, onChecklistProblem: (String,String,String)->Unit, onChecklistSkip: (String,String)->Unit, onComplete: () -> Unit, onSkip: (String)->Unit, onGeneralComplete: (String)->Unit, onGeneralReject: (String, String)->Unit, onOpenAnimal: (String)->Unit, canEdit: Boolean = true) {
     SimpleOperationScreen(
-            task = task,
-            definition = definition,
-            scannedRfid = scannedRfid,
-            onBack = onBack,
-            onBegin = onBegin,
-            onScan = onScan,
-            onOpenRfidScanner = onOpenRfidScanner,
-            onValue = onValue,
-            onChecklistDone = onChecklistDone,
-            onChecklistDoneWithValues = onChecklistDoneWithValues,
-            onChecklistProblem = onChecklistProblem,
-            onComplete = onComplete,
-            onSkip = onSkip,
-            onGeneralComplete = onGeneralComplete,
-            onGeneralReject = onGeneralReject,
-            onPhoto = onPhoto,
-            onVideo = onVideo,
-            onFile = onFile,
-            onComment = onComment,
-            onOpenAnimal = onOpenAnimal,
-            canEdit = canEdit,
+        task = task,
+        definition = definition,
+        scannedRfid = scannedRfid,
+        onBack = onBack,
+        onBegin = onBegin,
+        onScan = onScan,
+        onOpenRfidScanner = onOpenRfidScanner,
+        onValue = onValue,
+        onChecklistDone = onChecklistDone,
+        onChecklistDoneWithValues = onChecklistDoneWithValues,
+        onChecklistProblem = onChecklistProblem,
+        onComplete = onComplete,
+        onSkip = onSkip,
+        onGeneralComplete = onGeneralComplete,
+        onGeneralReject = onGeneralReject,
+        onPhoto = onPhoto,
+        onVideo = onVideo,
+        onFile = onFile,
+        onComment = onComment,
+        onOpenAnimal = onOpenAnimal,
+        canEdit = canEdit,
     )
-    return
-    @Suppress("UNREACHABLE_CODE")
-    when (task.operationType) {
-        OperationType.INSEMINATION -> InseminationScreen(task, scannedRfid, onBack, onBegin, onScan, onOpenRfidScanner, onValue, onPhoto, onVideo, onFile, onComment, onChecklistDone, onChecklistProblem, onChecklistSkip, onComplete, onSkip, onOpenAnimal, canEdit)
-        OperationType.PALPATION -> PalpationScreen(task, scannedRfid, onBack, onBegin, onScan, onOpenRfidScanner, onValue, onPhoto, onVideo, onFile, onComment, onChecklistDone, onChecklistProblem, onChecklistSkip, onComplete, onSkip, onOpenAnimal, canEdit)
-        OperationType.WEIGHING -> WeighingScreen(task, onBack, onBegin, onChecklistDoneWithValues, onPhoto, onVideo, onFile, onComment, onChecklistDone, onChecklistProblem, onChecklistSkip, onComplete, onSkip, canEdit)
-        OperationType.NEST_PREPARATION -> NestPreparationScreen(task, onBack, onBegin, onPhoto, onVideo, onFile, onComment, onChecklistDone, onChecklistProblem, onChecklistSkip, onComplete, onSkip, canEdit)
-        OperationType.NEST_CONTROL -> CageOperationScreen("Клетка", task, scannedRfid, "Контроль лактации", onBack, onBegin, onScan, onOpenRfidScanner, onValue, onPhoto, onVideo, onFile, onComment, onChecklistDone, onChecklistProblem, onChecklistSkip, onComplete, onSkip, canEdit)
-        OperationType.NEST_SELECTION -> CageOperationScreen("Клетка", task, scannedRfid, "Выравнивание / калибровка гнезда", onBack, onBegin, onScan, onOpenRfidScanner, onValue, onPhoto, onVideo, onFile, onComment, onChecklistDone, onChecklistProblem, onChecklistSkip, onComplete, onSkip, canEdit)
-        OperationType.OKROL -> CageOperationScreen("Клетка", task, scannedRfid, "Окрол: учет живых и мертвых", onBack, onBegin, onScan, onOpenRfidScanner, onValue, onPhoto, onVideo, onFile, onComment, onChecklistDone, onChecklistProblem, onChecklistSkip, onComplete, onSkip, canEdit)
-        OperationType.LACTATION_CONTROL -> CageOperationScreen("Клетка", task, scannedRfid, "Контроль лактации", onBack, onBegin, onScan, onOpenRfidScanner, onValue, onPhoto, onVideo, onFile, onComment, onChecklistDone, onChecklistProblem, onChecklistSkip, onComplete, onSkip, canEdit)
-        OperationType.ANIMAL_TRANSFER, OperationType.ANIMAL_SETTLEMENT, OperationType.FEMALE_DELIVERY -> CageOperationScreen("RFID объекта", task, scannedRfid, task.operationType.title, onBack, onBegin, onScan, onOpenRfidScanner, onValue, onPhoto, onVideo, onFile, onComment, onChecklistDone, onChecklistProblem, onChecklistSkip, onComplete, onSkip, canEdit)
-        OperationType.LIGHT_STIMULATION, OperationType.LIGHTING_CHECK -> LightAutomationTaskScreen(task, onBack, onBegin, onValue, onPhoto, onVideo, onFile, onComment, onChecklistDone, onChecklistProblem, onChecklistSkip, onComplete, onSkip, canEdit)
-        OperationType.FEED_CHECK, OperationType.MANUAL_FEEDING -> FeedOperationScreen(task, onBack, onBegin, onValue, onPhoto, onVideo, onFile, onComment, onChecklistDone, onChecklistProblem, onChecklistSkip, onComplete, onSkip, canEdit)
-        else -> HangarGenericOperationScreen(task, definition, onBack, onBegin, onValue, onPhoto, onVideo, onFile, onComment, onChecklistDone, onChecklistProblem, onChecklistSkip, onComplete, onSkip, canEdit)
-    }
 }

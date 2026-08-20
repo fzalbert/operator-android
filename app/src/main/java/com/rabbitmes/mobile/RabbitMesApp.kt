@@ -1,5 +1,6 @@
 package com.rabbitmes.mobile
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -62,6 +63,25 @@ fun RabbitMesApp(vm: MobileMesViewModel) {
     fun bottom(current: String): @Composable () -> Unit = { BottomNav(current, vm.shift.pendingSyncEvents) { key ->
         when(key) { "shift" -> vm.navigate(AppScreen.Shift); "tasks" -> vm.navigate(AppScreen.Tasks); "accept" -> vm.navigate(AppScreen.AcceptanceQueue); "sync" -> vm.navigate(AppScreen.Sync); "profile" -> vm.navigate(AppScreen.Profile) }
     } }
+
+    BackHandler(enabled = vm.screen !is AppScreen.Login) {
+        when (val screen = vm.screen) {
+            AppScreen.Shift -> Unit
+            AppScreen.Tasks,
+            AppScreen.Profile,
+            AppScreen.Sync -> vm.navigate(AppScreen.Shift)
+            AppScreen.Map -> vm.navigate(AppScreen.Tasks)
+            AppScreen.Notifications -> vm.navigate(AppScreen.Shift)
+            AppScreen.AcceptanceQueue -> vm.navigate(AppScreen.Tasks)
+            is AppScreen.Acceptance -> vm.navigate(AppScreen.AcceptanceQueue)
+            is AppScreen.TaskExecution -> vm.navigate(AppScreen.Tasks)
+            is AppScreen.RfidScan -> vm.navigate(AppScreen.TaskExecution(screen.taskId))
+            is AppScreen.RabbitProfile -> vm.navigate(AppScreen.TaskExecution(screen.taskId))
+            is AppScreen.AnimalHistory -> vm.navigate(AppScreen.Tasks)
+            AppScreen.Login -> Unit
+        }
+    }
+
     Scaffold(
         snackbarHost = { SnackbarHost(snackbarHostState) },
     ) { _ ->

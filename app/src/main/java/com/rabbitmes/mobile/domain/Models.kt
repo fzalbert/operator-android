@@ -40,6 +40,7 @@ enum class OperationType(val title: String) {
     DAILY_CLEANING("Ежедневная уборка проходов"),
     SECOND_ROUND("Второй обход ангара"),
     OKROL_PREPARATION("Подготовка к окролу"),
+    FIRST_WEIGHING("Первое взвешивание"),
     MANUAL_FEEDING("Ручное кормление"),
     FINAL_ROUND("Финальный обход"),
     CUSTOM_TASK("Поручение")

@@ -34,6 +34,7 @@ private val SimpleText = Color(0xFF10231B)
 private val SimpleMuted = Color(0xFF60726A)
 private val SimpleBorder = Color(0xFFDCE6E1)
 private val SimpleRed = Color(0xFFDC4C4C)
+private const val USE_GENERAL_TEMPLATE_FOR_ALL_OPERATIONS = true
 
 @Composable
 fun SimpleOperationScreen(
@@ -59,26 +60,7 @@ fun SimpleOperationScreen(
     onOpenAnimal: (String) -> Unit,
     canEdit: Boolean,
 ) {
-    if (task.operationType == OperationType.ANIMAL_SETTLEMENT) {
-        AnimalSettlementScreen(
-            task = task,
-            definition = definition,
-            onBack = onBack,
-            onBegin = onBegin,
-            onValue = onValue,
-            onComplete = onComplete,
-            onPhoto = onPhoto,
-            onVideo = onVideo,
-            onFile = onFile,
-            onComment = onComment,
-            canEdit = canEdit,
-        )
-        return
-    }
-    if (task.operationType == OperationType.NEST_CONTROL) {
-        NestControlRoundScreen(task, definition, onBack, onBegin, onChecklistProblem, onComplete, canEdit)
-        return
-    }
+    val useGeneralTemplate = USE_GENERAL_TEMPLATE_FOR_ALL_OPERATIONS
     var activeItemId by remember(task.id) { mutableStateOf<String?>(null) }
     val activeItem = task.checklist.firstOrNull { it.id == activeItemId }
     val pending = task.checklist.filter { it.status == ChecklistStatus.PENDING }
@@ -86,7 +68,7 @@ fun SimpleOperationScreen(
     val doneCount = task.checklist.count { it.status == ChecklistStatus.DONE }
     val problemCount = task.checklist.count { it.status == ChecklistStatus.PROBLEM }
     val allProcessed = task.checklist.isEmpty() || pending.isEmpty()
-    val requiresScan = definition.requiresScan && task.checklist.none {
+    val requiresScan = !useGeneralTemplate && definition.requiresScan && task.checklist.none {
         it.serverType.equals("general", ignoreCase = true)
     }
     val listState = rememberLazyListState()
@@ -98,7 +80,7 @@ fun SimpleOperationScreen(
         previousProcessedCount = closed.size
     }
 
-    if (activeItem != null && !requiresScan) {
+    if (!useGeneralTemplate && activeItem != null && !requiresScan) {
         SimpleItemForm(
             task = task,
             definition = definition,
@@ -194,7 +176,20 @@ fun SimpleOperationScreen(
         }
 
         if (task.status != TaskStatus.NEW && canEdit) {
-            if (requiresScan) {
+            if (useGeneralTemplate) {
+                item {
+                    SimpleStandaloneForm(
+                        task = task,
+                        definition = definition,
+                        onValue = onValue,
+                        onComment = onComment,
+                        onComplete = onComplete,
+                        onSkip = onSkip,
+                        onGeneralComplete = onGeneralComplete,
+                        onGeneralReject = onGeneralReject,
+                    )
+                }
+            } else if (requiresScan) {
                 item {
                     SimpleScanPanel(
                         task = task,
@@ -227,7 +222,7 @@ fun SimpleOperationScreen(
             }
         }
 
-        if (task.checklist.isNotEmpty()) {
+        if (!useGeneralTemplate && task.checklist.isNotEmpty()) {
             item { SimpleSectionTitle(if (requiresScan) "Чек-лист закрывается сканированием" else "К исполнению") }
             if (pending.isEmpty()) item { SimpleEmpty("Все пункты обработаны") }
             pending.forEach { checklistItem ->
@@ -773,39 +768,34 @@ private fun SimpleStandaloneForm(
 
     SimpleCard {
         Text("Выполнение задачи", color = SimpleText, fontSize = 20.sp, fontWeight = FontWeight.Black)
-        definition.fields.forEach { field -> SimpleField(field, values[field.id].orEmpty()) { values[field.id] = it; onValue(field.id, it) } }
-        if (task.isGeneral) {
-            OutlinedTextField(
-                value = comment,
-                onValueChange = {
-                    comment = it
-                    onComment(it)
-                },
-                modifier = Modifier.fillMaxWidth(),
-                label = { Text("Комментарий к задаче") },
-                placeholder = { Text("Добавьте результат или пояснение") },
-                minLines = 3,
-                shape = RoundedCornerShape(16.dp),
-            )
-            SimpleButton(
-                "Завершить задачу",
-                { onGeneralComplete(comment.trim()) },
-                Modifier.fillMaxWidth(),
-            )
-            OutlinedButton(
-                onClick = { showRejectDialog = true },
-                modifier = Modifier.fillMaxWidth(),
-                colors = ButtonDefaults.outlinedButtonColors(contentColor = SimpleRed),
-                border = BorderStroke(1.dp, SimpleRed),
-            ) {
-                Text("Отклонить задачу", fontWeight = FontWeight.Bold)
-            }
-        } else {
-            SimpleButton(definition.completionLabel, onComplete, Modifier.fillMaxWidth())
+        OutlinedTextField(
+            value = comment,
+            onValueChange = {
+                comment = it
+                onComment(it)
+            },
+            modifier = Modifier.fillMaxWidth(),
+            label = { Text("Комментарий к задаче") },
+            placeholder = { Text("Добавьте результат или пояснение") },
+            minLines = 3,
+            shape = RoundedCornerShape(16.dp),
+        )
+        SimpleButton(
+            "Завершить задачу",
+            { onGeneralComplete(comment.trim()) },
+            Modifier.fillMaxWidth(),
+        )
+        OutlinedButton(
+            onClick = { showRejectDialog = true },
+            modifier = Modifier.fillMaxWidth(),
+            colors = ButtonDefaults.outlinedButtonColors(contentColor = SimpleRed),
+            border = BorderStroke(1.dp, SimpleRed),
+        ) {
+            Text("Отклонить задачу", fontWeight = FontWeight.Bold)
         }
     }
 
-    if (task.isGeneral && showRejectDialog) {
+    if (showRejectDialog) {
         AlertDialog(
             onDismissRequest = { showRejectDialog = false },
             title = { Text("Отклонить задачу?") },

@@ -47,6 +47,7 @@ fun ShiftScreen(
     val totalItems = openTasks.sumOf { it.checklist.size }
     val closedItems = openTasks.sumOf { task -> task.checklist.count { it.status != ChecklistStatus.PENDING } }
     val progress = if (totalItems == 0) 0f else closedItems.toFloat() / totalItems
+    val greetingName = employee.fullName.greetingName()
 
     Scaffold(bottomBar = bottomBar, containerColor = MaterialTheme.colorScheme.background) { padding ->
         LazyColumn(
@@ -76,7 +77,7 @@ fun ShiftScreen(
                 ) {
                     Text("Рабочая смена", color = Color(0xFFB9E5CF), fontSize = 13.sp, fontWeight = FontWeight.ExtraBold)
                     Spacer(Modifier.height(6.dp))
-                    Text(if (active) "Смена начата" else if (shift.finishedAt != null) "Смена закрыта" else "Доброе утро, ${employee.fullName.substringBefore(' ')}", color = Color.White, fontSize = 25.sp, lineHeight = 28.sp, fontWeight = FontWeight.Black)
+                    Text(if (shift.finishedAt != null) "Смена закрыта" else "Доброе утро, $greetingName", color = Color.White, fontSize = 25.sp, lineHeight = 28.sp, fontWeight = FontWeight.Black)
                     Spacer(Modifier.height(14.dp))
                     Box(Modifier.fillMaxWidth().height(10.dp).background(Color.White.copy(.18f), RoundedCornerShape(99.dp))) { if (progress > 0) Box(Modifier.fillMaxWidth(progress).height(10.dp).background(Color(0xFF48D491), RoundedCornerShape(99.dp))) }
                     Spacer(Modifier.height(14.dp))
@@ -123,6 +124,11 @@ fun ShiftScreen(
 }
 
 @Composable private fun ShiftMetric(value: String, label: String, modifier: Modifier) { Column(modifier.background(Color.White.copy(.13f), RoundedCornerShape(15.dp)).padding(11.dp)) { Text(value, color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.ExtraBold); Text(label, color = Color(0xFFD9F1E5), fontSize = 12.sp) } }
+
+private fun String.greetingName(): String {
+    val parts = trim().split(Regex("\\s+")).filter(String::isNotBlank)
+    return parts.getOrNull(1) ?: parts.firstOrNull().orEmpty()
+}
 
 @Composable private fun PrototypeNextTaskCard(task: MobileTask, onOpen: () -> Unit) {
     val accent = when (task.priority) { Priority.URGENT -> Color(0xFFDC4C4C); Priority.HIGH -> Color(0xFFF59E0B); Priority.NORMAL -> ShiftGreen }
