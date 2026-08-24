@@ -19,6 +19,7 @@ import ru.profikrol.operator.data.remote.profile.ProfileApi
 import ru.profikrol.operator.data.remote.rabbit.RabbitApi
 import ru.profikrol.operator.data.remote.cell.CellApi
 import ru.profikrol.operator.data.remote.worktask.WorkTaskApi
+import ru.profikrol.operator.data.remote.production.ProductionTaskApi
 import java.security.SecureRandom
 import java.security.cert.X509Certificate
 import javax.inject.Named
@@ -31,6 +32,7 @@ import javax.net.ssl.X509TrustManager
 @InstallIn(SingletonComponent::class)
 object NetworkModule {
     private const val BASE_URL = "https://195.58.153.25/"
+    private const val PRODUCTION_BASE_URL = "http://195.58.153.25:55915/"
     private const val AUTH_LOG_TAG = "RabbitAuth"
     private val ALLOW_UNSAFE_CERTIFICATES = BuildConfig.DEBUG
 
@@ -92,6 +94,16 @@ object NetworkModule {
     fun provideWorkTaskApi(
         retrofit: Retrofit,
     ): WorkTaskApi = retrofit.create(WorkTaskApi::class.java)
+
+    @Provides
+    @Singleton
+    fun provideProductionTaskApi(client: OkHttpClient, json: Json): ProductionTaskApi =
+        Retrofit.Builder()
+            .baseUrl(PRODUCTION_BASE_URL)
+            .client(client)
+            .addConverterFactory(json.asConverterFactory("application/json".toMediaType()))
+            .build()
+            .create(ProductionTaskApi::class.java)
 
     @Provides
     @Singleton

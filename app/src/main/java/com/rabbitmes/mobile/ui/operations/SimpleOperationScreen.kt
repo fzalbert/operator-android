@@ -260,6 +260,148 @@ private val animalSettlementProblemReasons = listOf(
 )
 
 @Composable
+fun ProductionAnimalSettlementScreen(
+    task: MobileTask,
+    scannedRfid: String?,
+    onBack: () -> Unit,
+    onBegin: () -> Unit,
+    onScan: (String, Map<String, String>) -> Unit,
+    onOpenScanner: (Map<String, String>) -> Unit,
+    onPhoto: (String, String) -> Unit,
+    onVideo: (String, String) -> Unit,
+    onFile: (String, String) -> Unit,
+    canEdit: Boolean,
+) {
+    var hasProblem by remember(task.id) { mutableStateOf(false) }
+    var problemReason by remember(task.id) { mutableStateOf("") }
+    var problemComment by remember(task.id) { mutableStateOf("") }
+    var requestSent by remember(task.id) { mutableStateOf(false) }
+    var successful by remember(task.id) { mutableStateOf(false) }
+    var completedCount by remember(task.id) {
+        mutableIntStateOf(task.checklist.count { it.status == ChecklistStatus.DONE })
+    }
+    val newCompletedCount = task.checklist.count { it.status == ChecklistStatus.DONE }
+    val pendingTarget = task.checklist.firstOrNull { it.status == ChecklistStatus.PENDING }
+    val finished = task.checklist.isNotEmpty() && pendingTarget == null
+
+    LaunchedEffect(newCompletedCount) {
+        if (requestSent && newCompletedCount > completedCount) {
+            successful = true
+            requestSent = false
+        }
+        completedCount = newCompletedCount
+    }
+
+    LazyColumn(
+        modifier = Modifier.fillMaxSize().background(SimpleBackground).statusBarsPadding(),
+        contentPadding = PaddingValues(horizontal = 18.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
+        item {
+            Text(
+                "← Назад",
+                color = SimpleGreen,
+                fontWeight = FontWeight.ExtraBold,
+                modifier = Modifier.padding(vertical = 10.dp).clickable(onClick = onBack),
+            )
+        }
+        item {
+            Column(
+                Modifier.fillMaxWidth().clip(RoundedCornerShape(26.dp))
+                    .background(Brush.linearGradient(listOf(SimpleGreen, SimpleDarkGreen))).padding(18.dp),
+            ) {
+                Row(Modifier.fillMaxWidth(), Arrangement.SpaceBetween, Alignment.CenterVertically) {
+                    SimplePriorityBadge(task.priority)
+                    Text("${task.plannedStart} · ${task.plannedDurationMinutes} мин", color = Color(0xFFD6EEE2), fontSize = 13.sp)
+                }
+                Spacer(Modifier.height(12.dp))
+                Text("Заселение животных", color = Color.White, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Black)
+                Spacer(Modifier.height(5.dp))
+                Text("Заселено $newCompletedCount из ${task.checklist.size}", color = Color(0xFFD6EEE2))
+                if (task.status == TaskStatus.NEW && canEdit) {
+                    Spacer(Modifier.height(14.dp))
+                    SimpleButton("Приступить", onBegin, Modifier.fillMaxWidth())
+                }
+            }
+        }
+        if (task.status != TaskStatus.NEW && canEdit) {
+            item {
+                SimpleCard {
+                    SimpleSectionTitle("Клетка для заселения")
+                    Text(pendingTarget?.label ?: "Все клетки заселены", color = SimpleText, fontSize = 19.sp, fontWeight = FontWeight.Black)
+                    Text("Отсканируйте RFID нового кролика", color = SimpleMuted)
+                }
+            }
+            if (!finished) {
+                item {
+                    CageScanPanel(
+                        title = "RFID нового кролика",
+                        onScan = { rfid ->
+                            successful = false
+                            requestSent = true
+                            onScan(
+                                rfid,
+                                mapOf(
+                                    PROBLEM_REASON_KEY to if (hasProblem) problemReason else "",
+                                    PROBLEM_COMMENT_KEY to if (hasProblem) problemComment else "",
+                                ),
+                            )
+                        },
+                        onOpenScanner = {
+                            onOpenScanner(
+                                mapOf(
+                                    PROBLEM_REASON_KEY to if (hasProblem) problemReason else "",
+                                    PROBLEM_COMMENT_KEY to if (hasProblem) problemComment else "",
+                                ),
+                            )
+                        },
+                        initialRfid = scannedRfid,
+                        showSelectionButtons = false,
+                        instruction = "Отсканируйте метку нового кролика Bluetooth-считывателем.",
+                    )
+                }
+                item {
+                    SimpleCard {
+                        SimpleProblemBlock(
+                            problem = hasProblem,
+                            onProblem = {
+                                hasProblem = it
+                                if (!it) {
+                                    problemReason = ""
+                                    problemComment = ""
+                                }
+                            },
+                            reason = problemReason,
+                            onReason = { problemReason = it },
+                            comment = problemComment,
+                            onComment = { problemComment = it },
+                            reasons = animalSettlementProblemReasons,
+                            onPhoto = onPhoto,
+                            onVideo = onVideo,
+                            onFile = onFile,
+                            attachments = task.result.attachments,
+                        )
+                    }
+                }
+            }
+            if (successful || finished) {
+                item {
+                    SimpleCard {
+                        Text(
+                            if (finished) "Задача успешно завершена" else "Клетка успешно заселена",
+                            color = SimpleGreen,
+                            fontWeight = FontWeight.ExtraBold,
+                        )
+                        if (finished) SimpleButton("Задача завершена", onBack, Modifier.fillMaxWidth())
+                    }
+                }
+            }
+        }
+        item { Spacer(Modifier.height(24.dp)) }
+    }
+}
+
+@Composable
 private fun AnimalSettlementScreen(
     task: MobileTask,
     definition: OperationDefinition,

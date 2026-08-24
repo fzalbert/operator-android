@@ -7,6 +7,8 @@ import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.jsonObject
 import kotlinx.serialization.json.jsonPrimitive
 import ru.profikrol.operator.data.local.SessionStore
@@ -150,10 +152,21 @@ class RealAuthRepository @Inject constructor(
     }
 
     private fun Map<String, JsonElement>.stringClaim(key: String): String {
-        val value = this[key] ?: return ""
-        return when (value) {
-            is JsonArray -> value.firstOrNull()?.jsonPrimitive?.content.orEmpty()
-            else -> value.jsonPrimitive.content
+        return this[key]?.firstStringValue().orEmpty()
+    }
+
+    private fun JsonElement.firstStringValue(): String = when (this) {
+        is JsonPrimitive -> content
+        is JsonArray -> firstNotNullOfOrNull { element ->
+            element.firstStringValue().takeIf(String::isNotBlank)
+        }.orEmpty()
+        is JsonObject -> {
+            val preferredKeys = listOf("value", "name", "code", "role", "displayName")
+            preferredKeys.firstNotNullOfOrNull { key ->
+                this[key]?.firstStringValue()?.takeIf(String::isNotBlank)
+            } ?: values.firstNotNullOfOrNull { element ->
+                element.firstStringValue().takeIf(String::isNotBlank)
+            }.orEmpty()
         }
     }
 

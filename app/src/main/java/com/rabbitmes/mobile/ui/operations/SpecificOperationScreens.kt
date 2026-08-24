@@ -389,9 +389,55 @@ fun WeighingScreen(
 fun CageOperationScreen(title: String, task: MobileTask, scannedRfid: String?, fieldsTitle: String, onBack: () -> Unit, onBegin: () -> Unit, onScan: (String, Map<String,String>) -> Unit, onOpenRfidScanner: (Map<String, String>) -> Unit, onValue: (String,String) -> Unit, onPhoto: (String,String)->Unit, onVideo: (String,String)->Unit, onFile: (String,String)->Unit, onComment: (String)->Unit, onChecklistDone: (String)->Unit, onChecklistProblem: (String,String,String)->Unit, onChecklistSkip: (String,String)->Unit, onComplete: () -> Unit, onSkip: (String)->Unit, canEdit: Boolean = true) {
     var ok by remember { mutableStateOf(true) }
     var number by remember { mutableStateOf("0") }
+    var requestSent by remember(task.id) { mutableStateOf(false) }
+    var successful by remember(task.id) { mutableStateOf(false) }
+    var completedCount by remember(task.id) { mutableIntStateOf(task.checklist.count { it.status == ChecklistStatus.DONE }) }
+    val newCompletedCount = task.checklist.count { it.status == ChecklistStatus.DONE }
+    val pendingSettlementTarget = task.checklist.firstOrNull { it.status == ChecklistStatus.PENDING }
+    val settlementFinished = task.operationType == OperationType.ANIMAL_SETTLEMENT &&
+        task.checklist.isNotEmpty() && pendingSettlementTarget == null
+    LaunchedEffect(newCompletedCount) {
+        if (requestSent && newCompletedCount > completedCount) {
+            successful = true
+            requestSent = false
+        }
+        completedCount = newCompletedCount
+    }
     TaskExecutionScaffold(task, onBack, onBegin, onComplete, onSkip, onChecklistDone, onChecklistProblem, onChecklistSkip, allowRootComplete = false, canEdit = canEdit) {
-        MesCard { Text(fieldsTitle, fontWeight = FontWeight.Bold); Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) { Text("Готово / норма"); Switch(ok, { ok = it; onValue("ok", it.toString()) }) }; OutlinedTextField(number, { number = it; onValue("count", it) }, Modifier.fillMaxWidth(), label = { Text("Количество / показатель") }) }
-        CageScanPanel(title, onScan = { rfid -> onScan(rfid, mapOf("ok" to ok.toString(), "count" to number)) }, onOpenScanner = { onOpenRfidScanner(mapOf("ok" to ok.toString(), "count" to number)) }, initialRfid = scannedRfid)
+        if (task.operationType != OperationType.ANIMAL_SETTLEMENT) {
+            MesCard { Text(fieldsTitle, fontWeight = FontWeight.Bold); Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) { Text("Готово / норма"); Switch(ok, { ok = it; onValue("ok", it.toString()) }) }; OutlinedTextField(number, { number = it; onValue("count", it) }, Modifier.fillMaxWidth(), label = { Text("Количество / показатель") }) }
+        }
+        if (task.operationType == OperationType.ANIMAL_SETTLEMENT) {
+            MesCard {
+                Text("Клетка для заселения", fontWeight = FontWeight.Bold)
+                Spacer(Modifier.height(6.dp))
+                Text(pendingSettlementTarget?.label ?: "Все клетки заселены")
+                Text("Заселено $newCompletedCount из ${task.checklist.size}", style = MaterialTheme.typography.bodySmall)
+            }
+        }
+        CageScanPanel(title, onScan = { rfid ->
+            successful = false
+            requestSent = true
+            onScan(rfid, mapOf("ok" to ok.toString(), "count" to number))
+        }, onOpenScanner = { onOpenRfidScanner(mapOf("ok" to ok.toString(), "count" to number)) }, initialRfid = scannedRfid, showSelectionButtons = task.operationType != OperationType.ANIMAL_SETTLEMENT)
+        if (successful) {
+            MesCard {
+                Text(
+                    if (settlementFinished) "Задача успешно завершена" else "Клетка успешно заселена",
+                    color = ru.profikrol.operator.uikit.theme.mobileSuccessGreen,
+                    fontWeight = FontWeight.Bold,
+                )
+                if (settlementFinished) {
+                    Spacer(Modifier.height(12.dp))
+                    Button(
+                        onClick = onBack,
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Text("Задача завершена")
+                    }
+                }
+            }
+        }
         ProblemAndMediaControls(onPhoto, onVideo, onFile, onComment)
         ExecutionEvidencePanel(task)
     }
@@ -466,34 +512,9 @@ fun FeedOperationScreen(task: MobileTask, onBack: () -> Unit, onBegin: () -> Uni
 
 @Composable
 fun OperationScreenFactory(task: MobileTask, definition: OperationDefinition, onBack: () -> Unit, onBegin: () -> Unit, scannedRfid: String? = null, onScan: (String, Map<String,String>) -> Unit, onOpenRfidScanner: (Map<String, String>) -> Unit, onValue: (String,String) -> Unit, onPhoto: (String,String)->Unit, onVideo: (String,String)->Unit, onFile: (String,String)->Unit, onComment: (String)->Unit, onChecklistDone: (String)->Unit, onChecklistDoneWithValues: (String, Map<String, String>)->Unit, onChecklistProblem: (String,String,String)->Unit, onChecklistSkip: (String,String)->Unit, onComplete: () -> Unit, onSkip: (String)->Unit, onGeneralComplete: (String)->Unit, onGeneralReject: (String, String)->Unit, onOpenAnimal: (String)->Unit, canEdit: Boolean = true) {
-    when (task.operationType) {
-        OperationType.INSEMINATION -> InseminationScreen(task, scannedRfid, onBack, onBegin, onScan, onOpenRfidScanner, onValue, onPhoto, onVideo, onFile, onComment, onChecklistDone, onChecklistProblem, onChecklistSkip, onComplete, onSkip, onOpenAnimal, canEdit)
-        OperationType.PALPATION -> PalpationScreen(task, scannedRfid, onBack, onBegin, onScan, onOpenRfidScanner, onValue, onPhoto, onVideo, onFile, onComment, onChecklistDone, onChecklistProblem, onChecklistSkip, onComplete, onSkip, onOpenAnimal, canEdit)
-        OperationType.WEIGHING, OperationType.FIRST_WEIGHING -> WeighingScreen(
-            task = task,
-            onBack = onBack,
-            onBegin = onBegin,
-            onWeighingSaved = onScan,
-            onPhoto = onPhoto,
-            onVideo = onVideo,
-            onFile = onFile,
-            onComment = onComment,
-            onChecklistDone = onChecklistDone,
-            onChecklistProblem = onChecklistProblem,
-            onChecklistSkip = onChecklistSkip,
-            onComplete = onComplete,
-            onSkip = onSkip,
-            canEdit = canEdit,
-        )
-        OperationType.NEST_PREPARATION -> NestPreparationScreen(task, onBack, onBegin, onPhoto, onVideo, onFile, onComment, onChecklistDone, onChecklistProblem, onChecklistSkip, onComplete, onSkip, canEdit)
-        OperationType.NEST_CONTROL -> CageOperationScreen("RFID клетки", task, scannedRfid, "Контроль гнезда: сытые/голодные/мертвые", onBack, onBegin, onScan, onOpenRfidScanner, onValue, onPhoto, onVideo, onFile, onComment, onChecklistDone, onChecklistProblem, onChecklistSkip, onComplete, onSkip, canEdit)
-        OperationType.NEST_SELECTION -> CageOperationScreen("RFID клетки", task, scannedRfid, "Выравнивание / калибровка гнезда", onBack, onBegin, onScan, onOpenRfidScanner, onValue, onPhoto, onVideo, onFile, onComment, onChecklistDone, onChecklistProblem, onChecklistSkip, onComplete, onSkip, canEdit)
-        OperationType.OKROL -> CageOperationScreen("RFID клетки", task, scannedRfid, "Окрол: учет живых и мертвых", onBack, onBegin, onScan, onOpenRfidScanner, onValue, onPhoto, onVideo, onFile, onComment, onChecklistDone, onChecklistProblem, onChecklistSkip, onComplete, onSkip, canEdit)
-        OperationType.LACTATION_CONTROL -> CageOperationScreen("RFID клетки", task, scannedRfid, "Контроль лактации", onBack, onBegin, onScan, onOpenRfidScanner, onValue, onPhoto, onVideo, onFile, onComment, onChecklistDone, onChecklistProblem, onChecklistSkip, onComplete, onSkip, canEdit)
-        OperationType.ANIMAL_TRANSFER, OperationType.ANIMAL_SETTLEMENT, OperationType.FEMALE_DELIVERY -> CageOperationScreen("RFID объекта", task, scannedRfid, task.operationType.title, onBack, onBegin, onScan, onOpenRfidScanner, onValue, onPhoto, onVideo, onFile, onComment, onChecklistDone, onChecklistProblem, onChecklistSkip, onComplete, onSkip, canEdit)
-        OperationType.LIGHT_STIMULATION, OperationType.LIGHTING_CHECK -> LightAutomationTaskScreen(task, onBack, onBegin, onValue, onPhoto, onVideo, onFile, onComment, onChecklistDone, onChecklistProblem, onChecklistSkip, onComplete, onSkip, canEdit)
-        OperationType.FEED_CHECK, OperationType.MANUAL_FEEDING -> FeedOperationScreen(task, onBack, onBegin, onValue, onPhoto, onVideo, onFile, onComment, onChecklistDone, onChecklistProblem, onChecklistSkip, onComplete, onSkip, canEdit)
-        OperationType.CUSTOM_TASK -> SimpleOperationScreen(task, definition, scannedRfid, onBack, onBegin, onScan, onOpenRfidScanner, onValue, onChecklistDone, onChecklistDoneWithValues, onChecklistProblem, onComplete, onSkip, onGeneralComplete, onGeneralReject, onPhoto, onVideo, onFile, onComment, onOpenAnimal, canEdit)
-        else -> HangarGenericOperationScreen(task, definition, onBack, onBegin, onValue, onPhoto, onVideo, onFile, onComment, onChecklistDone, onChecklistProblem, onChecklistSkip, onComplete, onSkip, canEdit)
+    if (task.operationType == OperationType.ANIMAL_SETTLEMENT) {
+        ProductionAnimalSettlementScreen(task, scannedRfid, onBack, onBegin, onScan, onOpenRfidScanner, onPhoto, onVideo, onFile, canEdit)
+    } else {
+        SimpleOperationScreen(task, definition, scannedRfid, onBack, onBegin, onScan, onOpenRfidScanner, onValue, onChecklistDone, onChecklistDoneWithValues, onChecklistProblem, onComplete, onSkip, onGeneralComplete, onGeneralReject, onPhoto, onVideo, onFile, onComment, onOpenAnimal, canEdit)
     }
 }

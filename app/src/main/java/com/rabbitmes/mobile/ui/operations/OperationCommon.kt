@@ -1,5 +1,6 @@
 package com.rabbitmes.mobile.ui.operations
 
+import android.util.Log
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material.icons.Icons
@@ -8,6 +9,11 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.unit.dp
 import com.rabbitmes.mobile.data.MockRepository
 import com.rabbitmes.mobile.domain.*
@@ -48,6 +54,7 @@ fun TaskExecutionScaffold(
     bottom: @Composable ColumnScope.() -> Unit
 ) {
     var skipReason by remember { mutableStateOf(taskSkipReasons.first()) }
+    var hasTaskIssue by remember(task.id) { mutableStateOf(false) }
 
     val checklist: @Composable () -> Unit = {
         if (task.checklist.isNotEmpty()) {
@@ -97,14 +104,20 @@ fun TaskExecutionScaffold(
             }
         }
         Spacer(Modifier.height(MesSpacing.contentGap))
-        SelectionDropdown(
-            value = skipReason,
-            onValueChange = { skipReason = it },
-            options = taskSkipReasons,
-            label = "Причина, если невозможно выполнить всю задачу",
-            modifier = Modifier.fillMaxWidth(),
-        )
-        OutlinedButton(onClick = { onSkip(skipReason) }, Modifier.fillMaxWidth()) { Text("Невозможно выполнить всю задачу") }
+        Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+            Checkbox(checked = hasTaskIssue, onCheckedChange = { hasTaskIssue = it })
+            Text("Есть замечания", fontWeight = FontWeight.SemiBold)
+        }
+        if (hasTaskIssue) {
+            SelectionDropdown(
+                value = skipReason,
+                onValueChange = { skipReason = it },
+                options = taskSkipReasons,
+                label = "Причина, если невозможно выполнить задачу",
+                modifier = Modifier.fillMaxWidth(),
+            )
+            OutlinedButton(onClick = { onSkip(skipReason) }, Modifier.fillMaxWidth()) { Text("Невозможно выполнить задачу") }
+        }
     }
 
     LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = MesSpacing.screenBottom)) {
@@ -212,9 +225,12 @@ fun CageScanPanel(
     onScan: (String) -> Unit,
     onOpenScanner: (() -> Unit)? = null,
     initialRfid: String? = null,
+    showSelectionButtons: Boolean = true,
+    instruction: String = "Укажите клетку.",
 ) {
     var rfid by remember { mutableStateOf("") }
     var scannedRfid by remember { mutableStateOf<String?>(null) }
+    val focusRequester = remember { FocusRequester() }
 
     LaunchedEffect(initialRfid) {
         if (!initialRfid.isNullOrBlank()) {
@@ -222,21 +238,37 @@ fun CageScanPanel(
             scannedRfid = initialRfid
         }
     }
+    LaunchedEffect(Unit) { focusRequester.requestFocus() }
 
     MesCard {
         Text(title, fontWeight = FontWeight.Bold)
-        Text("Укажите клетку.", color = MaterialTheme.colorScheme.onSurfaceVariant)
-        OutlinedTextField(rfid, { rfid = it; scannedRfid = null }, Modifier.fillMaxWidth(), label = { Text("ID клетки") })
-        Row(horizontalArrangement = Arrangement.spacedBy(MesSpacing.smallGap), modifier = Modifier.fillMaxWidth()) {
-            Button(onClick = { onOpenScanner?.invoke() ?: run { scannedRfid = rfid } }, Modifier.weight(1f)) { Text("Выбрать клетку") }
-            OutlinedButton(
-                onClick = {
-                    val mockRfid = MockRepository.allCages.first().rfid
-                    rfid = mockRfid
-                    scannedRfid = mockRfid
-                },
-                Modifier.weight(1f)
-            ) { Text("Mock") }
+        Text(instruction, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        OutlinedTextField(
+            value = rfid,
+            onValueChange = { raw ->
+                val cleaned = raw.filterNot { it == '\n' || it == '\r' }
+                rfid = cleaned
+                scannedRfid = if (raw.any { it == '\n' || it == '\r' } && cleaned.isNotBlank()) cleaned.trim() else null
+            },
+            modifier = Modifier.fillMaxWidth().focusRequester(focusRequester),
+            label = { Text("RFID") },
+            placeholder = { Text("Ожидание сканирования…") },
+            singleLine = true,
+            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+            keyboardActions = KeyboardActions(onDone = { if (rfid.isNotBlank()) scannedRfid = rfid.trim() }),
+        )
+        if (showSelectionButtons) {
+            Row(horizontalArrangement = Arrangement.spacedBy(MesSpacing.smallGap), modifier = Modifier.fillMaxWidth()) {
+                Button(onClick = { onOpenScanner?.invoke() ?: run { scannedRfid = rfid } }, Modifier.weight(1f)) { Text("Выбрать клетку") }
+                OutlinedButton(
+                    onClick = {
+                        val mockRfid = MockRepository.allCages.first().rfid
+                        rfid = mockRfid
+                        scannedRfid = mockRfid
+                    },
+                    Modifier.weight(1f)
+                ) { Text("Mock") }
+            }
         }
         val cage = scannedRfid?.let { MockRepository.cageByRfid(it) }
         if (cage != null) {
@@ -253,7 +285,10 @@ fun CageScanPanel(
         }
         if (scannedRfid != null) {
             Spacer(Modifier.height(MesSpacing.contentGap))
-            Button(onClick = { onScan(scannedRfid!!) }, Modifier.fillMaxWidth()) { Text("Выполнено") }
+            Button(onClick = {
+                Log.d("RFID_SETTLEMENT", "UI click Выполнено. rfid=$scannedRfid")
+                onScan(scannedRfid!!)
+            }, Modifier.fillMaxWidth()) { Text("Выполнено") }
         }
     }
 }
