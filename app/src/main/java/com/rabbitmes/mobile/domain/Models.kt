@@ -20,6 +20,8 @@ enum class OperationType(val title: String) {
     NEST_SELECTION("Селекция / выравнивание гнезд"),
     LACTATION_CONTROL("Контроль лактации"),
     WEIGHING("Взвешивание"),
+    WEIGHING_CAGE("Взвешивание клетки"),
+    WEIGHING_RABBIT("Взвешивание мясного кролика"),
     ANIMAL_TRANSFER("Переводы животных"),
     ANIMAL_DEPARTURE("Выбытие"),
     WEANING("Отъем"),
@@ -87,6 +89,15 @@ data class ChecklistItem(
     val reviewedAt: String? = null
 )
 
+data class TaskTarget(
+    val id: String,
+    val label: String,
+    val targetType: TargetType,
+    val targetId: String,
+    val status: ChecklistStatus = ChecklistStatus.PENDING,
+    val result: ExecutionResult = ExecutionResult(),
+)
+
 data class MobileTask(
     val id: String,
     val title: String,
@@ -112,8 +123,15 @@ data class MobileTask(
     val isGeneral: Boolean = false,
     val pendingGeneralSubtaskIds: List<Long> = emptyList(),
     val workReportId: Long? = null,
+    val targets: List<TaskTarget> = emptyList(),
 ) {
-    val progress: Int get() = if (checklist.isEmpty()) 0 else checklist.count { it.status == ChecklistStatus.DONE || it.status == ChecklistStatus.PROBLEM || it.status == ChecklistStatus.SKIPPED } * 100 / checklist.size
+    val progress: Int get() {
+        val executionItems = checklist.size + targets.size
+        if (executionItems == 0) return 0
+        val processed = checklist.count { it.status != ChecklistStatus.PENDING } +
+            targets.count { it.status != ChecklistStatus.PENDING }
+        return processed * 100 / executionItems
+    }
     fun markOffline() = copy(offlineEvents = offlineEvents + 1)
 }
 

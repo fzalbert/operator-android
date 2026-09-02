@@ -21,7 +21,7 @@ import com.rabbitmes.mobile.ui.components.*
 @Composable
 fun TaskListScreen(tasks: List<MobileTask>, nextTask: MobileTask?, message: String?, shiftStarted: Boolean, onOpen: (String) -> Unit, onBack: () -> Unit, bottomBar: @Composable () -> Unit) {
     val open = tasks.filter { it.status != TaskStatus.DONE && it.status != TaskStatus.SENT && it.status != TaskStatus.SKIPPED }.sortedWith(compareBy<MobileTask> { it.priority.weight }.thenBy { it.plannedStart })
-    val problems = open.sumOf { task -> task.checklist.count { it.status == ChecklistStatus.PROBLEM } }
+    val problems = open.sumOf { task -> task.checklist.count { it.status == ChecklistStatus.PROBLEM } + task.targets.count { it.status == ChecklistStatus.PROBLEM } }
     val largeFont = LocalDensity.current.fontScale >= 1.3f
     Scaffold(bottomBar = bottomBar, containerColor = MaterialTheme.colorScheme.background) { padding ->
         LazyColumn(Modifier.fillMaxSize().padding(padding), contentPadding = PaddingValues(bottom = 24.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -52,7 +52,8 @@ fun TaskCard(task: MobileTask, isNext: Boolean = false, onClick: () -> Unit) = P
 
 @Composable private fun PrototypeTaskCard(task: MobileTask, onClick: () -> Unit) {
     val accent = when (task.priority) { Priority.URGENT -> Color(0xFFDC4C4C); Priority.HIGH -> Color(0xFFF59E0B); Priority.NORMAL -> Color(0xFF1F8A5B) }
-    val problems = task.checklist.count { it.status == ChecklistStatus.PROBLEM }
+    val executionItems = task.checklist.map { it.status } + task.targets.map { it.status }
+    val problems = executionItems.count { it == ChecklistStatus.PROBLEM }
     val largeFont = LocalDensity.current.fontScale >= 1.3f
     Card(shape = RoundedCornerShape(22.dp), colors = CardDefaults.cardColors(Color.White), elevation = CardDefaults.cardElevation(5.dp), modifier = Modifier.fillMaxWidth().padding(horizontal = 18.dp).clickable(onClick = onClick)) {
         Row { Box(Modifier.width(5.dp).heightIn(min = 190.dp).background(accent)); Column(Modifier.weight(1f).padding(16.dp)) {
@@ -68,12 +69,12 @@ fun TaskCard(task: MobileTask, isNext: Boolean = false, onClick: () -> Unit) = P
             Spacer(Modifier.height(12.dp))
             if (largeFont) {
                 Text(
-                    "${task.checklist.count { it.status == ChecklistStatus.DONE }}/${task.checklist.size} пунктов · $problems замечаний · приёмка: ${if (task.requiresAcceptance) "да" else "нет"}",
+                    "${executionItems.count { it == ChecklistStatus.DONE }}/${executionItems.size} пунктов · $problems замечаний · приёмка: ${if (task.requiresAcceptance) "да" else "нет"}",
                     color = Color(0xFF60726A),
                     style = MaterialTheme.typography.bodyMedium,
                 )
             } else {
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) { TaskMetric("${task.checklist.count { it.status == ChecklistStatus.DONE }}/${task.checklist.size}", "пунктов", Modifier.weight(1f)); TaskMetric(problems.toString(), "замечаний", Modifier.weight(1f)); TaskMetric(if (task.requiresAcceptance) "Да" else "Нет", "приёмка", Modifier.weight(1f)) }
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) { TaskMetric("${executionItems.count { it == ChecklistStatus.DONE }}/${executionItems.size}", "пунктов", Modifier.weight(1f)); TaskMetric(problems.toString(), "замечаний", Modifier.weight(1f)); TaskMetric(if (task.requiresAcceptance) "Да" else "Нет", "приёмка", Modifier.weight(1f)) }
             }
         } }
     }

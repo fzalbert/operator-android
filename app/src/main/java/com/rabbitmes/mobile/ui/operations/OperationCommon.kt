@@ -286,7 +286,7 @@ fun CageScanPanel(
         if (scannedRfid != null) {
             Spacer(Modifier.height(MesSpacing.contentGap))
             Button(onClick = {
-                Log.d("RFID_SETTLEMENT", "UI click Выполнено. rfid=$scannedRfid")
+                Log.d("RabbitSettlement", "RFID confirmed in settlement UI. rfid=$scannedRfid")
                 onScan(scannedRfid!!)
             }, Modifier.fillMaxWidth()) { Text("Выполнено") }
         }
