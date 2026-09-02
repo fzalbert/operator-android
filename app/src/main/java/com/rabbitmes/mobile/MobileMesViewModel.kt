@@ -272,6 +272,28 @@ private fun String.operationLookupKey(): String = trim()
 
 private fun String.isUuid(): Boolean = runCatching { UUID.fromString(this) }.isSuccess
 
+private fun buildProductionTargetResult(
+    operationType: OperationType,
+    targetObjectId: String,
+    values: Map<String, String>,
+) = buildJsonObject {
+    if (operationType == OperationType.ANIMAL_SETTLEMENT) {
+        targetObjectId.toLongOrNull()?.let { put("cellId", it) }
+    }
+    if (operationType == OperationType.WEIGHING_CAGE || operationType == OperationType.WEIGHING_RABBIT) {
+        val rawWeight = values["weightGrams"] ?: values["totalWeightGrams"]
+        rawWeight?.trim()?.toLongOrNull()?.let { put("weightGrams", it) }
+            ?: rawWeight?.trim()?.replace(',', '.')?.toDoubleOrNull()?.let { put("weightGrams", it) }
+    }
+    values.filterKeys {
+        it != "rfid" &&
+            it != "weightGrams" &&
+            it != "totalWeightGrams" &&
+            it != PROBLEM_REASON_KEY &&
+            it != PROBLEM_COMMENT_KEY
+    }.forEach { (key, value) -> put(key, value) }
+}
+
 private fun ProductionTaskDetailsDto.toMobileTask(employeeId: String): MobileTask {
     val resolvedTargets = targets.ifEmpty { task.targets }
     val operationKey = task.operationCode.orEmpty().operationLookupKey()
@@ -1173,10 +1195,7 @@ class MobileMesViewModel @Inject constructor(
             updateTargetLocally(taskId, targetId, status, reason, comment, values)
             return
         }
-        val result = buildJsonObject {
-            values.filterKeys { it != "rfid" && it != PROBLEM_REASON_KEY && it != PROBLEM_COMMENT_KEY }
-                .forEach { (key, value) -> put(key, value) }
-        }
+        val result = buildProductionTargetResult(task.operationType, target.targetId, values)
         val request = CompleteTargetRequest(
             result = result,
             rfid = values["rfid"]?.trim(),
@@ -1226,13 +1245,7 @@ class MobileMesViewModel @Inject constructor(
             val isAnimalTargetTask = task.operationType == OperationType.ANIMAL_SETTLEMENT ||
                 task.operationType == OperationType.ANIMAL_TRANSFER
             val operationTitle = if (task.operationType == OperationType.ANIMAL_TRANSFER) "Переселение" else "Заселение"
-            val result = buildJsonObject {
-                if (task.operationType == OperationType.ANIMAL_SETTLEMENT) {
-                    item.targetId.toLongOrNull()?.let { put("cellId", it) }
-                }
-                values.filterKeys { it != "rfid" && it != PROBLEM_REASON_KEY && it != PROBLEM_COMMENT_KEY }
-                    .forEach { (key, value) -> put(key, value) }
-            }
+            val result = buildProductionTargetResult(task.operationType, item.targetId, values)
             val completionPayload = CompleteTargetRequest(
                 result = result,
                 rfid = rfid,

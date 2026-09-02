@@ -61,6 +61,7 @@ object MockRepository {
             OperationField("photo", "Фото показаний весов", FieldType.PHOTO)
         ), listOf(RoleId.OPERATOR)),
         OperationDefinition(OperationType.WEIGHING_RABBIT, TargetType.RABBIT, false, "Сохранить вес кролика", listOf(
+            OperationField("rfid", "RFID кролика", FieldType.TEXT, true),
             OperationField("weightGrams", "Вес мясного кролика", FieldType.NUMBER, true, "г"),
             OperationField("photo", "Фото показаний весов", FieldType.PHOTO)
         ), listOf(RoleId.OPERATOR)),
