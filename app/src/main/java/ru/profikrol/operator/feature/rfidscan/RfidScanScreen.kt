@@ -86,7 +86,7 @@ fun RfidScanScreen(
         viewModel.events.collectLatest { event ->
             when (event) {
                 is RfidScanEvent.Scanned -> {
-                    Log.d("RFID_TEST", "RfidScanScreen получил: ${event.code}")
+                    Log.d("RabbitSettlement", "RFID received from HID scanner. rfid=${event.code}")
                     onScanned(event.code)
                 }
             }

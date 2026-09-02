@@ -56,6 +56,14 @@ object MockRepository {
             OperationField("weightGrams", "Вес", FieldType.NUMBER, true, "г"),
             OperationField("photo", "Фото весов", FieldType.PHOTO)
         ), listOf(RoleId.OPERATOR)),
+        OperationDefinition(OperationType.WEIGHING_CAGE, TargetType.CAGE, false, "Сохранить общий вес клетки", listOf(
+            OperationField("totalWeightGrams", "Общий вес клетки", FieldType.NUMBER, true, "г"),
+            OperationField("photo", "Фото показаний весов", FieldType.PHOTO)
+        ), listOf(RoleId.OPERATOR)),
+        OperationDefinition(OperationType.WEIGHING_RABBIT, TargetType.RABBIT, false, "Сохранить вес кролика", listOf(
+            OperationField("weightGrams", "Вес мясного кролика", FieldType.NUMBER, true, "г"),
+            OperationField("photo", "Фото показаний весов", FieldType.PHOTO)
+        ), listOf(RoleId.OPERATOR)),
         OperationDefinition(OperationType.NEST_PREPARATION, TargetType.CAGE, false, "Гнездо подготовлено", listOf(
             OperationField("nestReady", "Гнездо готово", FieldType.BOOLEAN, true)
         ), listOf(RoleId.OPERATOR), true),
@@ -115,9 +123,25 @@ object MockRepository {
     private fun rabbitChecklist(prefix: String, count: Int = 12) = rabbits.take(count).mapIndexed { index, rabbit -> ChecklistItem("$prefix-r-${index + 1}", "${rabbit.earNumber} · ${rabbit.rfid}", TargetType.RABBIT, rabbit.id) }
     private fun cageChecklist(prefix: String, count: Int = 18) = allCages.take(count).mapIndexed { index, cage -> ChecklistItem("$prefix-c-${index + 1}", "${cage.code} · ${cage.rfid}", TargetType.CAGE, cage.id) }
     private fun cageNumberChecklist(prefix: String, count: Int = 18) = allCages.take(count).mapIndexed { index, cage -> ChecklistItem("$prefix-c-${index + 1}", "Клетка ${cage.code}", TargetType.CAGE, cage.id) }
-    private fun weighingChecklist(count: Int = 4) = allCages.take(count).mapIndexed { index, cage ->
-        ChecklistItem("weight-c-${index + 1}", "Ряд ${cage.rowNumber} · клетка ${cage.number}", TargetType.CAGE, cage.id)
+    private fun weighingTargets(count: Int = 4) = allCages.take(count).mapIndexed { index, cage ->
+        TaskTarget("weight-c-${index + 1}", "Ряд ${cage.rowNumber} · клетка ${cage.number}", TargetType.CAGE, cage.id)
     }
+    private fun weighingChecklist(count: Int = 4) = allCages.take(count).mapIndexed { index, cage ->
+        ChecklistItem("legacy-weight-c-${index + 1}", "Ряд ${cage.rowNumber} · клетка ${cage.number}", TargetType.CAGE, cage.id)
+    }
+    private fun meatRabbitWeighingTargets(count: Int = 4) = allCages.take(count).mapIndexed { index, cage ->
+        TaskTarget(
+            id = "meat-rabbit-weight-${index + 1}",
+            label = "Мясной кролик ${index + 1} · ${cage.code} · без RFID",
+            targetType = TargetType.RABBIT,
+            targetId = "mock-meat-rabbit-${index + 1}",
+        )
+    }
+
+    fun mockWeighingTasks(employeeId: String): List<MobileTask> = listOf(
+        MobileTask("mock-weighing-cage", "Взвешивание клетки с мясными кроликами", OperationType.WEIGHING_CAGE, "ws-1", "h-1", employeeId, "2026-09-02", "11:30", 45, Priority.HIGH, TaskStatus.NEW, emptyList(), false, description = "Взвесьте всех мясных кроликов в клетке вместе и укажите общий вес.", targets = weighingTargets(3)),
+        MobileTask("mock-weighing-rabbit", "Взвешивание мясных кроликов по одному", OperationType.WEIGHING_RABBIT, "ws-1", "h-1", employeeId, "2026-09-02", "12:30", 45, Priority.HIGH, TaskStatus.NEW, emptyList(), false, description = "Взвесьте каждого мясного кролика отдельно. RFID не требуется.", targets = meatRabbitWeighingTargets(4)),
+    )
     private fun waterRowChecklist(hangarId: String): List<ChecklistItem> =
         workshop.hangars
             .firstOrNull { it.id == hangarId }

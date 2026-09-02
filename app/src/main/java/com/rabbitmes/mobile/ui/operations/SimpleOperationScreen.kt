@@ -82,14 +82,28 @@ fun SimpleOperationScreen(
     }
 
     val useGeneralTemplate = USE_GENERAL_TEMPLATE_FOR_ALL_OPERATIONS
+    val usesTargets = task.operationType == OperationType.WEIGHING_CAGE ||
+        task.operationType == OperationType.WEIGHING_RABBIT
+    val targetItems = task.targets.map { target ->
+        ChecklistItem(
+            id = target.id,
+            label = target.label,
+            targetType = target.targetType,
+            targetId = target.targetId,
+            serverType = "production-target",
+            status = target.status,
+            result = target.result,
+        )
+    }
+    val executionItems = if (usesTargets) targetItems else task.checklist
     var activeItemId by remember(task.id) { mutableStateOf<String?>(null) }
-    val activeItem = task.checklist.firstOrNull { it.id == activeItemId }
-    val pending = task.checklist.filter { it.status == ChecklistStatus.PENDING }
-    val closed = task.checklist.filter { it.status != ChecklistStatus.PENDING }
-    val doneCount = task.checklist.count { it.status == ChecklistStatus.DONE }
-    val problemCount = task.checklist.count { it.status == ChecklistStatus.PROBLEM }
-    val allProcessed = task.checklist.isEmpty() || pending.isEmpty()
-    val requiresScan = !useGeneralTemplate && definition.requiresScan && task.checklist.none {
+    val activeItem = executionItems.firstOrNull { it.id == activeItemId }
+    val pending = executionItems.filter { it.status == ChecklistStatus.PENDING }
+    val closed = executionItems.filter { it.status != ChecklistStatus.PENDING }
+    val doneCount = executionItems.count { it.status == ChecklistStatus.DONE }
+    val problemCount = executionItems.count { it.status == ChecklistStatus.PROBLEM }
+    val allProcessed = executionItems.isEmpty() || pending.isEmpty()
+    val requiresScan = !useGeneralTemplate && definition.requiresScan && executionItems.none {
         it.serverType.equals("general", ignoreCase = true)
     }
     val listState = rememberLazyListState()
@@ -126,6 +140,7 @@ fun SimpleOperationScreen(
             onVideo = onVideo,
             onFile = onFile,
             attachments = task.result.attachments,
+            objectLabel = if (usesTargets) "Целевой объект" else "Объект чек-листа",
         )
         return
     }
@@ -177,7 +192,7 @@ fun SimpleOperationScreen(
                 Spacer(Modifier.height(12.dp))
                 if (largeFont) {
                     Text(
-                        "$doneCount выполнено · $problemCount проблем · ${task.checklist.size} всего",
+                        "$doneCount выполнено · $problemCount проблем · ${executionItems.size} всего",
                         color = Color.White,
                         style = MaterialTheme.typography.bodyMedium,
                         fontWeight = FontWeight.Bold,
@@ -186,7 +201,7 @@ fun SimpleOperationScreen(
                     Row(horizontalArrangement = Arrangement.spacedBy(7.dp)) {
                         SimpleMetric(doneCount.toString(), "выполнено", Modifier.weight(1f), true)
                         SimpleMetric(problemCount.toString(), "проблем", Modifier.weight(1f), true)
-                        SimpleMetric(task.checklist.size.toString(), "всего", Modifier.weight(1f), true)
+                        SimpleMetric(executionItems.size.toString(), "всего", Modifier.weight(1f), true)
                     }
                 }
                 if (task.status == TaskStatus.NEW && canEdit) {
@@ -227,7 +242,7 @@ fun SimpleOperationScreen(
                         onOpenAnimal = onOpenAnimal,
                     )
                 }
-            } else if (task.checklist.isEmpty()) {
+            } else if (executionItems.isEmpty()) {
                 item {
                     SimpleStandaloneForm(
                         task = task,
@@ -243,8 +258,8 @@ fun SimpleOperationScreen(
             }
         }
 
-        if (!useGeneralTemplate && task.checklist.isNotEmpty()) {
-            item { SimpleSectionTitle(if (requiresScan) "Чек-лист закрывается сканированием" else "К исполнению") }
+        if (!useGeneralTemplate && executionItems.isNotEmpty()) {
+            item { SimpleSectionTitle(if (usesTargets) "Целевые объекты" else if (requiresScan) "Чек-лист закрывается сканированием" else "К исполнению") }
             if (pending.isEmpty()) item { SimpleEmpty("Все пункты обработаны") }
             pending.forEach { checklistItem ->
                 item(key = checklistItem.id) {
@@ -266,6 +281,19 @@ fun SimpleOperationScreen(
                     Modifier.fillMaxWidth().padding(top = 8.dp),
                     enabled = allProcessed && task.status != TaskStatus.SENT && canEdit,
                 )
+            }
+        }
+        if (usesTargets && task.checklist.isNotEmpty()) {
+            item { SimpleSectionTitle("Дополнительный чек-лист") }
+            task.checklist.forEach { checklistItem ->
+                item(key = "checklist-${checklistItem.id}") {
+                    SimpleChecklistCard(
+                        title = checklistItem.label,
+                        subtitle = checklistItem.status.title,
+                        action = if (checklistItem.status == ChecklistStatus.PENDING) "Выполнить" else "Готово",
+                        enabled = checklistItem.status == ChecklistStatus.PENDING && canEdit,
+                    ) { onChecklistDone(checklistItem.id) }
+                }
             }
         }
         item { Spacer(Modifier.height(24.dp)) }
@@ -1117,6 +1145,7 @@ private fun SimpleItemForm(
     onVideo: (String, String) -> Unit,
     onFile: (String, String) -> Unit,
     attachments: List<MediaAttachment>,
+    objectLabel: String = "Объект чек-листа",
 ) {
     val values = remember(item.id) {
         mutableStateMapOf<String, String>().apply {
@@ -1136,7 +1165,7 @@ private fun SimpleItemForm(
                 Text("×", color = SimpleMuted, fontSize = 30.sp, modifier = Modifier.clickable(onClick = onCancel).padding(8.dp))
             }
         }
-        item { SimpleReadonly("Объект чек-листа", item.label) }
+        item { SimpleReadonly(objectLabel, item.label) }
         definition.fields.filterNot { definition.shouldAutoCompleteField(it) }.forEach { field ->
             item(field.id) {
                 SimpleField(
@@ -1521,7 +1550,9 @@ private fun problemReasons(type: OperationType): List<String> = when (type) {
         "Животное отсутствует",
         "Другая причина",
     )
-    OperationType.WEIGHING -> listOf(
+    OperationType.WEIGHING,
+    OperationType.WEIGHING_CAGE,
+    OperationType.WEIGHING_RABBIT -> listOf(
         "Весы недоступны или неисправны",
         "Некорректные показания",
         "Объект отсутствует",

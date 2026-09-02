@@ -87,9 +87,13 @@ fun RabbitMesApp(vm: MobileMesViewModel) {
     ) { _ ->
         Box(Modifier.fillMaxSize()) {
         when(val screen = vm.screen) {
-            AppScreen.Login -> AuthScreen(onLoggedIn = vm::onLoggedInFromSession)
+            AppScreen.Login -> if (vm.tasks.any { it.id.startsWith("mock-") }) {
+                TaskListScreen(vm.tasksForCurrentEmployee(), vm.nextTask(), vm.lastMessage, true, { vm.navigate(AppScreen.TaskExecution(it)) }, { vm.navigate(AppScreen.Shift) }, bottom("tasks"))
+            } else {
+                AuthScreen(onLoggedIn = vm::onLoggedInFromSession)
+            }
             AppScreen.Shift -> ShiftScreen(vm.currentEmployee, vm.shift, vm.tasksForCurrentEmployee(), vm.nextTask(), vm.lastMessage, vm.notifications.count { it.isUnread }, vm.isShiftActionInProgress, vm.isTasksLoading, vm::startShift, vm::finishShift, { vm.navigate(AppScreen.TaskExecution(it)) }, { vm.navigate(AppScreen.Notifications) }, vm::logout, bottom("shift"))
-            AppScreen.Tasks -> TaskListScreen(vm.tasksForCurrentEmployee(), vm.nextTask(), vm.lastMessage, vm.shift.startedAt != null, { vm.navigate(AppScreen.TaskExecution(it)) }, { vm.navigate(AppScreen.Shift) }, bottom("tasks"))
+            AppScreen.Tasks -> TaskListScreen(vm.tasksForCurrentEmployee(), vm.nextTask(), vm.lastMessage, vm.shift.startedAt != null || vm.tasksForCurrentEmployee().any { it.id.startsWith("mock-") }, { vm.navigate(AppScreen.TaskExecution(it)) }, { vm.navigate(AppScreen.Shift) }, bottom("tasks"))
             AppScreen.Map -> HangarMapScreen(vm.workshop, vm.tasksForCurrentEmployee(), { vm.navigate(AppScreen.TaskExecution(it)) }, { vm.navigate(AppScreen.Tasks) }, bottom("map"))
             AppScreen.Sync -> SyncQueueScreen(vm.shift, vm.tasks, vm::syncNow, { vm.navigate(AppScreen.Tasks) }, bottom("sync"))
             AppScreen.Profile -> ProfileScreen(vm.currentEmployee, vm.tasksForCurrentEmployee(), vm.operations, vm::logout, bottom("profile"))
@@ -99,7 +103,7 @@ fun RabbitMesApp(vm: MobileMesViewModel) {
                 val task = vm.taskOrNull(screen.taskId)
                 if (task == null) {
                     LaunchedEffect(screen.taskId) { vm.navigate(AppScreen.Tasks) }
-                    TaskListScreen(vm.tasksForCurrentEmployee(), vm.nextTask(), vm.lastMessage, vm.shift.startedAt != null, { vm.navigate(AppScreen.TaskExecution(it)) }, { vm.navigate(AppScreen.Shift) }, bottom("tasks"))
+                    TaskListScreen(vm.tasksForCurrentEmployee(), vm.nextTask(), vm.lastMessage, vm.shift.startedAt != null || vm.tasksForCurrentEmployee().any { it.id.startsWith("mock-") }, { vm.navigate(AppScreen.TaskExecution(it)) }, { vm.navigate(AppScreen.Shift) }, bottom("tasks"))
                 } else {
                     val canEdit = task.status != com.rabbitmes.mobile.domain.TaskStatus.DONE &&
                         task.status != com.rabbitmes.mobile.domain.TaskStatus.SENT &&

@@ -44,8 +44,8 @@ fun ShiftScreen(
 ) {
     val active = shift.startedAt != null && shift.finishedAt == null
     val openTasks = tasks.filter { it.status != TaskStatus.DONE && it.status != TaskStatus.SENT && it.status != TaskStatus.SKIPPED }
-    val totalItems = openTasks.sumOf { it.checklist.size }
-    val closedItems = openTasks.sumOf { task -> task.checklist.count { it.status != ChecklistStatus.PENDING } }
+    val totalItems = openTasks.sumOf { it.checklist.size + it.targets.size }
+    val closedItems = openTasks.sumOf { task -> task.checklist.count { it.status != ChecklistStatus.PENDING } + task.targets.count { it.status != ChecklistStatus.PENDING } }
     val progress = if (totalItems == 0) 0f else closedItems.toFloat() / totalItems
     val greetingName = employee.fullName.greetingName()
 

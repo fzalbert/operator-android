@@ -188,7 +188,7 @@ fun StatusBadge(text: String, color: Color) {
 
 @Composable
 fun operationAccent(type: OperationType): Color = when(type) {
-    OperationType.INSEMINATION, OperationType.PALPATION, OperationType.WEIGHING, OperationType.ANIMAL_TRANSFER, OperationType.FEMALE_DELIVERY -> MaterialTheme.colorScheme.primary
+    OperationType.INSEMINATION, OperationType.PALPATION, OperationType.WEIGHING, OperationType.WEIGHING_CAGE, OperationType.WEIGHING_RABBIT, OperationType.ANIMAL_TRANSFER, OperationType.FEMALE_DELIVERY -> MaterialTheme.colorScheme.primary
     OperationType.NEST_PREPARATION, OperationType.NEST_CONTROL, OperationType.NEST_SELECTION, OperationType.OKROL, OperationType.LACTATION_CONTROL -> MaterialTheme.colorScheme.tertiary
     OperationType.WASHING, OperationType.DISINFECTION, OperationType.CLEANING, OperationType.DAILY_CLEANING, OperationType.HANGAR_ACCEPTANCE -> mobileSuccessGreen
     OperationType.LIGHT_STIMULATION, OperationType.LIGHTING_CHECK, OperationType.FEED_CHECK, OperationType.WATER_CHECK, OperationType.DEWORMING_DOSATRON -> MesWarning
