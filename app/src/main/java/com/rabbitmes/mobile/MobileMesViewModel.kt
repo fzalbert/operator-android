@@ -1198,10 +1198,11 @@ class MobileMesViewModel @Inject constructor(
         val result = buildProductionTargetResult(task.operationType, target.targetId, values)
         val request = CompleteTargetRequest(
             result = result,
-            rfid = values["rfid"]?.trim(),
+            rfid = values["rfid"]?.trim()?.takeIf(String::isNotBlank),
             deviceId = deviceId,
         )
         launchServerAction("Complete production target failed", "Не удалось сохранить результат") {
+            Log.i(API_LOG_TAG, "Before Complete target. taskId=$taskId targetId=$targetId operation=${task.operationType} payload=$request")
             runCatching {
                 productionTaskApi.completeTarget(currentEmployee.id, taskId, targetId, request)
             }.onSuccess {
