@@ -282,13 +282,17 @@ private fun buildProductionTargetResult(
     }
     if (operationType == OperationType.WEIGHING_CAGE || operationType == OperationType.WEIGHING_RABBIT) {
         val rawWeight = values["weightGrams"] ?: values["totalWeightGrams"]
-        rawWeight?.trim()?.toLongOrNull()?.let { put("weightGrams", it) }
-            ?: rawWeight?.trim()?.replace(',', '.')?.toDoubleOrNull()?.let { put("weightGrams", it) }
+        runCatching {
+            rawWeight?.trim()?.replace(',', '.')?.toBigDecimal()?.longValueExact()
+        }.getOrNull()?.let { put("weightGrams", it) }
     }
     values.filterKeys {
         it != "rfid" &&
             it != "weightGrams" &&
             it != "totalWeightGrams" &&
+            !it.contains("photo", ignoreCase = true) &&
+            !it.contains("video", ignoreCase = true) &&
+            !it.contains("file", ignoreCase = true) &&
             it != PROBLEM_REASON_KEY &&
             it != PROBLEM_COMMENT_KEY
     }.forEach { (key, value) -> put(key, value) }
@@ -945,12 +949,28 @@ class MobileMesViewModel @Inject constructor(
                 launchServerAction("Start production task action failed", fallbackMessage = "Не удалось начать задачу") {
                     runCatching { productionTaskApi.startTask(currentEmployee.id, taskId) }
                         .onSuccess { details ->
-                            val updated = details.toMobileTask(currentEmployee.id)
+                            val serverTask = details.toMobileTask(currentEmployee.id)
+                            val updated = if (serverTask.status == TaskStatus.NEW) {
+                                serverTask.copy(status = TaskStatus.IN_PROGRESS)
+                            } else serverTask
                             tasks = tasks.map { if (it.id == taskId) updated else it }
                             lastMessage = "Задача начата"
                         }
                         .onFailure { error ->
-                            handleError(error, "Не удалось начать задачу", "Start production task failed. taskId=$taskId")
+                            if (error is HttpException && error.code() == 409) {
+                                val details = runCatching {
+                                    productionTaskApi.getTask(currentEmployee.id, taskId)
+                                }.getOrNull()
+                                val updated = details?.toMobileTask(currentEmployee.id)
+                                if (updated != null && updated.status == TaskStatus.IN_PROGRESS) {
+                                    tasks = tasks.map { if (it.id == taskId) updated else it }
+                                    lastMessage = "Задача уже начата"
+                                } else {
+                                    handleError(error, "Не удалось начать задачу", "Start production task failed. taskId=$taskId")
+                                }
+                            } else {
+                                handleError(error, "Не удалось начать задачу", "Start production task failed. taskId=$taskId")
+                            }
                         }
                 }
             } else {
