@@ -60,6 +60,27 @@ fun SimpleOperationScreen(
     onOpenAnimal: (String) -> Unit,
     canEdit: Boolean,
 ) {
+    if (definition.type == OperationType.ANIMAL_TRANSFER) {
+        ProductionAnimalTransferScreen(
+            task = task,
+            definition = definition,
+            scannedRfid = scannedRfid,
+            onBack = onBack,
+            onBegin = onBegin,
+            onOpenScanner = onOpenRfidScanner,
+            onChecklistDoneWithValues = onChecklistDoneWithValues,
+            onChecklistProblem = onChecklistProblem,
+            onComplete = onComplete,
+            onPhoto = onPhoto,
+            onVideo = onVideo,
+            onFile = onFile,
+            onComment = onComment,
+            onOpenAnimal = onOpenAnimal,
+            canEdit = canEdit,
+        )
+        return
+    }
+
     val useGeneralTemplate = USE_GENERAL_TEMPLATE_FOR_ALL_OPERATIONS
     var activeItemId by remember(task.id) { mutableStateOf<String?>(null) }
     val activeItem = task.checklist.firstOrNull { it.id == activeItemId }
@@ -396,6 +417,289 @@ fun ProductionAnimalSettlementScreen(
                     }
                 }
             }
+        }
+        item { Spacer(Modifier.height(24.dp)) }
+    }
+}
+
+@Composable
+fun ProductionAnimalTransferScreen(
+    task: MobileTask,
+    definition: OperationDefinition,
+    scannedRfid: String?,
+    onBack: () -> Unit,
+    onBegin: () -> Unit,
+    onOpenScanner: (Map<String, String>) -> Unit,
+    onChecklistDoneWithValues: (String, Map<String, String>) -> Unit,
+    onChecklistProblem: (String, String, String) -> Unit,
+    onComplete: () -> Unit,
+    onPhoto: (String, String) -> Unit,
+    onVideo: (String, String) -> Unit,
+    onFile: (String, String) -> Unit,
+    onComment: (String) -> Unit,
+    onOpenAnimal: (String) -> Unit,
+    canEdit: Boolean,
+) {
+    val pendingItems = task.checklist.filter { it.status == ChecklistStatus.PENDING }
+    val closedItems = task.checklist.filter { it.status != ChecklistStatus.PENDING }
+    val cellOptions = definition.fields
+        .firstOrNull { it.id == "cellId" }
+        ?.options
+        .orEmpty()
+        .filterNot { it.startsWith("Выберите", ignoreCase = true) }
+        .ifEmpty {
+            MockRepository.allCages
+                .filterNot { it.occupied }
+                .map { it.id }
+        }
+    var selectedItemId by remember(task.id) { mutableStateOf<String?>(null) }
+    var cellId by remember(task.id) { mutableStateOf("") }
+    var hasProblem by remember(task.id) { mutableStateOf(false) }
+    var problemReason by remember(task.id) { mutableStateOf("") }
+    var problemComment by remember(task.id) { mutableStateOf("") }
+    var error by remember(task.id) { mutableStateOf("") }
+
+    fun resetForm() {
+        selectedItemId = null
+        cellId = ""
+        hasProblem = false
+        problemReason = ""
+        problemComment = ""
+        error = ""
+    }
+
+    LaunchedEffect(scannedRfid, task.checklist) {
+        if (!scannedRfid.isNullOrBlank()) {
+            val scannedRabbit = MockRepository.rabbitByRfid(scannedRfid)
+            val item = pendingItems.firstOrNull { checklistItem ->
+                checklistItem.targetId.equals(scannedRfid, ignoreCase = true) ||
+                    checklistItem.label.contains(scannedRfid, ignoreCase = true) ||
+                    scannedRabbit?.id?.let { checklistItem.targetId.equals(it, ignoreCase = true) } == true
+            } ?: pendingItems.singleOrNull()
+            if (item != null) {
+                selectedItemId = item.id
+                cellId = ""
+                hasProblem = false
+                problemReason = ""
+                problemComment = ""
+                error = ""
+            } else {
+                error = "Кроль с RFID $scannedRfid не найден в этом задании или уже обработан"
+            }
+        }
+    }
+
+    val selectedItem = task.checklist.firstOrNull { it.id == selectedItemId }
+    val selectedRabbit = selectedItem?.let { item ->
+        MockRepository.rabbit(item.targetId) ?: MockRepository.rabbitByRfid(item.targetId)
+    }
+    val selectedCell = MockRepository.cage(cellId)
+    val allProcessed = task.checklist.isNotEmpty() && pendingItems.isEmpty()
+    val canSaveTransfer = selectedItem != null && !hasProblem && cellId.isNotBlank() && task.status != TaskStatus.NEW
+    val canSaveProblem = selectedItem != null && hasProblem && problemReason.isNotBlank() && problemComment.isNotBlank() && task.status != TaskStatus.NEW
+
+    LazyColumn(
+        modifier = Modifier.fillMaxSize().background(SimpleBackground).statusBarsPadding(),
+        contentPadding = PaddingValues(horizontal = 18.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
+        item {
+            Text(
+                "← Назад",
+                color = SimpleGreen,
+                fontWeight = FontWeight.ExtraBold,
+                modifier = Modifier.padding(vertical = 10.dp).clickable(onClick = onBack),
+            )
+        }
+        item {
+            Column(
+                Modifier.fillMaxWidth().clip(RoundedCornerShape(26.dp))
+                    .background(Brush.linearGradient(listOf(SimpleGreen, SimpleDarkGreen))).padding(18.dp),
+            ) {
+                Row(Modifier.fillMaxWidth(), Arrangement.SpaceBetween, Alignment.CenterVertically) {
+                    SimplePriorityBadge(task.priority)
+                    Text("${task.plannedStart} · ${task.plannedDurationMinutes} мин", color = Color(0xFFD6EEE2), fontSize = 13.sp)
+                }
+                Spacer(Modifier.height(12.dp))
+                Text("Переселение животных", color = Color.White, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Black)
+                Spacer(Modifier.height(5.dp))
+                Text("${closedItems.size} обработано из ${task.checklist.size}", color = Color(0xFFD6EEE2))
+                if (task.status == TaskStatus.NEW && canEdit) {
+                    Spacer(Modifier.height(14.dp))
+                    SimpleButton("Приступить", onBegin, Modifier.fillMaxWidth())
+                }
+            }
+        }
+        if (task.status != TaskStatus.NEW && canEdit) {
+            item {
+                SimpleCard {
+                    SimpleSectionTitle("Сканирование")
+                    Text("Отсканируйте RFID, чтобы открыть карточку кроля из задания.", color = SimpleMuted)
+                    SimpleButton(
+                        if (scannedRfid.isNullOrBlank()) "Сканировать RFID" else "Сканировать другого кроля",
+                        { onOpenScanner(emptyMap()) },
+                        Modifier.fillMaxWidth(),
+                        secondary = true,
+                    )
+                    OutlinedButton(
+                        onClick = {
+                            selectedItemId = pendingItems.firstOrNull()?.id
+                            cellId = ""
+                            hasProblem = false
+                            error = ""
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                        enabled = pendingItems.isNotEmpty(),
+                    ) { Text("Mock RFID") }
+                    if (error.isNotBlank()) Text(error, color = SimpleRed, fontWeight = FontWeight.Bold)
+                }
+            }
+            if (selectedItem != null) {
+                item {
+                    SimpleCard {
+                        SimpleSectionTitle("Кроль")
+                        Text(selectedItem.label, color = SimpleText, fontSize = 21.sp, fontWeight = FontWeight.Black)
+                        selectedRabbit?.let { rabbit ->
+                            SimpleReadonly("Текущая клетка", MockRepository.cage(rabbit.cageId)?.code ?: rabbit.cageId)
+                        } ?: SimpleReadonly("Target", selectedItem.targetId)
+                        SimpleSectionTitle("Куда переселили")
+                        Row(
+                            Modifier.fillMaxWidth()
+                                .background(Color(0xFFFFF3D6), RoundedCornerShape(16.dp))
+                                .clickable {
+                                    hasProblem = !hasProblem
+                                    error = ""
+                                }
+                                .padding(14.dp),
+                            Arrangement.SpaceBetween,
+                            Alignment.CenterVertically,
+                        ) {
+                            Text("Не переселили", color = Color(0xFF875100), fontWeight = FontWeight.ExtraBold)
+                            Switch(hasProblem, { hasProblem = it; error = "" })
+                        }
+                        if (hasProblem) {
+                            SelectionDropdown(
+                                value = problemReason,
+                                onValueChange = {
+                                    problemReason = it
+                                    error = ""
+                                },
+                                options = problemReasons(OperationType.ANIMAL_TRANSFER),
+                                label = "Причина",
+                                modifier = Modifier.fillMaxWidth(),
+                            )
+                            OutlinedTextField(
+                                value = problemComment,
+                                onValueChange = {
+                                    problemComment = it
+                                    error = ""
+                                },
+                                modifier = Modifier.fillMaxWidth(),
+                                label = { Text("Комментарий почему не переселили") },
+                                minLines = 3,
+                                shape = RoundedCornerShape(16.dp),
+                            )
+                            AttachmentPickerButtons(
+                                onAttachment = { type, name, uri ->
+                                    when (type) {
+                                        AttachmentType.PHOTO -> onPhoto(name, uri)
+                                        AttachmentType.VIDEO -> onVideo(name, uri)
+                                        AttachmentType.FILE -> onFile(name, uri)
+                                    }
+                                },
+                            )
+                            SimpleAttachmentList(task.result.attachments)
+                        } else {
+                            SelectionDropdown(
+                                value = cellId,
+                                onValueChange = {
+                                    cellId = it
+                                    error = ""
+                                },
+                                options = cellOptions,
+                                label = "ID новой клетки",
+                                modifier = Modifier.fillMaxWidth(),
+                            )
+                            selectedCell?.let { cell ->
+                                SimpleReadonly("Выбранная клетка", "${cell.code} · RFID ${cell.rfid}")
+                            }
+                        }
+                        if (error.isNotBlank()) Text(error, color = SimpleRed, fontWeight = FontWeight.Bold)
+                        SimpleButton(
+                            text = if (hasProblem) "Сохранить причину" else "Сохранить новую клетку",
+                            onClick = {
+                                val item = selectedItem ?: return@SimpleButton
+                                when {
+                                    hasProblem && problemComment.isBlank() -> error = "Комментарий обязателен, если кроля не переселили"
+                                    hasProblem -> {
+                                        onChecklistProblem(item.id, problemReason, problemComment.trim())
+                                        onComment(problemComment.trim())
+                                        resetForm()
+                                    }
+                                    cellId.isBlank() -> error = "Укажите ID новой клетки"
+                                    else -> {
+                                        onChecklistDoneWithValues(
+                                            item.id,
+                                            mapOf(
+                                                "rabbitId" to item.targetId,
+                                                "rfid" to (selectedRabbit?.rfid ?: scannedRfid.orEmpty()),
+                                                "cellId" to cellId,
+                                                "cellCode" to (selectedCell?.code ?: cellId),
+                                            ),
+                                        )
+                                        resetForm()
+                                    }
+                                }
+                            },
+                            modifier = Modifier.fillMaxWidth(),
+                            enabled = canSaveTransfer || canSaveProblem,
+                        )
+                        selectedRabbit?.let { rabbit ->
+                            SimpleReadonly("RFID", rabbit.rfid)
+                            SimpleReadonly("Параметры", "${rabbit.sex} · ${rabbit.ageDays} дней · ${"%.2f".format(rabbit.lastWeightKg)} кг")
+                            SimpleReadonly("Статус", "${rabbit.healthStatus} · лактация: ${rabbit.lactationStatus}")
+                            OutlinedButton(onClick = { onOpenAnimal(rabbit.rfid) }, modifier = Modifier.fillMaxWidth()) {
+                                Text("Открыть профиль кроля")
+                            }
+                        }
+                    }
+                }
+            }
+            item { SimpleSectionTitle("К исполнению") }
+            if (pendingItems.isEmpty()) item { SimpleEmpty("Все кроли обработаны") }
+            pendingItems.forEach { item ->
+                item(key = item.id) {
+                    SimpleChecklistCard(
+                        title = item.label,
+                        subtitle = if (item.id == selectedItemId) "Открыт" else "Ожидает RFID или выбора",
+                        action = if (item.id == selectedItemId) "Открыт" else "Открыть",
+                        enabled = true,
+                    ) {
+                        selectedItemId = item.id
+                        cellId = ""
+                        hasProblem = false
+                        problemReason = ""
+                        problemComment = ""
+                        error = ""
+                    }
+                }
+            }
+            item { SimpleSectionTitle("Результаты") }
+            if (closedItems.isEmpty()) item { SimpleEmpty("Пока нет обработанных кролей") }
+            closedItems.forEach { item ->
+                item(key = "closed-${item.id}") { SimpleResultCard(item, definition) }
+            }
+            item {
+                SimpleButton(
+                    text = if (task.requiresAcceptance) "Завершить и отправить на приёмку" else "Завершить задачу",
+                    onClick = onComplete,
+                    modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+                    enabled = allProcessed,
+                )
+            }
+        }
+        if (!canEdit) {
+            item { SimpleEmpty("Задача доступна только для просмотра") }
         }
         item { Spacer(Modifier.height(24.dp)) }
     }

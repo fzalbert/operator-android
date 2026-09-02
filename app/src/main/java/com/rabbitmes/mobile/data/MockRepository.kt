@@ -77,7 +77,7 @@ object MockRepository {
             OperationField("destinationCage", "В клетку", FieldType.SELECT, true, options = listOf("Выберите клетку") + hangarACageCodes),
             OperationField("movedCount", "Количество крольчат", FieldType.NUMBER, true)
         ), listOf(RoleId.OPERATOR, RoleId.CHIEF_TECHNOLOGIST), true),
-        OperationDefinition(OperationType.ANIMAL_TRANSFER, TargetType.RABBIT, true, "Перевести", listOf(OperationField("rfid", "RFID", FieldType.TEXT, true), OperationField("toCage", "Куда переведен", FieldType.TEXT, true)), listOf(RoleId.OPERATOR, RoleId.GENERAL_WORKER)),
+        OperationDefinition(OperationType.ANIMAL_TRANSFER, TargetType.RABBIT, true, "Переселить", listOf(OperationField("rfid", "RFID", FieldType.TEXT, true), OperationField("cellId", "ID новой клетки", FieldType.SELECT, true), OperationField("comment", "Комментарий", FieldType.TEXT)), listOf(RoleId.OPERATOR, RoleId.GENERAL_WORKER)),
         OperationDefinition(OperationType.ANIMAL_SETTLEMENT, TargetType.CAGE, false, "Заселить", listOf(OperationField("cellId", "Клетка", FieldType.SELECT, true), OperationField("animalCount", "Количество животных", FieldType.NUMBER, true)), listOf(RoleId.OPERATOR, RoleId.GENERAL_WORKER)),
         OperationDefinition(OperationType.OKROL, TargetType.CAGE, false, "Окрол учтен", listOf(OperationField("cellId", "Клетка", FieldType.SELECT, true), OperationField("bornAlive", "Живых", FieldType.NUMBER, true), OperationField("bornDead", "Мертвых", FieldType.NUMBER, true)), listOf(RoleId.OPERATOR), true),
         OperationDefinition(OperationType.LACTATION_CONTROL, TargetType.CAGE, false, "Лактация проверена", listOf(OperationField("cellId", "Клетка", FieldType.SELECT, true), OperationField("status", "Статус", FieldType.SELECT, true, options = listOf("Норма", "Недостаточно молока", "Нужна подсадка", "Нужен технолог"))), listOf(RoleId.CHIEF_TECHNOLOGIST)),
@@ -145,6 +145,7 @@ object MockRepository {
         MobileTask("task-10", "Выравнивание гнезд", OperationType.NEST_SELECTION, "ws-1", "h-1", "emp-1", "2026-07-09", "16:40", 90, Priority.HIGH, TaskStatus.NEW, cageNumberChecklist("sel", 10), true, RoleId.CHIEF_TECHNOLOGIST, AcceptanceStatus.NOT_REQUIRED),
         MobileTask("task-11", "Проверка корма", OperationType.FEED_CHECK, "ws-1", "h-1", "emp-1", "2026-07-09", "07:30", 20, Priority.NORMAL, TaskStatus.NEW, emptyList(), false),
         MobileTask("task-12", "Проверка воды", OperationType.WATER_CHECK, "ws-1", "h-1", "emp-1", "2026-07-09", "07:40", 20, Priority.NORMAL, TaskStatus.NEW, waterRowChecklist("h-1"), false),
-        MobileTask("task-13", "Проверить крепление поилки в ряду 2", OperationType.CUSTOM_TASK, "ws-1", "h-1", "emp-1", "2026-07-09", "17:20", 20, Priority.HIGH, TaskStatus.NEW, emptyList(), false, description = "Проверьте клетку Р2-К7. Если крепление ослаблено — зафиксируйте замечание и приложите фото.")
+        MobileTask("task-13", "Проверить крепление поилки в ряду 2", OperationType.CUSTOM_TASK, "ws-1", "h-1", "emp-1", "2026-07-09", "17:20", 20, Priority.HIGH, TaskStatus.NEW, emptyList(), false, description = "Проверьте клетку Р2-К7. Если крепление ослаблено — зафиксируйте замечание и приложите фото."),
+        MobileTask("task-14", "Переселение кролей по клеткам", OperationType.ANIMAL_TRANSFER, "ws-1", "h-1", "emp-1", "2026-07-09", "18:00", 80, Priority.HIGH, TaskStatus.NEW, rabbitChecklist("transfer", 6), false)
     )
 }

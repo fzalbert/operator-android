@@ -219,6 +219,11 @@ private val GENERAL_FORM_OPERATION_TYPES = setOf(
 private val OPERATION_ALIASES = mapOf(
     "animal placement" to OperationType.ANIMAL_SETTLEMENT,
     "animal settlement" to OperationType.ANIMAL_SETTLEMENT,
+    "animal transfer" to OperationType.ANIMAL_TRANSFER,
+    "animal relocation" to OperationType.ANIMAL_TRANSFER,
+    "перевод животных" to OperationType.ANIMAL_TRANSFER,
+    "переселение" to OperationType.ANIMAL_TRANSFER,
+    "переселение животных" to OperationType.ANIMAL_TRANSFER,
     "kindling" to OperationType.OKROL,
     "nest equalization" to OperationType.NEST_SELECTION,
     "female arrival" to OperationType.FEMALE_DELIVERY,
@@ -649,7 +654,8 @@ class MobileMesViewModel @Inject constructor(
                         emptyList()
                     }
                     val needsCells = latestTasks.any {
-                        MockRepository.operation(it.resolveOperationType()).targetType == TargetType.CAGE
+                        it.resolveOperationType() == OperationType.ANIMAL_TRANSFER ||
+                            MockRepository.operation(it.resolveOperationType()).targetType == TargetType.CAGE
                     }
                     val cells = if (needsCells) {
                         runCatching { loadAllCells() }
@@ -684,7 +690,24 @@ class MobileMesViewModel @Inject constructor(
                             } else task
                         }
                     }
-                    tasks = (productionTasks + remoteTasks).distinctBy(MobileTask::id)
+                    val loadedTasks = (productionTasks + remoteTasks).distinctBy(MobileTask::id)
+                    val showcaseTransferTask = MockRepository.initialTasks()
+                        .firstOrNull { it.operationType == OperationType.ANIMAL_TRANSFER }
+                        ?.copy(
+                            id = "demo-animal-transfer",
+                            assignedEmployeeId = currentEmployee.id,
+                            plannedStart = "00:00",
+                            priority = Priority.URGENT,
+                            status = TaskStatus.NEW,
+                        )
+                    tasks = if (
+                        showcaseTransferTask != null &&
+                        loadedTasks.none { it.operationType == OperationType.ANIMAL_TRANSFER }
+                    ) {
+                        (listOf(showcaseTransferTask) + loadedTasks).distinctBy(MobileTask::id)
+                    } else {
+                        loadedTasks
+                    }
                     hasLoadedRemoteTasks = true
                     if (
                         currentEmployee.role == RoleId.CHIEF_TECHNOLOGIST &&
@@ -808,7 +831,7 @@ class MobileMesViewModel @Inject constructor(
     fun nextPendingRfid(taskId: String): String? {
         val item = task(taskId).checklist.firstOrNull { it.status == ChecklistStatus.PENDING } ?: return null
         return when (item.targetType) {
-            TargetType.RABBIT -> item.targetId
+            TargetType.RABBIT -> MockRepository.rabbit(item.targetId)?.rfid ?: item.targetId
             TargetType.CAGE -> allCages.firstOrNull { it.id == item.targetId }?.rfid
             TargetType.ROW,
             TargetType.HANGAR -> null
@@ -1112,6 +1135,9 @@ class MobileMesViewModel @Inject constructor(
                 lastMessage = "Для заселения RFID обязателен"
                 return
             }
+            val isAnimalTargetTask = task.operationType == OperationType.ANIMAL_SETTLEMENT ||
+                task.operationType == OperationType.ANIMAL_TRANSFER
+            val operationTitle = if (task.operationType == OperationType.ANIMAL_TRANSFER) "Переселение" else "Заселение"
             val resultJson = buildJsonObject {
                 values.filterKeys { it != "rfid" && it != PROBLEM_REASON_KEY && it != PROBLEM_COMMENT_KEY }
                     .forEach { (key, value) -> put(key, value) }
@@ -1138,18 +1164,18 @@ class MobileMesViewModel @Inject constructor(
                 }.onSuccess {
                     updateChecklistItemLocally(taskId, itemId, status, reason, comment, values)
                     val isLastTarget = task.checklist.count { it.status == ChecklistStatus.PENDING } == 1
-                    if (isLastTarget && task.operationType == OperationType.ANIMAL_SETTLEMENT) {
+                    if (isLastTarget && isAnimalTargetTask) {
                         runCatching { productionTaskApi.completeTask(currentEmployee.id, taskId) }
                             .onSuccess {
                                 updateTask(taskId) { current -> current.copy(status = TaskStatus.DONE, result = current.result.copy(completedAt = "now")) }
-                                lastMessage = "Заселение успешно завершено"
+                                lastMessage = "$operationTitle успешно завершено"
                             }
-                            .onFailure { error -> handleError(error, "RFID сохранён, но задачу не удалось закрыть", "Complete production settlement task failed. taskId=$taskId") }
+                            .onFailure { error -> handleError(error, "RFID сохранён, но задачу не удалось закрыть", "Complete production animal target task failed. taskId=$taskId operation=${task.operationType}") }
                     } else {
                         lastMessage = if (rfid != null) "RFID сохранён: $rfid" else "Позиция выполнена"
                     }
                 }.onFailure { error ->
-                    handleError(error, "Не удалось сохранить заселение", "Complete production target failed. taskId=$taskId targetId=$itemId")
+                    handleError(error, "Не удалось сохранить результат", "Complete production target failed. taskId=$taskId targetId=$itemId")
                 }
             }
             return
