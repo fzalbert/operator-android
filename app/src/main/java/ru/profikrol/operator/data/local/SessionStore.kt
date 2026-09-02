@@ -1,6 +1,7 @@
 package ru.profikrol.operator.data.local
 
 import android.content.Context
+import android.util.Base64
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -9,6 +10,7 @@ import ru.profikrol.operator.domain.model.User
 import ru.profikrol.operator.domain.model.UserRole
 import javax.inject.Inject
 import javax.inject.Singleton
+import org.json.JSONObject
 
 /**
  * Хранилище текущей сессии.
@@ -54,6 +56,7 @@ class SessionStore @Inject constructor(
         val current = _user.value ?: return
         save(
             current.copy(
+                id = accessToken.employeeIdClaim().orEmpty().ifBlank { current.id },
                 token = accessToken,
                 refreshToken = refreshToken,
                 accessTokenExpiresAt = accessTokenExpiresAt,
@@ -78,7 +81,7 @@ class SessionStore @Inject constructor(
         val role = runCatching { UserRole.valueOf(roleName) }.getOrNull() ?: return null
 
         return User(
-            id = id,
+            id = token.employeeIdClaim().orEmpty().ifBlank { id },
             login = login,
             displayName = displayName,
             token = token,
@@ -108,3 +111,12 @@ class SessionStore @Inject constructor(
 
 private fun String.looksLikeJwt(): Boolean =
     isNotBlank() && count { it == '.' } == 2 && split('.').all { it.isNotBlank() }
+
+private fun String.employeeIdClaim(): String? = runCatching {
+    val payload = split('.').getOrNull(1).orEmpty()
+    val decoded = Base64.decode(payload, Base64.URL_SAFE or Base64.NO_WRAP or Base64.NO_PADDING)
+        .toString(Charsets.UTF_8)
+    JSONObject(decoded).optString("employeeId")
+        .ifBlank { JSONObject(decoded).optString("employee_id") }
+        .takeIf(String::isNotBlank)
+}.getOrNull()

@@ -77,7 +77,9 @@ class RealAuthRepository @Inject constructor(
                     .ifBlank { trimmedLogin }
 
                 var user = User(
-                    id = claims.stringClaim("userId")
+                    id = claims.stringClaim("employeeId")
+                        .ifBlank { claims.stringClaim("employee_id") }
+                        .ifBlank { claims.stringClaim("userId") }
                         .ifBlank { claims.stringClaim("sub") }
                         .ifBlank { UUID.randomUUID().toString() },
                     login = trimmedLogin,
@@ -107,6 +109,7 @@ class RealAuthRepository @Inject constructor(
                         .joinToString(" ")
 
                     user = user.copy(
+                        id = profile.employeeId,
                         displayName = fullName.ifBlank { user.displayName },
                         email = profile.email,
                         phone = profile.phoneNumber ?: profile.contactNumber,
