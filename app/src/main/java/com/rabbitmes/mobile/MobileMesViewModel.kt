@@ -732,34 +732,17 @@ class MobileMesViewModel @Inject constructor(
                         }
                     }
                     val loadedTasks = (productionTasks + remoteTasks).distinctBy(MobileTask::id)
-                    val showcaseTransferTask = MockRepository.initialTasks()
-                        .firstOrNull { it.operationType == OperationType.ANIMAL_TRANSFER }
-                        ?.copy(
-                            id = "demo-animal-transfer",
-                            assignedEmployeeId = currentEmployee.id,
-                            plannedStart = "00:00",
-                            priority = Priority.URGENT,
-                            status = TaskStatus.NEW,
-                        )
-                    val tasksWithTransferShowcase = if (
-                        showcaseTransferTask != null &&
-                        loadedTasks.none { it.operationType == OperationType.ANIMAL_TRANSFER }
-                    ) {
-                        (listOf(showcaseTransferTask) + loadedTasks).distinctBy(MobileTask::id)
-                    } else {
-                        loadedTasks
-                    }
                     val mockWeighingTasks = if (
                         ENABLE_MOCK_MEAT_WEIGHING_TASKS &&
                         currentEmployee.role == RoleId.OPERATOR &&
-                        tasksWithTransferShowcase.none {
+                        loadedTasks.none {
                             it.operationType == OperationType.WEIGHING_CAGE ||
                                 it.operationType == OperationType.WEIGHING_RABBIT
                         }
                     ) {
                         MockRepository.mockWeighingTasks(currentEmployee.id)
                     } else emptyList()
-                    tasks = (tasksWithTransferShowcase + mockWeighingTasks).distinctBy(MobileTask::id)
+                    tasks = (loadedTasks + mockWeighingTasks).distinctBy(MobileTask::id)
                     hasLoadedRemoteTasks = true
                     if (
                         currentEmployee.role == RoleId.CHIEF_TECHNOLOGIST &&
