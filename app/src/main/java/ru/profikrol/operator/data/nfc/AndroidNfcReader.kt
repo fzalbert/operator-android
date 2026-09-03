@@ -8,11 +8,14 @@ import android.nfc.NdefRecord
 import android.nfc.Tag
 import android.nfc.tech.Ndef
 import android.os.Bundle
+import android.util.Log
 import dagger.hilt.android.qualifiers.ApplicationContext
 import ru.profikrol.operator.domain.nfc.NfcReader
 import ru.profikrol.operator.domain.nfc.ScannedPayload
 import javax.inject.Inject
 import javax.inject.Singleton
+
+private const val NFC_LOG_TAG = "RabbitApi"
 
 @Singleton
 class AndroidNfcReader @Inject constructor(
@@ -65,21 +68,29 @@ class AndroidNfcReader @Inject constructor(
         val adapter = nfcAdapter?.takeIf { it.isEnabled } ?: return
         if (onScanned == null) return
 
-        adapter.enableReaderMode(
-            activity,
-            { tag ->
-                onScanned?.invoke(ScannedPayload(tag.toScannedPayload()))
-            },
-            NfcAdapter.FLAG_READER_NFC_A or
-                NfcAdapter.FLAG_READER_NFC_B or
-                NfcAdapter.FLAG_READER_NFC_F or
-                NfcAdapter.FLAG_READER_NFC_V,
-            null,
-        )
+        runCatching {
+            adapter.enableReaderMode(
+                activity,
+                { tag ->
+                    onScanned?.invoke(ScannedPayload(tag.toScannedPayload()))
+                },
+                NfcAdapter.FLAG_READER_NFC_A or
+                    NfcAdapter.FLAG_READER_NFC_B or
+                    NfcAdapter.FLAG_READER_NFC_F or
+                    NfcAdapter.FLAG_READER_NFC_V,
+                null,
+            )
+        }.onFailure { error ->
+            Log.e(NFC_LOG_TAG, "Failed to enable NFC reader mode", error)
+        }
     }
 
     private fun disableReaderMode(activity: Activity) {
-        nfcAdapter?.disableReaderMode(activity)
+        runCatching {
+            nfcAdapter?.disableReaderMode(activity)
+        }.onFailure { error ->
+            Log.e(NFC_LOG_TAG, "Failed to disable NFC reader mode", error)
+        }
     }
 }
 

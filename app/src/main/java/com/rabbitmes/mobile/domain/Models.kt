@@ -23,7 +23,7 @@ enum class OperationType(val title: String) {
     ANIMAL_TRANSFER("Переводы животных"),
     ANIMAL_DEPARTURE("Выбытие"),
     WEANING("Отъем"),
-    SLAUGHTER_SHIPMENT("Забой / отгрузка"),
+    SLAUGHTER_SHIPMENT("Забой"),
     CLEANING("Уборка"),
     WASHING("Мойка"),
     DISINFECTION("Дезинфекция"),

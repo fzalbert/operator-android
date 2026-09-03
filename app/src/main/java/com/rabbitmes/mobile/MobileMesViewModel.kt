@@ -24,10 +24,16 @@ import ru.profikrol.operator.data.remote.worktask.WorkTaskApi
 import ru.profikrol.operator.data.remote.worktask.WorkTaskDto
 import ru.profikrol.operator.data.remote.worktask.CompleteWorkSubtaskRequest
 import ru.profikrol.operator.data.remote.worktask.CompleteWorkTaskRequest
+import ru.profikrol.operator.data.remote.production.AddProductionTargetRequest
 import ru.profikrol.operator.data.remote.production.CompleteTargetRequest
+import ru.profikrol.operator.data.remote.production.MortalityCountResult
+import ru.profikrol.operator.data.remote.production.ProductionMortalityCountProblemRequest
+import ru.profikrol.operator.data.remote.production.ProductionTargetCommentProblemRequest
+import ru.profikrol.operator.data.remote.production.ProductionTargetDto
 import ru.profikrol.operator.data.remote.production.ProductionTaskApi
 import ru.profikrol.operator.data.remote.production.ProductionTaskDetailsDto
 import javax.inject.Inject
+import javax.inject.Named
 import com.rabbitmes.mobile.data.MockRepository
 import com.rabbitmes.mobile.data.NotificationRepository
 import androidx.lifecycle.viewModelScope
@@ -94,6 +100,8 @@ private fun ShiftDto?.toShiftState(employeeId: String, previous: ShiftState): Sh
             pendingSyncEvents = previous.pendingSyncEvents,
         )
     }
+
+private fun ShiftState.isOpen(): Boolean = startedAt != null && finishedAt == null
 
 private fun WorkTaskDto.toMobileTask(
     employeeId: String,
@@ -229,9 +237,14 @@ private val OPERATION_ALIASES = mapOf(
     "female arrival" to OperationType.FEMALE_DELIVERY,
     "aisle cleaning" to OperationType.DAILY_CLEANING,
     "slaughter shipping" to OperationType.SLAUGHTER_SHIPMENT,
+    "weighing cage" to OperationType.WEIGHING,
     "light biostimulation" to OperationType.LIGHT_STIMULATION,
     "deworming dosatron" to OperationType.DEWORMING_DOSATRON,
     "mortality round" to OperationType.MORTALITY_ROUND,
+    "обход ангара" to OperationType.MORTALITY_ROUND,
+    "обход ангара с подсчетом падежа" to OperationType.MORTALITY_ROUND,
+    "обход ангара и подсчет падежа" to OperationType.MORTALITY_ROUND,
+    "обход ангара подсчет падежа" to OperationType.MORTALITY_ROUND,
     "mortality journal" to OperationType.MORTALITY_JOURNAL,
     "manual feeding" to OperationType.MANUAL_FEEDING,
     "nest control" to OperationType.NEST_CONTROL,
@@ -263,10 +276,71 @@ private fun String.operationLookupKey(): String = trim()
     .replace(Regex("[^a-zа-я0-9]+"), " ")
     .trim()
 
+private fun mortalityRoundTargetLabel(
+    targetKind: String,
+    cageId: String = "",
+    rabbitId: String = "",
+    count: Int? = null,
+): String = when (targetKind) {
+    "light_check" -> "Свет"
+    "feed_check" -> "Корм"
+    "water_check" -> "Вода"
+    "nest_control" -> "Гнездо / клетка ${cageId.ifBlank { "—" }}"
+    "mortality_count" -> "Погибшие животные: ${count ?: 0} / клетка ${cageId.ifBlank { "—" }}"
+    "female_culling" -> "Выбраковка самки ${rabbitId.ifBlank { "—" }}"
+    else -> targetKind
+}
+
+private fun mortalityRoundKindTitle(targetKind: String): String = when (targetKind) {
+    "light_check" -> "Свет"
+    "feed_check" -> "Корм"
+    "water_check" -> "Вода"
+    "nest_control" -> "Гнездо"
+    "mortality_count" -> "Погибшие животные"
+    "female_culling" -> "Выбраковка самки"
+    else -> targetKind
+}
+
+private fun ProductionTaskDetailsDto.allTargets(): List<ProductionTargetDto> =
+    (targets + checklist + task.targets + task.checkList).distinctBy { it.id }
+
+private fun ProductionTargetDto.toDisplayLabel(targetType: TargetType): String {
+    val code = displayCode?.trim().orEmpty()
+    if (targetType == TargetType.CAGE) {
+        val cage = cageId?.toString() ?: targetId?.trim().orEmpty()
+        return when {
+            code.isNotBlank() && !code.all(Char::isDigit) -> code
+            cage.isNotBlank() -> "Клетка $cage"
+            code.isNotBlank() -> "Клетка $code"
+            else -> "Клетка ${id.take(8)}"
+        }
+    }
+    return code.ifBlank {
+        targetKind?.let(::mortalityRoundKindTitle)
+            ?: targetId
+            ?: cageId?.let { "Клетка $it" }
+            ?: "Позиция ${id.take(8)}"
+    }
+}
+
+private fun String.productionIdValue(): String {
+    val trimmed = trim()
+    if (trimmed.startsWith("ID ", ignoreCase = true)) {
+        return trimmed.removePrefix("ID ").substringBefore(" ").trim()
+    }
+    return trimmed
+}
+
 private fun ProductionTaskDetailsDto.toMobileTask(employeeId: String): MobileTask {
-    val operationKey = task.operationCode.orEmpty().operationLookupKey()
-    val operationType = OPERATION_ALIASES[operationKey]
-        ?: OperationType.entries.firstOrNull { it.name.operationLookupKey() == operationKey }
+    val operationCandidates = listOfNotNull(task.operationCode, task.title, task.description)
+    val operationKeys = operationCandidates.map { it.operationLookupKey() }
+    val operationType = operationKeys.firstNotNullOfOrNull(OPERATION_ALIASES::get)
+        ?: operationKeys.firstNotNullOfOrNull { operationKey ->
+            OperationType.entries.firstOrNull { type ->
+                type.name.operationLookupKey() == operationKey ||
+                    type.title.operationLookupKey() == operationKey
+            }
+        }
         ?: OperationType.CUSTOM_TASK
     return MobileTask(
         id = task.id,
@@ -280,18 +354,23 @@ private fun ProductionTaskDetailsDto.toMobileTask(employeeId: String): MobileTas
         plannedDurationMinutes = task.durationMinutes ?: 0,
         priority = Priority.NORMAL,
         status = task.executionStatus.orEmpty().toTaskStatus(),
-        checklist = targets.sortedBy { it.sortOrder }.map { target ->
+        checklist = allTargets().sortedBy { it.sortOrder }.map { target ->
+            val targetType = when (target.targetType?.lowercase()) {
+                "cage" -> TargetType.CAGE
+                "hangar" -> TargetType.HANGAR
+                "row" -> TargetType.ROW
+                else -> TargetType.RABBIT
+            }
             ChecklistItem(
                 id = target.id,
-                label = target.displayCode.orEmpty().ifBlank {
-                    target.cageId?.let { "Клетка $it" } ?: "Позиция ${target.id.take(8)}"
+                label = target.toDisplayLabel(targetType),
+                targetType = targetType,
+                targetId = when (targetType) {
+                    TargetType.RABBIT -> target.targetId ?: target.rabbitId ?: target.scanIdentifier ?: target.id
+                    TargetType.CAGE -> target.targetId ?: target.cageId?.toString() ?: target.id
+                    TargetType.HANGAR -> target.targetId ?: target.hangarId?.toString() ?: target.id
+                    TargetType.ROW -> target.targetId ?: target.id
                 },
-                targetType = when (target.targetType?.lowercase()) {
-                    "cage" -> TargetType.CAGE
-                    "hangar" -> TargetType.HANGAR
-                    else -> TargetType.RABBIT
-                },
-                targetId = target.targetId ?: target.cageId?.toString() ?: target.id,
                 serverType = "production-target",
                 status = target.status.orEmpty().toChecklistStatus(),
                 result = ExecutionResult(scannedRfid = target.scanIdentifier, completedAt = target.completedAt),
@@ -370,6 +449,14 @@ private fun Throwable.toUserMessage(fallback: String): String = when (this) {
     else -> fallback
 }
 
+private fun Throwable.toHttpDebugMessage(): String = when (this) {
+    is HttpException -> {
+        val body = runCatching { response()?.errorBody()?.string() }.getOrNull().orEmpty()
+        "HTTP ${code()} ${message()}${body.takeIf(String::isNotBlank)?.let { ", body=$it" }.orEmpty()}"
+    }
+    else -> "${this::class.java.simpleName}: ${message.orEmpty()}"
+}
+
 @HiltViewModel
 class MobileMesViewModel @Inject constructor(
     @ApplicationContext private val appContext: Context,
@@ -379,6 +466,7 @@ class MobileMesViewModel @Inject constructor(
     private val profileApi: ProfileApi,
     private val workTaskApi: WorkTaskApi,
     private val productionTaskApi: ProductionTaskApi,
+    @Named("productionFallback") private val productionFallbackTaskApi: ProductionTaskApi,
     private val rabbitApi: RabbitApi,
     private val cellApi: CellApi,
 ) : ViewModel() {
@@ -410,6 +498,9 @@ class MobileMesViewModel @Inject constructor(
 
     var lastScannedRfid: String? by mutableStateOf(null)
     private val scannedRfidByTaskId = mutableStateMapOf<String, String>()
+    private val scannedValuesByTaskId = mutableStateMapOf<String, Map<String, String>>()
+    private val mortalityRoundEventsByTaskId = mutableStateMapOf<String, List<ChecklistItem>>()
+    private val productionTargetOverridesByTaskId = mutableStateMapOf<String, Map<String, ChecklistItem>>()
     var lastMessage: String? by mutableStateOf(null)
         private set
     var appError: AppErrorMessage? by mutableStateOf(null)
@@ -443,6 +534,19 @@ class MobileMesViewModel @Inject constructor(
     fun consumeAppError(id: Long) {
         if (appError?.id == id) appError = null
     }
+
+    private suspend fun <T> productionCall(action: suspend (ProductionTaskApi) -> T): T =
+        try {
+            Log.d(API_LOG_TAG, "Production API request via production service")
+            action(productionTaskApi)
+        } catch (error: HttpException) {
+            if (error.code() == 404) {
+                Log.w(API_LOG_TAG, "Production service returned 404, retrying gateway fallback")
+                action(productionFallbackTaskApi)
+            } else {
+                throw error
+            }
+        }
 
     private fun safeLaunch(
         logMessage: String,
@@ -517,8 +621,7 @@ class MobileMesViewModel @Inject constructor(
         shift = ShiftState(currentEmployee.id)
         screen = defaultScreenForRole()
         lastMessage = null
-        refreshProfileAndTasks()
-        startTasksAutoRefresh()
+        refreshProfile()
     }
     fun logout() {
         stopTasksAutoRefresh()
@@ -538,6 +641,7 @@ class MobileMesViewModel @Inject constructor(
                         shift = remoteShift.toShiftState(currentEmployee.id, shift)
                         lastMessage = "Смена открыта"
                         loadMyTasks()
+                        startTasksAutoRefresh()
                     }
                     .onFailure { error ->
                         if (error is HttpException && error.code() == 400) {
@@ -547,6 +651,7 @@ class MobileMesViewModel @Inject constructor(
                                         shift = profile.shift.toShiftState(currentEmployee.id, shift)
                                         lastMessage = "Смена уже открыта"
                                         loadMyTasks()
+                                        startTasksAutoRefresh()
                                     } else {
                                         handleError(error, "Не удалось открыть смену", "Open shift failed")
                                     }
@@ -571,6 +676,7 @@ class MobileMesViewModel @Inject constructor(
                 runCatching { profileApi.closeShift() }
                     .onSuccess { remoteShift ->
                         shift = remoteShift.toShiftState(currentEmployee.id, shift)
+                        stopTasksAutoRefresh()
                         lastMessage = "Смена завершена"
                     }
                     .onFailure { error ->
@@ -582,15 +688,21 @@ class MobileMesViewModel @Inject constructor(
         }
     }
 
-    private fun refreshProfileAndTasks() {
-        safeLaunch("Profile and tasks refresh failed") {
+    private fun refreshProfile() {
+        safeLaunch("Profile refresh failed") {
             runCatching { profileApi.getMyProfile() }
                 .onSuccess { profile ->
                     currentEmployee = currentEmployee.copy(id = profile.employeeId)
                     shift = profile.shift.toShiftState(currentEmployee.id, shift)
+                    if (shift.isOpen()) {
+                        loadMyTasks(showLoading = false)
+                        startTasksAutoRefresh()
+                    } else {
+                        tasks = emptyList()
+                        stopTasksAutoRefresh()
+                    }
                 }
                 .onFailure { error -> handleError(error, "Не удалось обновить профиль", "Profile refresh failed") }
-            loadMyTasks()
         }
     }
 
@@ -602,14 +714,29 @@ class MobileMesViewModel @Inject constructor(
         isTasksRequestInProgress = true
         if (showLoading) isTasksLoading = true
         try {
-            val productionTasks = if (currentEmployee.role == RoleId.OPERATOR) {
-                runCatching {
-                    productionTaskApi.getEmployeeTasks(currentEmployee.id, currentEmployee.id)
-                        .map { productionTaskApi.getTask(currentEmployee.id, it.id).toMobileTask(currentEmployee.id) }
-                }.onFailure { error ->
-                    Log.e(API_LOG_TAG, "Production tasks request failed", error)
-                }.getOrDefault(emptyList())
-            } else emptyList()
+            Log.d(
+                API_LOG_TAG,
+                "Loading tasks. employeeId=${currentEmployee.id} role=${currentEmployee.role} showLoading=$showLoading",
+            )
+            val productionTasks = runCatching {
+                val productionList = productionCall { api -> api.getEmployeeTasks(currentEmployee.id, currentEmployee.id) }
+                Log.d(
+                    API_LOG_TAG,
+                    "Production getEmployeeTasks returned ${productionList.size} items: ${
+                        productionList.joinToString { task ->
+                            "id=${task.id}, operationCode=${task.operationCode}, title=${task.title}"
+                        }
+                    }",
+                )
+                productionList
+                    .map { productionTask ->
+                        Log.d(API_LOG_TAG, "Loading production task details. taskId=${productionTask.id}")
+                        productionCall { api -> api.getTask(currentEmployee.id, productionTask.id) }
+                            .toMobileTask(currentEmployee.id)
+                    }
+            }.onFailure { error ->
+                Log.e(API_LOG_TAG, "Production tasks request failed: ${error.toHttpDebugMessage()}", error)
+            }.getOrDefault(emptyList())
             runCatching {
                 if (currentEmployee.role == RoleId.CHIEF_TECHNOLOGIST) {
                     val ownTasks = workTaskApi.getMyWorkTasks()
@@ -623,6 +750,14 @@ class MobileMesViewModel @Inject constructor(
                 }
             }
                 .onSuccess { page ->
+                    Log.d(
+                        API_LOG_TAG,
+                        "Work tasks returned ${page.items.size} items: ${
+                            page.items.joinToString { task ->
+                                "id=${task.id}, operationId=${task.operationId}, operationName=${task.operationName}, name=${task.name}"
+                            }
+                        }",
+                    )
                     val latestTasks = page.items
                         .groupBy { task ->
                             task.scheduledDate to (task.operationId ?: "work-task:${task.id}")
@@ -656,6 +791,10 @@ class MobileMesViewModel @Inject constructor(
                     val needsCells = latestTasks.any {
                         it.resolveOperationType() == OperationType.ANIMAL_TRANSFER ||
                             MockRepository.operation(it.resolveOperationType()).targetType == TargetType.CAGE
+                    } || productionTasks.any {
+                        it.operationType == OperationType.MORTALITY_ROUND ||
+                            it.operationType == OperationType.ANIMAL_TRANSFER ||
+                            it.operationType == OperationType.NEST_CONTROL
                     }
                     val cells = if (needsCells) {
                         runCatching { loadAllCells() }
@@ -673,9 +812,11 @@ class MobileMesViewModel @Inject constructor(
                         emptyList()
                     }
                     val remoteTasks = latestTasks
-                        // Animal settlement is owned by Production API. A legacy task
-                        // has numeric subtask ids and cannot complete a targetTask UUID.
-                        .filterNot { it.resolveOperationType() == OperationType.ANIMAL_SETTLEMENT }
+                        .filterNot {
+                            val operationType = it.resolveOperationType()
+                            operationType == OperationType.ANIMAL_SETTLEMENT ||
+                                operationType == OperationType.MORTALITY_ROUND
+                        }
                         .map { dto ->
                         dto.toMobileTask(currentEmployee.id, rabbits, cells).let { task ->
                             if (
@@ -690,24 +831,14 @@ class MobileMesViewModel @Inject constructor(
                             } else task
                         }
                     }
-                    val loadedTasks = (productionTasks + remoteTasks).distinctBy(MobileTask::id)
-                    val showcaseTransferTask = MockRepository.initialTasks()
-                        .firstOrNull { it.operationType == OperationType.ANIMAL_TRANSFER }
-                        ?.copy(
-                            id = "demo-animal-transfer",
-                            assignedEmployeeId = currentEmployee.id,
-                            plannedStart = "00:00",
-                            priority = Priority.URGENT,
-                            status = TaskStatus.NEW,
-                        )
-                    tasks = if (
-                        showcaseTransferTask != null &&
-                        loadedTasks.none { it.operationType == OperationType.ANIMAL_TRANSFER }
-                    ) {
-                        (listOf(showcaseTransferTask) + loadedTasks).distinctBy(MobileTask::id)
-                    } else {
-                        loadedTasks
-                    }
+                    tasks = (
+                        productionTasks.map { it.withProductionTargetOverrides().withMortalityRoundEvents() } +
+                            remoteTasks
+                        ).distinctBy(MobileTask::id)
+                    Log.d(
+                        API_LOG_TAG,
+                        "Tasks visible=${tasks.size}, production=${productionTasks.size}, work=${remoteTasks.size}",
+                    )
                     hasLoadedRemoteTasks = true
                     if (
                         currentEmployee.role == RoleId.CHIEF_TECHNOLOGIST &&
@@ -724,6 +855,9 @@ class MobileMesViewModel @Inject constructor(
                         logMessage = "Work tasks request failed",
                         showToUser = showLoading,
                     )
+                }
+                .onFailure { error ->
+                    Log.e(API_LOG_TAG, "Work tasks request failed: ${error.toHttpDebugMessage()}", error)
                 }
         } finally {
             isTasksRequestInProgress = false
@@ -777,7 +911,6 @@ class MobileMesViewModel @Inject constructor(
     fun startTasksAutoRefresh() {
         if (sessionStore.currentUser == null || tasksAutoRefreshJob?.isActive == true) return
         tasksAutoRefreshJob = safeLaunch("Tasks auto refresh failed", fallbackMessage = "Не удалось обновить задачи") {
-            loadMyTasks(showLoading = false)
             while (currentCoroutineContext().isActive) {
                 delay(TASKS_REFRESH_INTERVAL_MS)
                 loadMyTasks(showLoading = false)
@@ -824,12 +957,14 @@ class MobileMesViewModel @Inject constructor(
     fun task(id: String) = tasks.first { it.id == id }
     fun taskOrNull(id: String) = tasks.firstOrNull { it.id == id }
     fun scannedRfidForTask(taskId: String): String? = scannedRfidByTaskId[taskId] ?: task(taskId).result.scannedRfid
-    fun rememberScannedRfid(taskId: String, rfid: String) {
+    fun scannedValuesForTask(taskId: String): Map<String, String> = scannedValuesByTaskId[taskId].orEmpty()
+    fun rememberScannedRfid(taskId: String, rfid: String, values: Map<String, String> = emptyMap()) {
         lastScannedRfid = rfid
         scannedRfidByTaskId[taskId] = rfid
+        scannedValuesByTaskId[taskId] = values
     }
     fun nextPendingRfid(taskId: String): String? {
-        val item = task(taskId).checklist.firstOrNull { it.status == ChecklistStatus.PENDING } ?: return null
+        val item = taskOrNull(taskId)?.checklist?.firstOrNull { it.status == ChecklistStatus.PENDING } ?: return null
         return when (item.targetType) {
             TargetType.RABBIT -> MockRepository.rabbit(item.targetId)?.rfid ?: item.targetId
             TargetType.CAGE -> allCages.firstOrNull { it.id == item.targetId }?.rfid
@@ -852,6 +987,16 @@ class MobileMesViewModel @Inject constructor(
         val definition = MockRepository.operation(type)
         if (serverCells.isEmpty()) return definition
         val cellOptions = serverCells.map(CellDto::displayName)
+        if (type == OperationType.MORTALITY_ROUND) {
+            return definition.copy(
+                fields = definition.fields + OperationField(
+                    id = "cageId",
+                    title = "ID клетки",
+                    type = FieldType.SELECT,
+                    options = listOf("Выберите клетку") + cellOptions,
+                ),
+            )
+        }
         return definition.copy(
             fields = definition.fields.map { field ->
                 if (field.id == "sourceCage" || field.id == "destinationCage" || field.id == "cellId") {
@@ -868,6 +1013,60 @@ class MobileMesViewModel @Inject constructor(
     private fun queueOfflineChange(): ShiftState =
         if (shift.isOnline) shift else shift.copy(pendingSyncEvents = shift.pendingSyncEvents + 1)
 
+    private fun MobileTask.withMortalityRoundEvents(): MobileTask {
+        if (operationType != OperationType.MORTALITY_ROUND) return this
+        val cachedEvents = mortalityRoundEventsByTaskId[id].orEmpty()
+        if (cachedEvents.isEmpty()) return this
+        val visibleServerItems = checklist.filter { item ->
+            item.serverType != "production-target" || item.status == ChecklistStatus.PENDING
+        }
+        return copy(checklist = (visibleServerItems + cachedEvents).distinctBy { it.id })
+    }
+
+    private fun MobileTask.withProductionTargetOverrides(): MobileTask {
+        val overrides = productionTargetOverridesByTaskId[id].orEmpty()
+        if (overrides.isEmpty()) return this
+        return copy(
+            checklist = checklist.map { item ->
+                val override = overrides[item.id] ?: return@map item
+                if (
+                    item.serverType == "production-target" &&
+                    item.status == ChecklistStatus.PENDING &&
+                    override.status != ChecklistStatus.PENDING
+                ) {
+                    override
+                } else {
+                    item
+                }
+            },
+        )
+    }
+
+    private fun rememberProductionTargetOverride(
+        taskId: String,
+        itemId: String,
+        status: ChecklistStatus,
+        reason: String,
+        comment: String,
+        values: Map<String, String>,
+    ) {
+        val task = taskOrNull(taskId) ?: return
+        val item = task.checklist.firstOrNull { it.id == itemId } ?: return
+        if (item.serverType != "production-target") return
+        val updatedItem = item.copy(
+            status = status,
+            result = item.result.copy(
+                values = item.result.values + values,
+                scannedRfid = values["rfid"] ?: item.result.scannedRfid,
+                completedAt = "now",
+                problemReason = reason.ifBlank { null },
+                comment = comment,
+            ),
+        )
+        productionTargetOverridesByTaskId[taskId] =
+            productionTargetOverridesByTaskId[taskId].orEmpty() + (itemId to updatedItem)
+    }
+
     private fun updateTask(taskId: String, transform: (MobileTask) -> MobileTask) {
         tasks = tasks.map { task ->
             if (task.id == taskId) {
@@ -883,16 +1082,37 @@ class MobileMesViewModel @Inject constructor(
         val remoteTaskId = taskId.toLongOrNull()
         if (remoteTaskId == null) {
             val task = taskOrNull(taskId)
-            if (task?.checklist?.any { it.serverType == "production-target" } == true) {
+            if (
+                task?.checklist?.any { it.serverType == "production-target" } == true ||
+                task?.operationType == OperationType.MORTALITY_ROUND ||
+                task?.operationType == OperationType.ANIMAL_TRANSFER ||
+                task?.operationType == OperationType.ANIMAL_SETTLEMENT
+            ) {
                 launchServerAction("Start production task action failed", fallbackMessage = "Не удалось начать задачу") {
-                    runCatching { productionTaskApi.startTask(currentEmployee.id, taskId) }
-                        .onSuccess { details ->
-                            val updated = details.toMobileTask(currentEmployee.id)
+                    runCatching {
+                        val response = productionCall { api -> api.startTask(currentEmployee.id, taskId) }
+                        if (!response.isSuccessful) throw HttpException(response)
+                        runCatching { productionCall { api -> api.getTask(currentEmployee.id, taskId) }.toMobileTask(currentEmployee.id) }
+                            .getOrElse { task.copy(status = TaskStatus.IN_PROGRESS) }
+                    }
+                        .onSuccess { updated ->
                             tasks = tasks.map { if (it.id == taskId) updated else it }
                             lastMessage = "Задача начата"
                         }
                         .onFailure { error ->
-                            handleError(error, "Не удалось начать задачу", "Start production task failed. taskId=$taskId")
+                            if (error is HttpException && error.code() == 409) {
+                                val syncedTask = runCatching {
+                                    productionCall { api -> api.getTask(currentEmployee.id, taskId) }.toMobileTask(currentEmployee.id)
+                                }.getOrNull()
+                                if (syncedTask?.status == TaskStatus.IN_PROGRESS || syncedTask?.status == TaskStatus.DONE) {
+                                    tasks = tasks.map { if (it.id == taskId) syncedTask else it }
+                                    lastMessage = "Задача уже открыта"
+                                } else {
+                                    handleError(error, "Не удалось начать задачу", "Start production task failed. taskId=$taskId")
+                                }
+                            } else {
+                                handleError(error, "Не удалось начать задачу", "Start production task failed. taskId=$taskId")
+                            }
                         }
                 }
             } else {
@@ -957,7 +1177,15 @@ class MobileMesViewModel @Inject constructor(
             lastMessage = "RFID не может быть пустым"
             return
         }
-        if (currentTask.checklist.any { it.result.scannedRfid.equals(normalizedRfid, ignoreCase = true) }) {
+        if (currentTask.checklist.any { item ->
+                item.status != ChecklistStatus.PENDING &&
+                    (
+                        item.targetId.equals(normalizedRfid, ignoreCase = true) ||
+                            item.result.scannedRfid.equals(normalizedRfid, ignoreCase = true) ||
+                            item.label.equals(normalizedRfid, ignoreCase = true)
+                        )
+            }
+        ) {
             lastMessage = "RFID $normalizedRfid уже использован в этой задаче"
             return
         }
@@ -965,7 +1193,12 @@ class MobileMesViewModel @Inject constructor(
             item.targetType == TargetType.RABBIT && item.status == ChecklistStatus.PENDING
         }
         val serverRabbitTarget = pendingServerRabbits.firstOrNull { item ->
-            item.targetType == TargetType.RABBIT && item.targetId.equals(rfid, ignoreCase = true)
+            item.targetType == TargetType.RABBIT &&
+                (
+                    item.targetId.equals(normalizedRfid, ignoreCase = true) ||
+                        item.result.scannedRfid.equals(normalizedRfid, ignoreCase = true) ||
+                        item.label.equals(normalizedRfid, ignoreCase = true)
+                    )
         } ?: pendingServerRabbits.singleOrNull()
         val productionSettlementTarget = if (currentTask.operationType == OperationType.ANIMAL_SETTLEMENT) {
             currentTask.checklist.firstOrNull { item ->
@@ -1004,7 +1237,7 @@ class MobileMesViewModel @Inject constructor(
             return
         }
 
-        val scannedItem = targetId?.let { scannedTargetId ->
+        val scannedItem = serverRabbitTarget ?: targetId?.let { scannedTargetId ->
             currentTask.checklist.firstOrNull { it.targetId == scannedTargetId }
         }
         val matchingItem = if (problemReason.isNotBlank()) {
@@ -1119,6 +1352,137 @@ class MobileMesViewModel @Inject constructor(
         )
     }
 
+    fun addMortalityRoundProblem(
+        taskId: String,
+        targetKind: String,
+        cageId: String,
+        rabbitId: String,
+        comment: String,
+        count: Int?,
+    ) {
+        val task = taskOrNull(taskId) ?: return
+        val normalizedKind = targetKind.trim()
+        val normalizedCageId = cageId.trim().productionIdValue()
+        val normalizedRabbitId = rabbitId.trim()
+        val normalizedComment = comment.trim()
+        val targetType = when (normalizedKind) {
+            "nest_control",
+            "mortality_count" -> TargetType.CAGE
+            "female_culling" -> TargetType.RABBIT
+            else -> TargetType.HANGAR
+        }
+        val targetLabel = mortalityRoundTargetLabel(normalizedKind, normalizedCageId, normalizedRabbitId, count)
+        val values = buildMap {
+            put("Тип", mortalityRoundKindTitle(normalizedKind))
+            if (normalizedCageId.isNotBlank()) put("Клетка", normalizedCageId)
+            if (normalizedRabbitId.isNotBlank()) put("Самка", normalizedRabbitId)
+            if (normalizedComment.isNotBlank()) put("Комментарий", normalizedComment)
+            if (count != null) put("Количество", count.toString())
+        }
+
+        if (taskId.startsWith("demo-", ignoreCase = true)) {
+            updateTask(taskId) { current ->
+                current.copy(
+                    status = TaskStatus.IN_PROGRESS,
+                    checklist = current.checklist + ChecklistItem(
+                        id = "demo-mortality-${System.currentTimeMillis()}",
+                        label = targetLabel,
+                        targetType = targetType,
+                        targetId = normalizedRabbitId.ifBlank { normalizedCageId.ifBlank { normalizedKind } },
+                        serverType = normalizedKind,
+                        status = ChecklistStatus.PROBLEM,
+                        result = ExecutionResult(
+                            values = values,
+                            completedAt = "now",
+                            problemReason = normalizedKind,
+                            comment = normalizedComment,
+                        ),
+                    ),
+                ).markOffline()
+            }
+            lastMessage = "Событие обхода сохранено"
+            return
+        }
+
+        launchServerAction("Create mortality round target failed", fallbackMessage = "Не удалось сохранить событие обхода") {
+            Log.d(
+                API_LOG_TAG,
+                "Creating mortality round target. taskId=$taskId targetKind=$normalizedKind displayCode=${mortalityRoundKindTitle(normalizedKind)} cageId=${normalizedCageId.ifBlank { "null" }} rabbitIdPresent=${normalizedRabbitId.isNotBlank()}",
+            )
+            val createdTargetId = productionCall { api ->
+                api.addTarget(
+                    employeeId = currentEmployee.id,
+                    taskId = taskId,
+                    request = AddProductionTargetRequest(
+                        targetKind = normalizedKind,
+                        cageId = normalizedCageId.toLongOrNull(),
+                        rabbitId = normalizedRabbitId.toLongOrNull(),
+                    ),
+                )
+            }.string().trim().trim('"')
+            val taskDetails = productionCall { api -> api.getTask(currentEmployee.id, taskId) }
+            val createdTarget = taskDetails.allTargets().firstOrNull { it.id == createdTargetId }
+                ?: taskDetails.allTargets().lastOrNull { target ->
+                    target.status.orEmpty().equals("pending", ignoreCase = true) &&
+                        (
+                            target.targetKind.equals(normalizedKind, ignoreCase = true) ||
+                                target.displayCode.equals(mortalityRoundKindTitle(normalizedKind), ignoreCase = true) ||
+                                target.displayCode.equals(mortalityRoundTargetLabel(normalizedKind, normalizedCageId, normalizedRabbitId, count), ignoreCase = true)
+                            )
+                }
+            val targetIdForProblem = createdTarget?.id ?: createdTargetId
+            Log.d(
+                API_LOG_TAG,
+                "Created mortality round target. taskId=$taskId responseTargetId=$createdTargetId targetIdForProblem=$targetIdForProblem targetKind=$normalizedKind loadedTargets=${taskDetails.allTargets().size}",
+            )
+
+            productionCall { api ->
+                if (normalizedKind == "mortality_count") {
+                    api.reportMortalityCountProblem(
+                        employeeId = currentEmployee.id,
+                        taskId = taskId,
+                        targetId = targetIdForProblem,
+                        request = ProductionMortalityCountProblemRequest(
+                            result = MortalityCountResult(requireNotNull(count)),
+                        ),
+                    )
+                } else {
+                    api.reportTargetCommentProblem(
+                        employeeId = currentEmployee.id,
+                        taskId = taskId,
+                        targetId = targetIdForProblem,
+                        request = ProductionTargetCommentProblemRequest(comment = normalizedComment),
+                    )
+                }
+            }
+
+            updateTask(taskId) { current ->
+                val savedItem = ChecklistItem(
+                    id = "mortality-event-$normalizedKind-$targetIdForProblem-${System.currentTimeMillis()}",
+                    label = targetLabel,
+                    targetType = targetType,
+                    targetId = normalizedRabbitId.ifBlank { normalizedCageId.ifBlank { targetIdForProblem } },
+                    serverType = "mortality-round-event",
+                    status = ChecklistStatus.PROBLEM,
+                    result = ExecutionResult(
+                        values = values,
+                        completedAt = "now",
+                        problemReason = normalizedKind,
+                        comment = normalizedComment,
+                    ),
+                )
+                mortalityRoundEventsByTaskId[taskId] = mortalityRoundEventsByTaskId[taskId].orEmpty() + savedItem
+                current.copy(
+                    status = TaskStatus.IN_PROGRESS,
+                    checklist = current.checklist.filter { item ->
+                        item.serverType != "production-target" || item.status == ChecklistStatus.PENDING
+                    } + savedItem,
+                )
+            }
+            lastMessage = "Событие обхода сохранено"
+        }
+    }
+
     private fun completeChecklistItemOnServer(
         taskId: String,
         itemId: String,
@@ -1139,33 +1503,75 @@ class MobileMesViewModel @Inject constructor(
                 task.operationType == OperationType.ANIMAL_TRANSFER
             val operationTitle = if (task.operationType == OperationType.ANIMAL_TRANSFER) "Переселение" else "Заселение"
             val resultJson = buildJsonObject {
-                values.filterKeys { it != "rfid" && it != PROBLEM_REASON_KEY && it != PROBLEM_COMMENT_KEY }
-                    .forEach { (key, value) -> put(key, value) }
+                if (task.operationType == OperationType.SLAUGHTER_SHIPMENT) {
+                    put("count", values["count"]?.toIntOrNull() ?: 0)
+                } else if (task.operationType == OperationType.WEIGHING) {
+                    put("weightGrams", values["weightGrams"]?.toIntOrNull() ?: 0)
+                } else {
+                    values.filterKeys { it != "rfid" && it != PROBLEM_REASON_KEY && it != PROBLEM_COMMENT_KEY }
+                        .forEach { (key, value) -> put(key, value) }
+                }
                 if (task.operationType == OperationType.ANIMAL_SETTLEMENT) {
                     // One RFID scan represents one newly settled rabbit.
                     // Production API validates this value as a JSON integer.
                     put("animalCount", 1)
                 }
-            }.toString()
-            launchServerAction("Complete production target failed", fallbackMessage = "Не удалось сохранить заселение") {
-                Log.d(API_LOG_TAG, "Sending production target completion. taskId=$taskId targetId=$itemId rfid=$rfid")
+            }
+            launchServerAction("Complete production target failed", fallbackMessage = "Не удалось сохранить результат") {
                 runCatching {
-                    productionTaskApi.completeTarget(
-                        employeeId = currentEmployee.id,
-                        taskId = taskId,
-                        targetId = itemId,
-                        request = CompleteTargetRequest(
-                            employeeId = currentEmployee.id,
-                            resultJson = resultJson,
-                            rfid = rfid,
-                            deviceId = deviceId,
-                        ),
-                    )
+                    productionCall { api ->
+                        if (status == ChecklistStatus.PROBLEM) {
+                            val targetComment = comment.ifBlank { reason.ifBlank { values["palpationResult"].orEmpty() } }
+                                .ifBlank { "Есть замечание" }
+                            Log.d(API_LOG_TAG, "Sending production target problem. taskId=$taskId targetId=$itemId operation=${task.operationType} rfid=$rfid reason=$reason")
+                            api.reportTargetCommentProblem(
+                                employeeId = currentEmployee.id,
+                                taskId = taskId,
+                                targetId = itemId,
+                                request = ProductionTargetCommentProblemRequest(comment = targetComment),
+                            )
+                        } else {
+                            Log.d(API_LOG_TAG, "Sending production target completion. taskId=$taskId targetId=$itemId operation=${task.operationType} rfid=$rfid")
+                            api.completeTarget(
+                                employeeId = currentEmployee.id,
+                                taskId = taskId,
+                                targetId = itemId,
+                                request = CompleteTargetRequest(
+                                    result = resultJson,
+                                    rfid = rfid,
+                                    deviceId = deviceId,
+                                ),
+                            )
+                        }
+                    }
                 }.onSuccess {
-                    updateChecklistItemLocally(taskId, itemId, status, reason, comment, values)
+                    Log.d(API_LOG_TAG, "Production target request succeeded. taskId=$taskId targetId=$itemId operation=${task.operationType} status=$status")
+                    rememberProductionTargetOverride(taskId, itemId, status, reason, comment, values)
+                    val syncedTask = runCatching {
+                        productionCall { api -> api.getTask(currentEmployee.id, taskId) }
+                            .toMobileTask(currentEmployee.id)
+                    }.onFailure { error ->
+                        Log.e(API_LOG_TAG, "Production task sync after target completion failed: ${error.toHttpDebugMessage()}. taskId=$taskId targetId=$itemId", error)
+                    }.getOrNull()
+                    if (syncedTask != null) {
+                        tasks = tasks.map { current ->
+                            if (current.id == taskId) {
+                                syncedTask.copy(
+                                    result = syncedTask.result.copy(
+                                        values = syncedTask.result.values + values,
+                                        scannedRfid = values["rfid"] ?: syncedTask.result.scannedRfid,
+                                    ),
+                                ).withProductionTargetOverrides()
+                            } else {
+                                current
+                            }
+                        }
+                    } else {
+                        updateChecklistItemLocally(taskId, itemId, status, reason, comment, values)
+                    }
                     val isLastTarget = task.checklist.count { it.status == ChecklistStatus.PENDING } == 1
                     if (isLastTarget && isAnimalTargetTask) {
-                        runCatching { productionTaskApi.completeTask(currentEmployee.id, taskId) }
+                        runCatching { productionCall { api -> api.completeTask(currentEmployee.id, taskId) } }
                             .onSuccess {
                                 updateTask(taskId) { current -> current.copy(status = TaskStatus.DONE, result = current.result.copy(completedAt = "now")) }
                                 lastMessage = "$operationTitle успешно завершено"
@@ -1175,7 +1581,27 @@ class MobileMesViewModel @Inject constructor(
                         lastMessage = if (rfid != null) "RFID сохранён: $rfid" else "Позиция выполнена"
                     }
                 }.onFailure { error ->
-                    handleError(error, "Не удалось сохранить результат", "Complete production target failed. taskId=$taskId targetId=$itemId")
+                    Log.e(API_LOG_TAG, "Production target request failed: ${error.toHttpDebugMessage()}. taskId=$taskId targetId=$itemId operation=${task.operationType} status=$status", error)
+                    if (error is HttpException && error.code() == 409) {
+                        val syncedTask = runCatching {
+                            productionCall { api -> api.getTask(currentEmployee.id, taskId) }.toMobileTask(currentEmployee.id)
+                        }.getOrNull()
+                        val syncedItem = syncedTask?.checklist?.firstOrNull { it.id == itemId }
+                        if (syncedItem != null && syncedItem.status != ChecklistStatus.PENDING) {
+                            updateTask(taskId) { current ->
+                                current.copy(
+                                    checklist = current.checklist.map { item ->
+                                        if (item.id == itemId) syncedItem else item
+                                    },
+                                )
+                            }
+                            lastMessage = "Пункт уже обработан: ${syncedItem.label}"
+                        } else {
+                            handleError(error, "Не удалось сохранить результат", "Complete production target failed. taskId=$taskId targetId=$itemId")
+                        }
+                    } else {
+                        handleError(error, "Не удалось сохранить результат", "Complete production target failed. taskId=$taskId targetId=$itemId")
+                    }
                 }
             }
             return
@@ -1278,14 +1704,27 @@ class MobileMesViewModel @Inject constructor(
         }
         val remoteTaskId = taskId.toLongOrNull()
         if (remoteTaskId == null) {
-            if (currentTask.checklist.any { it.serverType == "production-target" }) {
+            if (
+                currentTask.checklist.any { it.serverType == "production-target" } ||
+                (currentTask.operationType == OperationType.MORTALITY_ROUND && !taskId.startsWith("demo-", ignoreCase = true))
+            ) {
                 launchServerAction("Complete production task failed", fallbackMessage = "Не удалось завершить задачу") {
-                    runCatching { productionTaskApi.completeTask(currentEmployee.id, taskId) }
+                    runCatching { productionCall { api -> api.completeTask(currentEmployee.id, taskId) } }
                         .onSuccess {
                             updateTask(taskId) { current -> current.copy(status = TaskStatus.DONE, checklist = checklist, result = current.result.copy(completedAt = "now")) }
                             lastMessage = "Задача завершена"
                         }
-                        .onFailure { error -> handleError(error, "Не удалось завершить задачу", "Complete production task failed. taskId=$taskId") }
+                        .onFailure { error ->
+                            val syncedTask = runCatching {
+                                productionCall { api -> api.getTask(currentEmployee.id, taskId) }.toMobileTask(currentEmployee.id)
+                            }.getOrNull()
+                            if (syncedTask?.status == TaskStatus.DONE) {
+                                updateTask(taskId) { syncedTask.copy(checklist = syncedTask.checklist.ifEmpty { checklist }) }
+                                lastMessage = "Задача завершена"
+                            } else {
+                                handleError(error, "Не удалось завершить задачу", "Complete production task failed. taskId=$taskId")
+                            }
+                        }
                 }
             } else {
                 updateTask(taskId) { current ->

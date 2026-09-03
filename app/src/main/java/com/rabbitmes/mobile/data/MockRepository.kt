@@ -52,8 +52,8 @@ object MockRepository {
         OperationDefinition(OperationType.PALPATION, TargetType.RABBIT, true, "Зафиксировать пальпацию", listOf(
             OperationField("rfid", "RFID самки", FieldType.TEXT, true), OperationField("result", "Результат", FieldType.SELECT, true, options = listOf("Сукрольная", "Не сукрольная", "Сомнительно")), OperationField("comment", "Комментарий", FieldType.TEXT)
         ), listOf(RoleId.OPERATOR)),
-        OperationDefinition(OperationType.WEIGHING, TargetType.CAGE, false, "Сохранить вес", listOf(
-            OperationField("weightGrams", "Вес", FieldType.NUMBER, true, "г"),
+        OperationDefinition(OperationType.WEIGHING, TargetType.CAGE, false, "Вес сохранён", listOf(
+            OperationField("weightGrams", "Вес клетки", FieldType.NUMBER, true, "г"),
             OperationField("photo", "Фото весов", FieldType.PHOTO)
         ), listOf(RoleId.OPERATOR)),
         OperationDefinition(OperationType.NEST_PREPARATION, TargetType.CAGE, false, "Гнездо подготовлено", listOf(
@@ -101,7 +101,7 @@ object MockRepository {
         OperationDefinition(OperationType.FIRST_WEIGHING, TargetType.HANGAR, false, "Первое взвешивание завершено", emptyList(), listOf(RoleId.OPERATOR, RoleId.CHIEF_TECHNOLOGIST)),
         OperationDefinition(OperationType.ANIMAL_DEPARTURE, TargetType.HANGAR, false, "Выбытие учтено", listOf(OperationField("count", "Количество", FieldType.NUMBER, true), OperationField("reason", "Причина", FieldType.SELECT, true, options = listOf("Падеж", "Выбраковка", "Перемещение"))), listOf(RoleId.OPERATOR, RoleId.CHIEF_TECHNOLOGIST)),
         OperationDefinition(OperationType.WEANING, TargetType.HANGAR, false, "Отъем завершен", listOf(OperationField("youngCount", "Количество молодняка", FieldType.NUMBER, true)), listOf(RoleId.OPERATOR, RoleId.CHIEF_TECHNOLOGIST)),
-        OperationDefinition(OperationType.SLAUGHTER_SHIPMENT, TargetType.HANGAR, false, "Отгрузка завершена", listOf(OperationField("count", "Количество", FieldType.NUMBER, true), OperationField("weightTotal", "Общий вес", FieldType.NUMBER, true, "кг")), listOf(RoleId.OPERATOR, RoleId.GENERAL_WORKER)),
+        OperationDefinition(OperationType.SLAUGHTER_SHIPMENT, TargetType.CAGE, false, "Забой завершён", listOf(OperationField("count", "Количество", FieldType.NUMBER, true)), listOf(RoleId.OPERATOR, RoleId.GENERAL_WORKER)),
         OperationDefinition(OperationType.FEMALE_DELIVERY, TargetType.RABBIT, true, "Самки заведены", listOf(OperationField("rfid", "RFID", FieldType.TEXT, true), OperationField("source", "Поставщик/группа", FieldType.TEXT)), listOf(RoleId.OPERATOR, RoleId.GENERAL_WORKER)),
         OperationDefinition(OperationType.DEWORMING_DOSATRON, TargetType.HANGAR, false, "Дозатрон запущен", listOf(OperationField("drug", "Препарат", FieldType.TEXT, true), OperationField("dosage", "Дозировка", FieldType.TEXT, true)), listOf(RoleId.OPERATOR, RoleId.CHIEF_MECHANIC))
     )
@@ -146,6 +146,7 @@ object MockRepository {
         MobileTask("task-11", "Проверка корма", OperationType.FEED_CHECK, "ws-1", "h-1", "emp-1", "2026-07-09", "07:30", 20, Priority.NORMAL, TaskStatus.NEW, emptyList(), false),
         MobileTask("task-12", "Проверка воды", OperationType.WATER_CHECK, "ws-1", "h-1", "emp-1", "2026-07-09", "07:40", 20, Priority.NORMAL, TaskStatus.NEW, waterRowChecklist("h-1"), false),
         MobileTask("task-13", "Проверить крепление поилки в ряду 2", OperationType.CUSTOM_TASK, "ws-1", "h-1", "emp-1", "2026-07-09", "17:20", 20, Priority.HIGH, TaskStatus.NEW, emptyList(), false, description = "Проверьте клетку Р2-К7. Если крепление ослаблено — зафиксируйте замечание и приложите фото."),
-        MobileTask("task-14", "Переселение кролей по клеткам", OperationType.ANIMAL_TRANSFER, "ws-1", "h-1", "emp-1", "2026-07-09", "18:00", 80, Priority.HIGH, TaskStatus.NEW, rabbitChecklist("transfer", 6), false)
+        MobileTask("task-14", "Переселение кролей по клеткам", OperationType.ANIMAL_TRANSFER, "ws-1", "h-1", "emp-1", "2026-07-09", "18:00", 80, Priority.HIGH, TaskStatus.NEW, rabbitChecklist("transfer", 6), false),
+        MobileTask("task-15", "Обход ангара", OperationType.MORTALITY_ROUND, "ws-1", "h-1", "emp-1", "2026-07-09", "18:30", 45, Priority.HIGH, TaskStatus.NEW, emptyList(), false)
     )
 }

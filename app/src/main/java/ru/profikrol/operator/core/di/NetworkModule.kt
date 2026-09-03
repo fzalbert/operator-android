@@ -6,6 +6,7 @@ import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
 import dagger.hilt.components.SingletonComponent
+import kotlinx.serialization.ExperimentalSerializationApi
 import kotlinx.serialization.json.Json
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
@@ -22,6 +23,7 @@ import ru.profikrol.operator.data.remote.worktask.WorkTaskApi
 import ru.profikrol.operator.data.remote.production.ProductionTaskApi
 import java.security.SecureRandom
 import java.security.cert.X509Certificate
+import java.util.concurrent.TimeUnit
 import javax.inject.Named
 import javax.inject.Singleton
 import javax.net.ssl.HostnameVerifier
@@ -31,14 +33,20 @@ import javax.net.ssl.X509TrustManager
 @Module
 @InstallIn(SingletonComponent::class)
 object NetworkModule {
-    private const val BASE_URL = "https://195.58.153.25/"
+    private const val BASE_URL = "http://195.58.153.25:5216/"
     private const val PRODUCTION_BASE_URL = "http://195.58.153.25:55915/"
+    private const val PRODUCTION_FALLBACK_BASE_URL = BASE_URL
     private const val AUTH_LOG_TAG = "RabbitAuth"
     private val ALLOW_UNSAFE_CERTIFICATES = BuildConfig.DEBUG
 
+    @OptIn(ExperimentalSerializationApi::class)
     @Provides
     @Singleton
-    fun provideJson(): Json = Json { ignoreUnknownKeys = true; isLenient = true }
+    fun provideJson(): Json = Json {
+        ignoreUnknownKeys = true
+        isLenient = true
+        explicitNulls = false
+    }
 
     @Provides
     @Singleton
@@ -107,6 +115,17 @@ object NetworkModule {
 
     @Provides
     @Singleton
+    @Named("productionFallback")
+    fun provideProductionFallbackTaskApi(client: OkHttpClient, json: Json): ProductionTaskApi =
+        Retrofit.Builder()
+            .baseUrl(PRODUCTION_FALLBACK_BASE_URL)
+            .client(client)
+            .addConverterFactory(json.asConverterFactory("application/json".toMediaType()))
+            .build()
+            .create(ProductionTaskApi::class.java)
+
+    @Provides
+    @Singleton
     fun provideRabbitApi(
         retrofit: Retrofit,
     ): RabbitApi = retrofit.create(RabbitApi::class.java)
@@ -127,6 +146,10 @@ object NetworkModule {
     private fun baseClient(logging: HttpLoggingInterceptor): OkHttpClient.Builder =
         OkHttpClient.Builder()
             .addInterceptor(logging)
+            .connectTimeout(30, TimeUnit.SECONDS)
+            .readTimeout(60, TimeUnit.SECONDS)
+            .writeTimeout(30, TimeUnit.SECONDS)
+            .callTimeout(75, TimeUnit.SECONDS)
             .apply {
                 if (ALLOW_UNSAFE_CERTIFICATES) {
                     Log.w(AUTH_LOG_TAG, "Unsafe TLS checks are enabled for API client")
