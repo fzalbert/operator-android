@@ -82,28 +82,14 @@ fun SimpleOperationScreen(
     }
 
     val useGeneralTemplate = USE_GENERAL_TEMPLATE_FOR_ALL_OPERATIONS
-    val usesTargets = task.operationType == OperationType.WEIGHING_CAGE ||
-        task.operationType == OperationType.WEIGHING_RABBIT
-    val targetItems = task.targets.map { target ->
-        ChecklistItem(
-            id = target.id,
-            label = target.label,
-            targetType = target.targetType,
-            targetId = target.targetId,
-            serverType = "production-target",
-            status = target.status,
-            result = target.result,
-        )
-    }
-    val executionItems = if (usesTargets) targetItems else task.checklist
     var activeItemId by remember(task.id) { mutableStateOf<String?>(null) }
-    val activeItem = executionItems.firstOrNull { it.id == activeItemId }
-    val pending = executionItems.filter { it.status == ChecklistStatus.PENDING }
-    val closed = executionItems.filter { it.status != ChecklistStatus.PENDING }
-    val doneCount = executionItems.count { it.status == ChecklistStatus.DONE }
-    val problemCount = executionItems.count { it.status == ChecklistStatus.PROBLEM }
-    val allProcessed = executionItems.isEmpty() || pending.isEmpty()
-    val requiresScan = !useGeneralTemplate && definition.requiresScan && executionItems.none {
+    val activeItem = task.checklist.firstOrNull { it.id == activeItemId }
+    val pending = task.checklist.filter { it.status == ChecklistStatus.PENDING }
+    val closed = task.checklist.filter { it.status != ChecklistStatus.PENDING }
+    val doneCount = task.checklist.count { it.status == ChecklistStatus.DONE }
+    val problemCount = task.checklist.count { it.status == ChecklistStatus.PROBLEM }
+    val allProcessed = task.checklist.isEmpty() || pending.isEmpty()
+    val requiresScan = !useGeneralTemplate && definition.requiresScan && task.checklist.none {
         it.serverType.equals("general", ignoreCase = true)
     }
     val listState = rememberLazyListState()
@@ -140,7 +126,6 @@ fun SimpleOperationScreen(
             onVideo = onVideo,
             onFile = onFile,
             attachments = task.result.attachments,
-            objectLabel = if (usesTargets) "Целевой объект" else "Объект чек-листа",
         )
         return
     }
@@ -192,7 +177,7 @@ fun SimpleOperationScreen(
                 Spacer(Modifier.height(12.dp))
                 if (largeFont) {
                     Text(
-                        "$doneCount выполнено · $problemCount проблем · ${executionItems.size} всего",
+                        "$doneCount выполнено · $problemCount проблем · ${task.checklist.size} всего",
                         color = Color.White,
                         style = MaterialTheme.typography.bodyMedium,
                         fontWeight = FontWeight.Bold,
@@ -201,7 +186,7 @@ fun SimpleOperationScreen(
                     Row(horizontalArrangement = Arrangement.spacedBy(7.dp)) {
                         SimpleMetric(doneCount.toString(), "выполнено", Modifier.weight(1f), true)
                         SimpleMetric(problemCount.toString(), "проблем", Modifier.weight(1f), true)
-                        SimpleMetric(executionItems.size.toString(), "всего", Modifier.weight(1f), true)
+                        SimpleMetric(task.checklist.size.toString(), "всего", Modifier.weight(1f), true)
                     }
                 }
                 if (task.status == TaskStatus.NEW && canEdit) {
@@ -242,7 +227,7 @@ fun SimpleOperationScreen(
                         onOpenAnimal = onOpenAnimal,
                     )
                 }
-            } else if (executionItems.isEmpty()) {
+            } else if (task.checklist.isEmpty()) {
                 item {
                     SimpleStandaloneForm(
                         task = task,
@@ -258,14 +243,14 @@ fun SimpleOperationScreen(
             }
         }
 
-        if (!useGeneralTemplate && executionItems.isNotEmpty()) {
-            item { SimpleSectionTitle(if (usesTargets) "Целевые объекты" else if (requiresScan) "Чек-лист закрывается сканированием" else "К исполнению") }
+        if (!useGeneralTemplate && task.checklist.isNotEmpty()) {
+            item { SimpleSectionTitle(if (requiresScan) "Чек-лист закрывается сканированием" else "К исполнению") }
             if (pending.isEmpty()) item { SimpleEmpty("Все пункты обработаны") }
             pending.forEach { checklistItem ->
                 item(key = checklistItem.id) {
                     SimpleChecklistCard(
-                        title = checklistItem.label,
-                        subtitle = if (requiresScan) "Ожидает сканирования" else "Открыть короткую форму",
+                        title = checklistItem.displayTitle(),
+                        subtitle = checklistItem.displaySubtitle(requiresScan),
                         action = if (requiresScan) "RFID" else "Открыть",
                         enabled = !requiresScan && canEdit,
                     ) { activeItemId = checklistItem.id }
@@ -281,19 +266,6 @@ fun SimpleOperationScreen(
                     Modifier.fillMaxWidth().padding(top = 8.dp),
                     enabled = allProcessed && task.status != TaskStatus.SENT && canEdit,
                 )
-            }
-        }
-        if (usesTargets && task.checklist.isNotEmpty()) {
-            item { SimpleSectionTitle("Дополнительный чек-лист") }
-            task.checklist.forEach { checklistItem ->
-                item(key = "checklist-${checklistItem.id}") {
-                    SimpleChecklistCard(
-                        title = checklistItem.label,
-                        subtitle = checklistItem.status.title,
-                        action = if (checklistItem.status == ChecklistStatus.PENDING) "Выполнить" else "Готово",
-                        enabled = checklistItem.status == ChecklistStatus.PENDING && canEdit,
-                    ) { onChecklistDone(checklistItem.id) }
-                }
             }
         }
         item { Spacer(Modifier.height(24.dp)) }
@@ -733,6 +705,229 @@ fun ProductionAnimalTransferScreen(
     }
 }
 
+private data class MortalityRoundEventType(
+    val code: String,
+    val title: String,
+    val requiresCage: Boolean = false,
+    val requiresRabbit: Boolean = false,
+    val requiresCount: Boolean = false,
+)
+
+private val mortalityRoundEventTypes = listOf(
+    MortalityRoundEventType("light_check", "Свет"),
+    MortalityRoundEventType("feed_check", "Корм"),
+    MortalityRoundEventType("water_check", "Вода"),
+    MortalityRoundEventType("nest_control", "Гнездо", requiresCage = true),
+    MortalityRoundEventType("mortality_count", "Погибшие животные", requiresCage = true, requiresCount = true),
+    MortalityRoundEventType("female_culling", "Выбраковка самки", requiresRabbit = true),
+)
+
+@Composable
+fun ProductionMortalityRoundScreen(
+    task: MobileTask,
+    definition: OperationDefinition,
+    scannedRfid: String?,
+    scannedValues: Map<String, String>,
+    onBack: () -> Unit,
+    onBegin: () -> Unit,
+    onOpenScanner: (Map<String, String>) -> Unit,
+    onAddProblem: (String, String, String, String, Int?) -> Unit,
+    onComplete: () -> Unit,
+    canEdit: Boolean,
+) {
+    val fixedItems = task.checklist.filter { it.status != ChecklistStatus.PENDING }
+    val cageOptions = definition.fields
+        .firstOrNull { it.id == "cageId" }
+        ?.options
+        .orEmpty()
+        .filterNot { it.startsWith("Выберите", ignoreCase = true) }
+        .ifEmpty { MockRepository.allCages.map { it.id } }
+    val scanTargetKind = scannedValues["targetKind"]
+    var selectedType by remember(task.id, scanTargetKind) {
+        mutableStateOf(mortalityRoundEventTypes.firstOrNull { it.code == scanTargetKind } ?: mortalityRoundEventTypes.first())
+    }
+    var cageId by remember(task.id) { mutableStateOf("") }
+    var rabbitId by remember(task.id) { mutableStateOf("") }
+    var comment by remember(task.id) { mutableStateOf("") }
+    var count by remember(task.id) { mutableStateOf("") }
+    var error by remember(task.id) { mutableStateOf("") }
+    val selectedRabbit = rabbitId.takeIf(String::isNotBlank)?.let(MockRepository::rabbit)
+
+    fun resetForm() {
+        cageId = ""
+        rabbitId = ""
+        comment = ""
+        count = ""
+        error = ""
+    }
+
+    LaunchedEffect(scannedRfid, selectedType.code) {
+        if (!selectedType.requiresRabbit || scannedRfid.isNullOrBlank()) return@LaunchedEffect
+        val rabbit = MockRepository.rabbitByRfid(scannedRfid)
+        when {
+            rabbit == null -> {
+                rabbitId = ""
+                error = "Самка с RFID $scannedRfid не найдена"
+            }
+            !rabbit.sex.equals("Самка", ignoreCase = true) -> {
+                rabbitId = ""
+                error = "RFID $scannedRfid принадлежит не самке"
+            }
+            else -> {
+                rabbitId = rabbit.id
+                error = ""
+            }
+        }
+    }
+
+    LazyColumn(
+        modifier = Modifier.fillMaxSize().background(SimpleBackground).statusBarsPadding(),
+        contentPadding = PaddingValues(horizontal = 18.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
+        item {
+            Text(
+                "← Назад",
+                color = SimpleGreen,
+                fontWeight = FontWeight.ExtraBold,
+                modifier = Modifier.padding(vertical = 10.dp).clickable(onClick = onBack),
+            )
+        }
+        item {
+            Column(
+                Modifier.fillMaxWidth().clip(RoundedCornerShape(26.dp))
+                    .background(Brush.linearGradient(listOf(SimpleGreen, SimpleDarkGreen))).padding(18.dp),
+            ) {
+                Row(Modifier.fillMaxWidth(), Arrangement.SpaceBetween, Alignment.CenterVertically) {
+                    SimplePriorityBadge(task.priority)
+                    Text("${task.plannedStart} · ${task.plannedDurationMinutes} мин", color = Color(0xFFD6EEE2), fontSize = 13.sp)
+                }
+                Spacer(Modifier.height(12.dp))
+                Text("Обход ангара", color = Color.White, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Black)
+                Spacer(Modifier.height(5.dp))
+                Text("${fixedItems.size} событий зафиксировано", color = Color(0xFFD6EEE2))
+                if (task.status == TaskStatus.NEW && canEdit) {
+                    Spacer(Modifier.height(14.dp))
+                    SimpleButton("Начать обход", onBegin, Modifier.fillMaxWidth())
+                }
+            }
+        }
+        if (task.status != TaskStatus.NEW && canEdit) {
+            item {
+                SimpleCard {
+                    SimpleSectionTitle("Добавить событие")
+                    Text("Выберите тип отклонения и заполните обязательные поля.", color = SimpleMuted)
+                    SelectionDropdown(
+                        value = selectedType.title,
+                        onValueChange = { title ->
+                            mortalityRoundEventTypes.firstOrNull { it.title == title }?.let { type ->
+                                selectedType = type
+                                resetForm()
+                            }
+                        },
+                        options = mortalityRoundEventTypes.map { it.title },
+                        label = "Тип события",
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                    if (selectedType.requiresCage) {
+                        SelectionDropdown(
+                            value = cageId,
+                            onValueChange = {
+                                cageId = it
+                                error = ""
+                            },
+                            options = cageOptions,
+                            label = "ID клетки",
+                            modifier = Modifier.fillMaxWidth(),
+                        )
+                    }
+                    if (selectedType.requiresRabbit) {
+                        SimpleButton(
+                            if (selectedRabbit == null) "Сканировать RFID самки" else "Сканировать другую самку",
+                            { onOpenScanner(mapOf("targetKind" to selectedType.code)) },
+                            modifier = Modifier.fillMaxWidth(),
+                            secondary = true,
+                        )
+                        OutlinedButton(
+                            onClick = {
+                                MockRepository.rabbits.firstOrNull { it.sex.equals("Самка", ignoreCase = true) }?.let { rabbit ->
+                                    rabbitId = rabbit.id
+                                    error = ""
+                                }
+                            },
+                            modifier = Modifier.fillMaxWidth(),
+                        ) { Text("Mock RFID самки") }
+                        selectedRabbit?.let { rabbit ->
+                            SimpleReadonly("Выбранная самка", "${rabbit.earNumber} · RFID ${rabbit.rfid}")
+                            SimpleReadonly("Текущая клетка", MockRepository.cage(rabbit.cageId)?.code ?: rabbit.cageId)
+                        }
+                    }
+                    if (selectedType.requiresCount) {
+                        OutlinedTextField(
+                            value = count,
+                            onValueChange = {
+                                count = it.filter(Char::isDigit)
+                                error = ""
+                            },
+                            modifier = Modifier.fillMaxWidth(),
+                            label = { Text("Количество погибших") },
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                            singleLine = true,
+                            shape = RoundedCornerShape(16.dp),
+                        )
+                    } else {
+                        OutlinedTextField(
+                            value = comment,
+                            onValueChange = {
+                                comment = it
+                                error = ""
+                            },
+                            modifier = Modifier.fillMaxWidth(),
+                            label = { Text("Комментарий") },
+                            minLines = 3,
+                            shape = RoundedCornerShape(16.dp),
+                        )
+                    }
+                    if (error.isNotBlank()) Text(error, color = SimpleRed, fontWeight = FontWeight.Bold)
+                    SimpleButton(
+                        "Зафиксировать событие",
+                        {
+                            val mortalityCount = count.toIntOrNull()
+                            when {
+                                selectedType.requiresCage && cageId.isBlank() -> error = "Укажите ID клетки"
+                                selectedType.requiresRabbit && selectedRabbit == null -> error = "Отсканируйте RFID самки"
+                                selectedType.requiresCount && (mortalityCount == null || mortalityCount <= 0) -> error = "Укажите количество погибших"
+                                !selectedType.requiresCount && comment.isBlank() -> error = "Комментарий обязателен"
+                                else -> {
+                                    onAddProblem(selectedType.code, cageId, selectedRabbit?.id.orEmpty(), comment.trim(), mortalityCount)
+                                    resetForm()
+                                }
+                            }
+                        },
+                        Modifier.fillMaxWidth(),
+                    )
+                }
+            }
+            item { SimpleSectionTitle("Зафиксированные события") }
+            if (fixedItems.isEmpty()) item { SimpleEmpty("Пока нет событий обхода") }
+            fixedItems.forEach { item ->
+                item(key = item.id) { SimpleResultCard(item, definition) }
+            }
+            item {
+                SimpleButton(
+                    "Завершить обход",
+                    onComplete,
+                    Modifier.fillMaxWidth().padding(top = 8.dp),
+                )
+            }
+        }
+        if (!canEdit) {
+            item { SimpleEmpty("Задача доступна только для просмотра") }
+        }
+        item { Spacer(Modifier.height(24.dp)) }
+    }
+}
+
 @Composable
 private fun AnimalSettlementScreen(
     task: MobileTask,
@@ -1145,7 +1340,6 @@ private fun SimpleItemForm(
     onVideo: (String, String) -> Unit,
     onFile: (String, String) -> Unit,
     attachments: List<MediaAttachment>,
-    objectLabel: String = "Объект чек-листа",
 ) {
     val values = remember(item.id) {
         mutableStateMapOf<String, String>().apply {
@@ -1165,7 +1359,7 @@ private fun SimpleItemForm(
                 Text("×", color = SimpleMuted, fontSize = 30.sp, modifier = Modifier.clickable(onClick = onCancel).padding(8.dp))
             }
         }
-        item { SimpleReadonly(objectLabel, item.label) }
+        item { SimpleReadonly(item.displayTitle(), item.label) }
         definition.fields.filterNot { definition.shouldAutoCompleteField(it) }.forEach { field ->
             item(field.id) {
                 SimpleField(
@@ -1217,6 +1411,16 @@ private fun SimpleItemForm(
                         definition.type == OperationType.NEST_SELECTION &&
                         (values["movedCount"]?.toIntOrNull() ?: 0) <= 0
                     ) error = "Укажите количество крольчат больше нуля"
+                    else if (
+                        !problem &&
+                        definition.type == OperationType.SLAUGHTER_SHIPMENT &&
+                        (values["count"]?.toIntOrNull() ?: 0) <= 0
+                    ) error = "Укажите количество больше нуля"
+                    else if (
+                        !problem &&
+                        definition.type == OperationType.WEIGHING &&
+                        (values["weightGrams"]?.toIntOrNull() ?: 0) <= 0
+                    ) error = "Укажите вес больше нуля"
                     else onSubmit(values.withAutoCompleteValues(definition), problem, reason, comment)
                 }, Modifier.weight(1f))
             }
@@ -1484,7 +1688,16 @@ private fun String.shortAttachmentName(maxLength: Int = 18): String {
 }
 
 @Composable private fun SimpleChecklistCard(title: String, subtitle: String, action: String, enabled: Boolean, onClick: () -> Unit) { Card(Modifier.fillMaxWidth().clickable(enabled, onClick = onClick), RoundedCornerShape(18.dp), CardDefaults.cardColors(Color.White), elevation = CardDefaults.cardElevation(4.dp)) { Row(Modifier.padding(14.dp), Arrangement.SpaceBetween, Alignment.CenterVertically) { Column(Modifier.weight(1f)) { Text(title, color = SimpleText, fontWeight = FontWeight.Bold); Text(subtitle, color = SimpleMuted, fontSize = 13.sp) }; Text(action, color = SimpleGreen, fontWeight = FontWeight.ExtraBold) } } }
-@Composable private fun SimpleResultCard(item: ChecklistItem, definition: OperationDefinition) { val problem = item.status == ChecklistStatus.PROBLEM; Card(Modifier.fillMaxWidth(), RoundedCornerShape(18.dp), CardDefaults.cardColors(Color.White), elevation = CardDefaults.cardElevation(4.dp)) { Row { Box(Modifier.width(4.dp).heightIn(min = 100.dp).background(if (problem) SimpleRed else SimpleGreen)); Row(Modifier.weight(1f).padding(14.dp), Arrangement.SpaceBetween, Alignment.CenterVertically) { Column(Modifier.weight(1f)) { Text(item.label, color = SimpleText, fontWeight = FontWeight.Bold); Text(if (problem) item.result.problemReason ?: "Есть замечание" else "Выполнено", color = SimpleMuted); val details = item.result.values.entries.joinToString(" · ") { (key, v) -> "${definition.fields.firstOrNull { it.id == key }?.title ?: key}: ${if (v == "true") "Да" else if (v == "false") "Нет" else v}" }; if (details.isNotBlank()) Text(details, color = SimpleMuted, fontSize = 12.sp) }; SimpleBadge(if (problem) "Проблема" else "OK", if (problem) SimpleRed else SimpleGreen) } } } }
+@Composable private fun SimpleResultCard(item: ChecklistItem, definition: OperationDefinition) { val problem = item.status == ChecklistStatus.PROBLEM; Card(Modifier.fillMaxWidth(), RoundedCornerShape(18.dp), CardDefaults.cardColors(Color.White), elevation = CardDefaults.cardElevation(4.dp)) { Row { Box(Modifier.width(4.dp).heightIn(min = 100.dp).background(if (problem) SimpleRed else SimpleGreen)); Row(Modifier.weight(1f).padding(14.dp), Arrangement.SpaceBetween, Alignment.CenterVertically) { Column(Modifier.weight(1f)) { Text(item.displayTitle(), color = SimpleText, fontWeight = FontWeight.Bold); Text(item.label, color = SimpleMuted, fontSize = 12.sp); Text(if (problem) item.result.problemReason ?: "Есть замечание" else "Выполнено", color = SimpleMuted); val details = item.result.values.entries.joinToString(" · ") { (key, v) -> "${definition.fields.firstOrNull { it.id == key }?.title ?: key}: ${if (v == "true") "Да" else if (v == "false") "Нет" else v}" }; if (details.isNotBlank()) Text(details, color = SimpleMuted, fontSize = 12.sp) }; SimpleBadge(if (problem) "Проблема" else "OK", if (problem) SimpleRed else SimpleGreen) } } } }
+private fun ChecklistItem.displayTitle(): String = when (targetType) {
+    TargetType.CAGE -> "Клетка"
+    TargetType.RABBIT -> "Кролик"
+    TargetType.ROW -> "Ряд"
+    TargetType.HANGAR -> "Ангар"
+}
+private fun ChecklistItem.displaySubtitle(requiresScan: Boolean): String {
+    return if (requiresScan) "$label · ожидает RFID" else label
+}
 @Composable private fun SimpleReadonly(label: String, value: String) { Column(Modifier.fillMaxWidth().background(Color(0xFFF6F9F7), RoundedCornerShape(16.dp)).border(1.dp, SimpleBorder, RoundedCornerShape(16.dp)).padding(14.dp)) { Text(label, color = SimpleMuted, fontSize = 12.sp, fontWeight = FontWeight.Bold); Text(value, color = SimpleText, fontWeight = FontWeight.Bold) } }
 @Composable private fun SimpleCard(content: @Composable ColumnScope.() -> Unit) { Card(Modifier.fillMaxWidth(), RoundedCornerShape(24.dp), CardDefaults.cardColors(Color.White), elevation = CardDefaults.cardElevation(5.dp)) { Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp), content = content) } }
 @Composable private fun SimpleSectionTitle(text: String) = Text(text, color = SimpleText, fontSize = 19.sp, fontWeight = FontWeight.ExtraBold, modifier = Modifier.padding(top = 8.dp))
@@ -1550,9 +1763,7 @@ private fun problemReasons(type: OperationType): List<String> = when (type) {
         "Животное отсутствует",
         "Другая причина",
     )
-    OperationType.WEIGHING,
-    OperationType.WEIGHING_CAGE,
-    OperationType.WEIGHING_RABBIT -> listOf(
+    OperationType.WEIGHING -> listOf(
         "Весы недоступны или неисправны",
         "Некорректные показания",
         "Объект отсутствует",

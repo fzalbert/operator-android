@@ -112,6 +112,7 @@ fun RabbitMesApp(vm: MobileMesViewModel) {
                     task = task,
                     definition = vm.definition(task.operationType),
                     scannedRfid = vm.scannedRfidForTask(task.id),
+                    scannedValues = vm.scannedValuesForTask(task.id),
                     onBack = { vm.navigate(AppScreen.Tasks) },
                     onBegin = { vm.beginTask(task.id) },
                     onScan = { rfid, values -> vm.scanRfidAndCompleteItem(task.id, rfid, values) },
@@ -128,6 +129,9 @@ fun RabbitMesApp(vm: MobileMesViewModel) {
                     onChecklistDoneWithValues = { itemId, values -> vm.completeChecklistItem(task.id, itemId, values) },
                     onChecklistProblem = { itemId, reason, comment -> vm.markChecklistItem(task.id, itemId, ChecklistStatus.PROBLEM, reason, comment) },
                     onChecklistSkip = { itemId, reason -> vm.markChecklistItem(task.id, itemId, ChecklistStatus.SKIPPED, reason, "Пропущено") },
+                    onMortalityRoundProblem = { targetKind, cageId, rabbitId, comment, count ->
+                        vm.addMortalityRoundProblem(task.id, targetKind, cageId, rabbitId, comment, count)
+                    },
                     onComplete = { vm.completeTask(task.id); vm.navigate(AppScreen.Tasks) },
                     onSkip = {
                         if (task.isGeneral) vm.rejectGeneralTask(task.id, it) else vm.skipTask(task.id, it)
@@ -152,7 +156,7 @@ fun RabbitMesApp(vm: MobileMesViewModel) {
                         vm.navigate(AppScreen.TaskExecution(screen.taskId))
                     },
                     onScanned = { code ->
-                        vm.rememberScannedRfid(screen.taskId, code)
+                        vm.rememberScannedRfid(screen.taskId, code, screen.values)
                         vm.navigate(AppScreen.TaskExecution(screen.taskId))
                     },
                     demoRfidCode = vm.nextPendingRfid(screen.taskId),

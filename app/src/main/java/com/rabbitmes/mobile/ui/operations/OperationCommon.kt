@@ -360,7 +360,7 @@ fun ChecklistExecutionBlock(
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                         Column(Modifier.weight(1f)) {
                             Text(item.label, fontWeight = FontWeight.SemiBold)
-                            Text("Объект: ${item.targetType.name} · ${item.targetId}", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            Text(item.secondaryTargetLabel(), color = MaterialTheme.colorScheme.onSurfaceVariant)
                             if (item.result.scannedRfid != null) Text("RFID: ${item.result.scannedRfid}", color = mobileSuccessGreen)
                             if (item.result.values.isNotEmpty()) Text(item.result.values.entries.joinToString { "${it.key}: ${it.value}" }, color = MaterialTheme.colorScheme.onSurfaceVariant)
                             if (item.result.problemReason != null) Text(item.result.problemReason, color = MaterialTheme.colorScheme.error)
@@ -369,6 +369,9 @@ fun ChecklistExecutionBlock(
                     }
                     if (canEdit) {
                         Row(horizontalArrangement = Arrangement.spacedBy(MesSpacing.smallGap), modifier = Modifier.fillMaxWidth()) {
+                            if (item.status == ChecklistStatus.PENDING && item.targetType != TargetType.RABBIT) {
+                                Button(onClick = { onDone(item.id) }, modifier = Modifier.weight(1f)) { Text("Выполнено") }
+                            }
                             OutlinedButton(onClick = { openedItemId = if (openedItemId == item.id) null else item.id }, modifier = Modifier.weight(1f)) { Text("Детали / проблема") }
                         }
                     }
@@ -391,6 +394,13 @@ fun ChecklistExecutionBlock(
             }
         }
     }
+}
+
+private fun ChecklistItem.secondaryTargetLabel(): String = when (targetType) {
+    TargetType.CAGE -> "ID клетки: $targetId"
+    TargetType.RABBIT -> "ID кролика: $targetId"
+    TargetType.ROW -> "ID ряда: $targetId"
+    TargetType.HANGAR -> "ID ангара: $targetId"
 }
 
 @Composable
