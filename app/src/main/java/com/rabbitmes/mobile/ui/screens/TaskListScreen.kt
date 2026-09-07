@@ -42,20 +42,33 @@ fun TaskListScreen(tasks: List<MobileTask>, nextTask: MobileTask?, message: Stri
             }
             if (!shiftStarted) item { TaskEmpty("Начните смену, чтобы открыть задачи") }
             else if (open.isEmpty()) item { TaskEmpty("Задач нет") }
-            else items(open, key = { it.id }) { task -> PrototypeTaskCard(task) { onOpen(task.id) } }
+            else items(open, key = { it.id }) { task ->
+                PrototypeTaskCard(
+                    task = task,
+                    onClick = { onOpen(task.id) },
+                )
+            }
         }
     }
 }
 
 @Composable
-fun TaskCard(task: MobileTask, isNext: Boolean = false, onClick: () -> Unit) = PrototypeTaskCard(task, onClick)
+fun TaskCard(task: MobileTask, isNext: Boolean = false, onClick: () -> Unit) = PrototypeTaskCard(task, onClick = onClick)
 
 @Composable private fun PrototypeTaskCard(task: MobileTask, onClick: () -> Unit) {
     val accent = when (task.priority) { Priority.URGENT -> Color(0xFFDC4C4C); Priority.HIGH -> Color(0xFFF59E0B); Priority.NORMAL -> Color(0xFF1F8A5B) }
     val executionItems = task.checklist.map { it.status } + task.targets.map { it.status }
     val problems = executionItems.count { it == ChecklistStatus.PROBLEM }
     val largeFont = LocalDensity.current.fontScale >= 1.3f
-    Card(shape = RoundedCornerShape(22.dp), colors = CardDefaults.cardColors(Color.White), elevation = CardDefaults.cardElevation(5.dp), modifier = Modifier.fillMaxWidth().padding(horizontal = 18.dp).clickable(onClick = onClick)) {
+    Card(
+        shape = RoundedCornerShape(22.dp),
+        colors = CardDefaults.cardColors(Color.White),
+        elevation = CardDefaults.cardElevation(5.dp),
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 18.dp)
+            .clickable(onClick = onClick),
+    ) {
         Row { Box(Modifier.width(5.dp).heightIn(min = 190.dp).background(accent)); Column(Modifier.weight(1f).padding(16.dp)) {
             if (largeFont) {
                 Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {

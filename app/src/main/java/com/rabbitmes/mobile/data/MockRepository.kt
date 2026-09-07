@@ -81,10 +81,11 @@ object MockRepository {
             emptyList(),
             listOf(RoleId.OPERATOR, RoleId.CHIEF_TECHNOLOGIST, RoleId.GENERAL_WORKER),
         ),
-        OperationDefinition(OperationType.NEST_SELECTION, TargetType.CAGE, false, "Перемещение сохранено", listOf(
-            OperationField("sourceCage", "Из клетки", FieldType.SELECT, true, options = listOf("Выберите клетку") + hangarACageCodes),
-            OperationField("destinationCage", "В клетку", FieldType.SELECT, true, options = listOf("Выберите клетку") + hangarACageCodes),
-            OperationField("movedCount", "Количество крольчат", FieldType.NUMBER, true)
+        OperationDefinition(OperationType.NEST_SELECTION, TargetType.CAGE, false, "Сохранить по клетке", listOf(
+            OperationField("alive", "Живые", FieldType.NUMBER, true),
+            OperationField("stillborn", "Мертворождённые", FieldType.NUMBER, true),
+            OperationField("removed", "Забрали", FieldType.NUMBER, true),
+            OperationField("added", "Добавили", FieldType.NUMBER, true)
         ), listOf(RoleId.OPERATOR, RoleId.CHIEF_TECHNOLOGIST), true),
         OperationDefinition(OperationType.ANIMAL_TRANSFER, TargetType.RABBIT, true, "Переселить", listOf(OperationField("rfid", "RFID", FieldType.TEXT, true), OperationField("cellId", "ID новой клетки", FieldType.SELECT, true), OperationField("comment", "Комментарий", FieldType.TEXT)), listOf(RoleId.OPERATOR, RoleId.GENERAL_WORKER)),
         OperationDefinition(OperationType.ANIMAL_SETTLEMENT, TargetType.CAGE, false, "Заселить", listOf(OperationField("cellId", "Клетка", FieldType.SELECT, true), OperationField("animalCount", "Количество животных", FieldType.NUMBER, true)), listOf(RoleId.OPERATOR, RoleId.GENERAL_WORKER)),

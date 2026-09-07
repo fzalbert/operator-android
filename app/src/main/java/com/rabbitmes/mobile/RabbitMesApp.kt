@@ -105,7 +105,8 @@ fun RabbitMesApp(vm: MobileMesViewModel) {
                     LaunchedEffect(screen.taskId) { vm.navigate(AppScreen.Tasks) }
                     TaskListScreen(vm.tasksForCurrentEmployee(), vm.nextTask(), vm.lastMessage, vm.shift.startedAt != null || vm.tasksForCurrentEmployee().any { it.id.startsWith("mock-") }, { vm.navigate(AppScreen.TaskExecution(it)) }, { vm.navigate(AppScreen.Shift) }, bottom("tasks"))
                 } else {
-                    val canEdit = task.status != com.rabbitmes.mobile.domain.TaskStatus.DONE &&
+                    val canEdit = vm.canWorkOnTask(task.id) &&
+                        task.status != com.rabbitmes.mobile.domain.TaskStatus.DONE &&
                         task.status != com.rabbitmes.mobile.domain.TaskStatus.SENT &&
                         task.status != com.rabbitmes.mobile.domain.TaskStatus.SKIPPED
                     OperationScreenFactory(
