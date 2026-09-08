@@ -53,6 +53,9 @@ import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 
 private const val API_LOG_TAG = "RabbitApi"
+
+private fun OperationType.isFemaleArrivalSettlement(): Boolean =
+    this == OperationType.FEMALE_DELIVERY || this == OperationType.ANIMAL_SETTLEMENT
 private const val TASKS_REFRESH_INTERVAL_MS = 30_000L
 private const val RABBITS_PAGE_SIZE = 100
 private const val CELLS_PAGE_SIZE = 100
@@ -1200,12 +1203,12 @@ class MobileMesViewModel @Inject constructor(
                         item.label.equals(normalizedRfid, ignoreCase = true)
                     )
         } ?: pendingServerRabbits.singleOrNull()
-        val productionSettlementTarget = if (currentTask.operationType == OperationType.ANIMAL_SETTLEMENT) {
+        val productionSettlementTarget = if (currentTask.operationType.isFemaleArrivalSettlement()) {
             currentTask.checklist.firstOrNull { item ->
                 item.serverType == "production-target" && item.status == ChecklistStatus.PENDING
             }
         } else null
-        val settlementFallbackTarget = if (currentTask.operationType == OperationType.ANIMAL_SETTLEMENT) {
+        val settlementFallbackTarget = if (currentTask.operationType.isFemaleArrivalSettlement()) {
             currentTask.checklist.firstOrNull { it.status == ChecklistStatus.PENDING }
         } else null
         val effectiveRfid = if (productionSettlementTarget != null || settlementFallbackTarget != null) rfid else serverRabbitTarget?.targetId ?: rfid
@@ -1495,11 +1498,16 @@ class MobileMesViewModel @Inject constructor(
         val item = task.checklist.firstOrNull { it.id == itemId }
         if (item?.serverType == "production-target") {
             val rfid = values["rfid"]?.trim()
-            if (task.operationType == OperationType.ANIMAL_SETTLEMENT && rfid.isNullOrBlank()) {
+            if (task.operationType.isFemaleArrivalSettlement() && rfid.isNullOrBlank()) {
                 lastMessage = "Для заселения RFID обязателен"
                 return
             }
-            val isAnimalTargetTask = task.operationType == OperationType.ANIMAL_SETTLEMENT ||
+            val settlementAgeDays = values["age"]?.trim()?.toIntOrNull()
+            if (task.operationType.isFemaleArrivalSettlement() && (settlementAgeDays == null || settlementAgeDays <= 0)) {
+                lastMessage = "Укажите возраст кролика в днях"
+                return
+            }
+            val isAnimalTargetTask = task.operationType.isFemaleArrivalSettlement() ||
                 task.operationType == OperationType.ANIMAL_TRANSFER
             val operationTitle = if (task.operationType == OperationType.ANIMAL_TRANSFER) "Переселение" else "Заселение"
             val resultJson = buildJsonObject {
@@ -1511,10 +1519,10 @@ class MobileMesViewModel @Inject constructor(
                     values.filterKeys { it != "rfid" && it != PROBLEM_REASON_KEY && it != PROBLEM_COMMENT_KEY }
                         .forEach { (key, value) -> put(key, value) }
                 }
-                if (task.operationType == OperationType.ANIMAL_SETTLEMENT) {
-                    // One RFID scan represents one newly settled rabbit.
-                    // Production API validates this value as a JSON integer.
-                    put("animalCount", 1)
+                if (task.operationType.isFemaleArrivalSettlement()) {
+                    item.targetId.toLongOrNull()?.let { put("cageId", it) }
+                    rfid?.let { put("femaleRfid", it) }
+                    settlementAgeDays?.let { put("age", it) }
                 }
             }
             launchServerAction("Complete production target failed", fallbackMessage = "Не удалось сохранить результат") {
@@ -1531,7 +1539,7 @@ class MobileMesViewModel @Inject constructor(
                                 request = ProductionTargetCommentProblemRequest(comment = targetComment),
                             )
                         } else {
-                            Log.d(API_LOG_TAG, "Sending production target completion. taskId=$taskId targetId=$itemId operation=${task.operationType} rfid=$rfid")
+                            Log.d(API_LOG_TAG, "Sending production target completion. taskId=$taskId targetId=$itemId operation=${task.operationType} rfid=$rfid result=$resultJson")
                             api.completeTarget(
                                 employeeId = currentEmployee.id,
                                 taskId = taskId,
@@ -1634,7 +1642,7 @@ class MobileMesViewModel @Inject constructor(
             }.onSuccess {
                 updateChecklistItemLocally(taskId, itemId, status, reason, comment, values)
                 val current = taskOrNull(taskId)
-                val isLastSettlementItem = current?.operationType == OperationType.ANIMAL_SETTLEMENT &&
+                val isLastSettlementItem = current?.operationType?.isFemaleArrivalSettlement() == true &&
                     current.checklist.count { it.status == ChecklistStatus.PENDING } <= 1
                 if (isLastSettlementItem) {
                     runCatching {

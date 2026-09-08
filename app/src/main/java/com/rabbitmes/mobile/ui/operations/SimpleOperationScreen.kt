@@ -293,6 +293,7 @@ fun ProductionAnimalSettlementScreen(
     onFile: (String, String) -> Unit,
     canEdit: Boolean,
 ) {
+    var ageDays by remember(task.id) { mutableStateOf(task.result.values["age"].orEmpty()) }
     var hasProblem by remember(task.id) { mutableStateOf(false) }
     var problemReason by remember(task.id) { mutableStateOf("") }
     var problemComment by remember(task.id) { mutableStateOf("") }
@@ -355,6 +356,21 @@ fun ProductionAnimalSettlementScreen(
             }
             if (!finished) {
                 item {
+                    SimpleCard {
+                        SimpleSectionTitle("Данные кролика")
+                        OutlinedTextField(
+                            value = ageDays,
+                            onValueChange = { value -> ageDays = value.filter(Char::isDigit) },
+                            modifier = Modifier.fillMaxWidth(),
+                            label = { Text("Возраст, дней") },
+                            supportingText = { Text("Например: 10, 210 или 730") },
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                            singleLine = true,
+                            isError = ageDays.isNotBlank() && ageDays.toIntOrNull()?.let { it > 0 } != true,
+                        )
+                    }
+                }
+                item {
                     CageScanPanel(
                         title = "RFID нового кролика",
                         onScan = { rfid ->
@@ -363,6 +379,7 @@ fun ProductionAnimalSettlementScreen(
                             onScan(
                                 rfid,
                                 mapOf(
+                                    "age" to ageDays,
                                     PROBLEM_REASON_KEY to if (hasProblem) problemReason else "",
                                     PROBLEM_COMMENT_KEY to if (hasProblem) problemComment else "",
                                 ),
@@ -371,6 +388,7 @@ fun ProductionAnimalSettlementScreen(
                         onOpenScanner = {
                             onOpenScanner(
                                 mapOf(
+                                    "age" to ageDays,
                                     PROBLEM_REASON_KEY to if (hasProblem) problemReason else "",
                                     PROBLEM_COMMENT_KEY to if (hasProblem) problemComment else "",
                                 ),
