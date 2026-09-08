@@ -986,6 +986,7 @@ class MobileMesViewModel @Inject constructor(
     }
     fun tasksForAcceptance() = tasks.filter { it.requiresAcceptance && it.status == TaskStatus.DONE && it.acceptanceStatus == AcceptanceStatus.WAITING && it.acceptanceRole == currentEmployee.role }
     fun nextTask() = tasksForCurrentEmployee().filter { it.status != TaskStatus.DONE && it.status != TaskStatus.SENT && it.status != TaskStatus.SKIPPED }.minWithOrNull(compareBy<MobileTask> { it.priority.weight }.thenBy { it.plannedStart })
+    fun canWorkOnTask(taskId: String): Boolean = nextTask()?.id == taskId
     fun definition(type: OperationType): OperationDefinition {
         val definition = MockRepository.operation(type)
         if (serverCells.isEmpty()) return definition
@@ -1082,6 +1083,10 @@ class MobileMesViewModel @Inject constructor(
         shift = queueOfflineChange()
     }
     fun beginTask(taskId: String) {
+        if (!canWorkOnTask(taskId)) {
+            lastMessage = "Сначала завершите предыдущую задачу"
+            return
+        }
         val remoteTaskId = taskId.toLongOrNull()
         if (remoteTaskId == null) {
             val task = taskOrNull(taskId)
@@ -1511,7 +1516,12 @@ class MobileMesViewModel @Inject constructor(
                 task.operationType == OperationType.ANIMAL_TRANSFER
             val operationTitle = if (task.operationType == OperationType.ANIMAL_TRANSFER) "Переселение" else "Заселение"
             val resultJson = buildJsonObject {
-                if (task.operationType == OperationType.SLAUGHTER_SHIPMENT) {
+                if (task.operationType == OperationType.NEST_SELECTION) {
+                    put("alive", values["alive"]?.toIntOrNull() ?: 0)
+                    put("stillborn", values["stillborn"]?.toLongOrNull() ?: 0L)
+                    put("removed", values["removed"]?.toLongOrNull() ?: 0L)
+                    put("added", values["added"]?.toLongOrNull() ?: 0L)
+                } else if (task.operationType == OperationType.SLAUGHTER_SHIPMENT) {
                     put("count", values["count"]?.toIntOrNull() ?: 0)
                 } else if (task.operationType == OperationType.WEIGHING) {
                     put("weightGrams", values["weightGrams"]?.toIntOrNull() ?: 0)
@@ -1706,7 +1716,7 @@ class MobileMesViewModel @Inject constructor(
             }
         } else currentTask.checklist
         val pending = checklist.count { it.status == ChecklistStatus.PENDING }
-        if (pending > 0) {
+        if (pending > 0 && currentTask.operationType != OperationType.NEST_SELECTION) {
             lastMessage = "Нельзя завершить задачу: осталось $pending необработанных пунктов чек-листа"
             return
         }

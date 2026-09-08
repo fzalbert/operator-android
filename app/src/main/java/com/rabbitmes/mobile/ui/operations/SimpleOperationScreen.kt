@@ -9,6 +9,8 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -437,6 +439,265 @@ fun ProductionAnimalSettlementScreen(
             }
         }
         item { Spacer(Modifier.height(24.dp)) }
+    }
+}
+
+@Composable
+fun ProductionNestAlignmentScreen(
+    task: MobileTask,
+    onBack: () -> Unit,
+    onBegin: () -> Unit,
+    onChecklistDoneWithValues: (String, Map<String, String>) -> Unit,
+    onComplete: () -> Unit,
+    canEdit: Boolean,
+) {
+    var openedItemId by remember(task.id) { mutableStateOf<String?>(null) }
+    var alive by remember(task.id) { mutableStateOf("0") }
+    var stillborn by remember(task.id) { mutableStateOf("0") }
+    var movement by remember(task.id) { mutableStateOf("0") }
+    var movementType by remember(task.id) { mutableStateOf("removed") }
+    var validationError by remember(task.id) { mutableStateOf("") }
+    val processedCount = task.checklist.count { it.status != ChecklistStatus.PENDING }
+    val selectedItem = task.checklist.firstOrNull {
+        it.id == openedItemId && it.status == ChecklistStatus.PENDING
+    }
+
+    fun openItem(itemId: String?) {
+        openedItemId = itemId
+        alive = "0"
+        stillborn = "0"
+        movement = "0"
+        movementType = "removed"
+        validationError = ""
+    }
+
+    LazyColumn(
+        modifier = Modifier.fillMaxSize().background(SimpleBackground).statusBarsPadding(),
+        contentPadding = PaddingValues(horizontal = 18.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
+        item {
+            Text(
+                "← Назад",
+                color = SimpleGreen,
+                fontWeight = FontWeight.ExtraBold,
+                modifier = Modifier.padding(vertical = 10.dp).clickable(onClick = onBack),
+            )
+        }
+        item {
+            Column(
+                Modifier.fillMaxWidth().clip(RoundedCornerShape(26.dp))
+                    .background(Brush.linearGradient(listOf(SimpleGreen, SimpleDarkGreen))).padding(18.dp),
+            ) {
+                Row(Modifier.fillMaxWidth(), Arrangement.SpaceBetween, Alignment.CenterVertically) {
+                    SimplePriorityBadge(task.priority)
+                    Text("${task.plannedStart} · ${task.plannedDurationMinutes} мин", color = Color(0xFFD6EEE2), fontSize = 13.sp)
+                }
+                Spacer(Modifier.height(12.dp))
+                Text("Выравнивание гнёзд", color = Color.White, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Black)
+                Spacer(Modifier.height(5.dp))
+                Text("Обработано $processedCount из ${task.checklist.size}", color = Color(0xFFD6EEE2))
+                if (task.status == TaskStatus.NEW && canEdit) {
+                    Spacer(Modifier.height(14.dp))
+                    SimpleButton("Приступить", onBegin, Modifier.fillMaxWidth())
+                }
+            }
+        }
+        if (task.status != TaskStatus.NEW && canEdit) {
+            item {
+                SimpleSectionTitle("Клетки")
+                Text(
+                    "Выберите клетку для внесения результата.",
+                    color = SimpleMuted,
+                )
+            }
+            if (selectedItem != null) {
+                item(key = "alignment-form-${selectedItem.id}") {
+                    SimpleCard {
+                        Row(Modifier.fillMaxWidth(), Arrangement.SpaceBetween, Alignment.CenterVertically) {
+                            Column(Modifier.weight(1f)) {
+                                Text(selectedItem.label, color = SimpleText, fontSize = 21.sp, fontWeight = FontWeight.Black)
+                                Text("Результат по клетке", color = SimpleMuted, fontSize = 13.sp)
+                            }
+                            IconButton(onClick = { openItem(null) }) {
+                                Icon(
+                                    imageVector = Icons.Default.Close,
+                                    contentDescription = "Закрыть форму",
+                                    tint = SimpleMuted,
+                                )
+                            }
+                        }
+                        AlignmentCountRow(
+                            title = "Живых",
+                            subtitle = "голов сейчас",
+                        ) {
+                            OutlinedTextField(
+                                value = alive,
+                                onValueChange = { alive = it.filter(Char::isDigit).take(4) },
+                                modifier = Modifier.width(82.dp),
+                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                                singleLine = true,
+                            )
+                        }
+                        AlignmentCountRow(
+                            title = "Мертворождённых",
+                            subtitle = "зафиксировано",
+                        ) {
+                            OutlinedTextField(
+                                value = stillborn,
+                                onValueChange = { stillborn = it.filter(Char::isDigit).take(4) },
+                                modifier = Modifier.width(82.dp),
+                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                                singleLine = true,
+                            )
+                        }
+                        Text("Движение", color = SimpleText, fontWeight = FontWeight.Bold, modifier = Modifier.padding(top = 12.dp, bottom = 6.dp))
+                        Row(
+                            Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(10.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            AlignmentDirectionSelector(
+                                selected = movementType,
+                                onSelected = { movementType = it },
+                                modifier = Modifier.weight(1f),
+                            )
+                            OutlinedTextField(
+                                value = movement,
+                                onValueChange = { movement = it.filter(Char::isDigit).take(4) },
+                                modifier = Modifier.width(82.dp),
+                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                                singleLine = true,
+                            )
+                        }
+                        if (validationError.isNotBlank()) {
+                            Text(validationError, color = SimpleRed, fontWeight = FontWeight.Bold)
+                        }
+                        SimpleButton(
+                            text = "Сохранить результат",
+                            onClick = {
+                                val aliveValue = alive.toIntOrNull()
+                                val stillbornValue = stillborn.toLongOrNull()
+                                val movementValue = movement.toLongOrNull()
+                                if (aliveValue == null || stillbornValue == null || movementValue == null || movementValue <= 0) {
+                                    validationError = "Проверьте значения: количество должно быть больше нуля"
+                                } else {
+                                    onChecklistDoneWithValues(
+                                        selectedItem.id,
+                                        mapOf(
+                                            "alive" to aliveValue.toString(),
+                                            "stillborn" to stillbornValue.toString(),
+                                            "removed" to if (movementType == "removed") movementValue.toString() else "0",
+                                            "added" to if (movementType == "added") movementValue.toString() else "0",
+                                        ),
+                                    )
+                                    openItem(null)
+                                }
+                            },
+                            modifier = Modifier.fillMaxWidth().padding(top = 6.dp),
+                        )
+                    }
+                }
+            }
+            task.checklist.forEach { item ->
+                item(key = item.id) {
+                    Surface(
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(8.dp),
+                        color = Color.White,
+                        border = BorderStroke(1.dp, SimpleBorder),
+                        shadowElevation = 1.dp,
+                    ) {
+                        Row(Modifier.fillMaxWidth(), Arrangement.SpaceBetween, Alignment.CenterVertically) {
+                            Row(
+                                Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 10.dp),
+                                Arrangement.SpaceBetween,
+                                Alignment.CenterVertically,
+                            ) {
+                                Column(Modifier.weight(1f)) {
+                                    Text(item.label, color = SimpleText, fontSize = 17.sp, fontWeight = FontWeight.Bold)
+                                    Text(item.status.title, color = if (item.status == ChecklistStatus.PENDING) SimpleMuted else SimpleGreen, fontSize = 13.sp)
+                                }
+                                if (item.status == ChecklistStatus.PENDING) {
+                                    TextButton(onClick = { openItem(item.id) }) { Text("Выбрать") }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            item {
+                SimpleButton(
+                    text = "Завершить задачу",
+                    onClick = onComplete,
+                    modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
+                    enabled = processedCount > 0,
+                )
+                if (task.checklist.any { it.status == ChecklistStatus.PENDING }) {
+                    Text("Можно завершить, не обрабатывая все клетки", color = SimpleMuted, modifier = Modifier.padding(top = 6.dp))
+                }
+            }
+        }
+        if (!canEdit) {
+            item { SimpleEmpty("Задача доступна только для просмотра") }
+        }
+        item { Spacer(Modifier.height(24.dp)) }
+    }
+}
+
+@Composable
+private fun AlignmentDirectionSelector(
+    selected: String,
+    onSelected: (String) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Row(
+        modifier = modifier
+            .height(48.dp)
+            .clip(RoundedCornerShape(10.dp))
+            .border(1.dp, SimpleBorder, RoundedCornerShape(10.dp)),
+    ) {
+        listOf(
+            Triple("added", "Положили", SimpleGreen),
+            Triple("removed", "Забрали", SimpleRed),
+        ).forEach { (value, label, selectedColor) ->
+            val isSelected = selected == value
+            Box(
+                modifier = Modifier
+                    .weight(1f)
+                    .fillMaxHeight()
+                    .background(if (isSelected) selectedColor else Color.White)
+                    .clickable { onSelected(value) },
+                contentAlignment = Alignment.Center,
+            ) {
+                Text(
+                    text = label,
+                    color = if (isSelected) Color.White else SimpleMuted,
+                    fontWeight = if (isSelected) FontWeight.ExtraBold else FontWeight.SemiBold,
+                    fontSize = 14.sp,
+                    maxLines = 1,
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun AlignmentCountRow(
+    title: String,
+    subtitle: String,
+    control: @Composable () -> Unit,
+) {
+    Row(
+        modifier = Modifier.fillMaxWidth().border(1.dp, SimpleBorder, RoundedCornerShape(8.dp)).padding(horizontal = 12.dp, vertical = 8.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Column(Modifier.weight(1f)) {
+            Text(title, color = SimpleText, fontWeight = FontWeight.Bold)
+            Text(subtitle, color = SimpleMuted, fontSize = 12.sp)
+        }
+        control()
     }
 }
 
