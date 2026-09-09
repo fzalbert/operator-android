@@ -54,8 +54,8 @@ import kotlinx.serialization.json.put
 
 private const val API_LOG_TAG = "RabbitApi"
 
-private fun OperationType.isFemaleArrivalSettlement(): Boolean =
-    this == OperationType.FEMALE_DELIVERY || this == OperationType.ANIMAL_SETTLEMENT
+private fun OperationType.isFemaleArrival(): Boolean =
+    this == OperationType.FEMALE_DELIVERY
 private const val TASKS_REFRESH_INTERVAL_MS = 30_000L
 private const val RABBITS_PAGE_SIZE = 100
 private const val CELLS_PAGE_SIZE = 100
@@ -985,7 +985,7 @@ class MobileMesViewModel @Inject constructor(
         }
     }
     fun tasksForAcceptance() = tasks.filter { it.requiresAcceptance && it.status == TaskStatus.DONE && it.acceptanceStatus == AcceptanceStatus.WAITING && it.acceptanceRole == currentEmployee.role }
-    fun nextTask() = tasksForCurrentEmployee().filter { it.status != TaskStatus.DONE && it.status != TaskStatus.SENT && it.status != TaskStatus.SKIPPED }.minWithOrNull(compareBy<MobileTask> { it.priority.weight }.thenBy { it.plannedStart })
+    fun nextTask() = tasksForCurrentEmployee().orderedOpenTasks().firstOrNull()
     fun canWorkOnTask(taskId: String): Boolean = nextTask()?.id == taskId
     fun definition(type: OperationType): OperationDefinition {
         val definition = MockRepository.operation(type)
@@ -1208,12 +1208,12 @@ class MobileMesViewModel @Inject constructor(
                         item.label.equals(normalizedRfid, ignoreCase = true)
                     )
         } ?: pendingServerRabbits.singleOrNull()
-        val productionSettlementTarget = if (currentTask.operationType.isFemaleArrivalSettlement()) {
+        val productionSettlementTarget = if (currentTask.operationType.isFemaleArrival()) {
             currentTask.checklist.firstOrNull { item ->
                 item.serverType == "production-target" && item.status == ChecklistStatus.PENDING
             }
         } else null
-        val settlementFallbackTarget = if (currentTask.operationType.isFemaleArrivalSettlement()) {
+        val settlementFallbackTarget = if (currentTask.operationType.isFemaleArrival()) {
             currentTask.checklist.firstOrNull { it.status == ChecklistStatus.PENDING }
         } else null
         val effectiveRfid = if (productionSettlementTarget != null || settlementFallbackTarget != null) rfid else serverRabbitTarget?.targetId ?: rfid
@@ -1503,16 +1503,16 @@ class MobileMesViewModel @Inject constructor(
         val item = task.checklist.firstOrNull { it.id == itemId }
         if (item?.serverType == "production-target") {
             val rfid = values["rfid"]?.trim()
-            if (task.operationType.isFemaleArrivalSettlement() && rfid.isNullOrBlank()) {
+            if (task.operationType.isFemaleArrival() && rfid.isNullOrBlank()) {
                 lastMessage = "Для заселения RFID обязателен"
                 return
             }
             val settlementAgeDays = values["age"]?.trim()?.toIntOrNull()
-            if (task.operationType.isFemaleArrivalSettlement() && (settlementAgeDays == null || settlementAgeDays <= 0)) {
+            if (task.operationType.isFemaleArrival() && (settlementAgeDays == null || settlementAgeDays <= 0)) {
                 lastMessage = "Укажите возраст кролика в днях"
                 return
             }
-            val isAnimalTargetTask = task.operationType.isFemaleArrivalSettlement() ||
+            val isAnimalTargetTask = task.operationType.isFemaleArrival() ||
                 task.operationType == OperationType.ANIMAL_TRANSFER
             val operationTitle = if (task.operationType == OperationType.ANIMAL_TRANSFER) "Переселение" else "Заселение"
             val resultJson = buildJsonObject {
@@ -1529,8 +1529,8 @@ class MobileMesViewModel @Inject constructor(
                     values.filterKeys { it != "rfid" && it != PROBLEM_REASON_KEY && it != PROBLEM_COMMENT_KEY }
                         .forEach { (key, value) -> put(key, value) }
                 }
-                if (task.operationType.isFemaleArrivalSettlement()) {
-                    item.targetId.toLongOrNull()?.let { put("cageId", it) }
+                if (task.operationType.isFemaleArrival()) {
+                    item.targetId.toLongOrNull()?.let { put("cellId", it) }
                     rfid?.let { put("femaleRfid", it) }
                     settlementAgeDays?.let { put("age", it) }
                 }
@@ -1652,7 +1652,7 @@ class MobileMesViewModel @Inject constructor(
             }.onSuccess {
                 updateChecklistItemLocally(taskId, itemId, status, reason, comment, values)
                 val current = taskOrNull(taskId)
-                val isLastSettlementItem = current?.operationType?.isFemaleArrivalSettlement() == true &&
+                val isLastSettlementItem = current?.operationType?.isFemaleArrival() == true &&
                     current.checklist.count { it.status == ChecklistStatus.PENDING } <= 1
                 if (isLastSettlementItem) {
                     runCatching {

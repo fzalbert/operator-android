@@ -20,7 +20,7 @@ import com.rabbitmes.mobile.ui.components.*
 
 @Composable
 fun TaskListScreen(tasks: List<MobileTask>, nextTask: MobileTask?, message: String?, shiftStarted: Boolean, onOpen: (String) -> Unit, onBack: () -> Unit, bottomBar: @Composable () -> Unit) {
-    val open = tasks.filter { it.status != TaskStatus.DONE && it.status != TaskStatus.SENT && it.status != TaskStatus.SKIPPED }.sortedWith(compareBy<MobileTask> { it.priority.weight }.thenBy { it.plannedStart })
+    val open = tasks.orderedOpenTasks()
     val problems = open.sumOf { task -> task.checklist.count { it.status == ChecklistStatus.PROBLEM } + task.targets.count { it.status == ChecklistStatus.PROBLEM } }
     val largeFont = LocalDensity.current.fontScale >= 1.3f
     Scaffold(bottomBar = bottomBar, containerColor = MaterialTheme.colorScheme.background) { padding ->
