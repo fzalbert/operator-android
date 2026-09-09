@@ -12,6 +12,9 @@ import androidx.lifecycle.ViewModel
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import ru.profikrol.operator.data.local.SessionStore
+import ru.profikrol.operator.data.local.offline.OfflineActionPayload
+import ru.profikrol.operator.data.local.offline.OfflineActionType
+import ru.profikrol.operator.data.local.offline.OfflineRepository
 import ru.profikrol.operator.domain.model.UserRole
 import ru.profikrol.operator.domain.repository.AuthRepository
 import ru.profikrol.operator.data.remote.profile.ProfileApi
@@ -51,6 +54,8 @@ import java.io.IOException
 import retrofit2.HttpException
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.jsonObject
 
 private const val API_LOG_TAG = "RabbitApi"
 
@@ -472,6 +477,7 @@ class MobileMesViewModel @Inject constructor(
     @Named("productionFallback") private val productionFallbackTaskApi: ProductionTaskApi,
     private val rabbitApi: RabbitApi,
     private val cellApi: CellApi,
+    private val offlineRepository: OfflineRepository,
 ) : ViewModel() {
     private var nextErrorId = 0L
     private val globalErrorHandler = CoroutineExceptionHandler { _, error ->
@@ -496,6 +502,7 @@ class MobileMesViewModel @Inject constructor(
     private var isTasksReloadRequested = false
     private var hasLoadedRemoteTasks = false
     private var tasksAutoRefreshJob: Job? = null
+    private var syncJob: Job? = null
     var remarks: List<AcceptanceRemark> by mutableStateOf(emptyList())
         private set
 
@@ -624,7 +631,11 @@ class MobileMesViewModel @Inject constructor(
         shift = ShiftState(currentEmployee.id)
         screen = defaultScreenForRole()
         lastMessage = null
-        refreshProfile()
+        viewModelScope.launch {
+            runCatching { restoreOfflineState() }
+                .onFailure { Log.e(API_LOG_TAG, "Offline cache restore failed", it) }
+            refreshProfile()
+        }
     }
     fun logout() {
         stopTasksAutoRefresh()
@@ -837,7 +848,10 @@ class MobileMesViewModel @Inject constructor(
                     tasks = (
                         productionTasks.map { it.withProductionTargetOverrides().withMortalityRoundEvents() } +
                             remoteTasks
-                        ).distinctBy(MobileTask::id)
+                        ).distinctBy(MobileTask::id).map { remote ->
+                            tasks.firstOrNull { local -> local.id == remote.id && local.offlineEvents > 0 } ?: remote
+                        }
+                    persistTasks()
                     Log.d(
                         API_LOG_TAG,
                         "Tasks visible=${tasks.size}, production=${productionTasks.size}, work=${remoteTasks.size}",
@@ -926,29 +940,136 @@ class MobileMesViewModel @Inject constructor(
         tasksAutoRefreshJob = null
     }
     fun setOnline(isOnline: Boolean) {
-        if (shift.isOnline == isOnline) return
-        val pending = shift.pendingSyncEvents
+        if (shift.isOnline == isOnline) {
+            if (isOnline && shift.pendingSyncEvents > 0) syncNow()
+            return
+        }
         shift = shift.copy(isOnline = isOnline)
         lastMessage = if (isOnline) {
-            if (pending > 0) "Интернет появился: можно синхронизировать накопленные изменения" else "Онлайн режим включен"
+            if (shift.pendingSyncEvents > 0) "Интернет появился: синхронизируем изменения" else "Онлайн режим включен"
         } else {
             "Нет интернета: приложение перешло в офлайн режим"
         }
+        if (isOnline && shift.pendingSyncEvents > 0) syncNow()
     }
 
     fun syncNow() {
-        val hasPending = shift.pendingSyncEvents > 0 || tasks.any { it.offlineEvents > 0 }
         if (!shift.isOnline) {
             lastMessage = "Нет интернета: синхронизация будет доступна после перехода онлайн"
             return
         }
-        if (!hasPending) {
-            lastMessage = "Нет изменений для синхронизации"
-            return
+        if (syncJob?.isActive == true) return
+        syncJob = safeLaunch("Offline synchronization failed", "Не удалось синхронизировать изменения") {
+            val queued = offlineRepository.actions(currentEmployee.id)
+            if (queued.isEmpty()) {
+                shift = shift.copy(pendingSyncEvents = 0)
+                tasks = tasks.map { it.copy(offlineEvents = 0) }
+                persistTasks()
+                lastMessage = "Нет изменений для синхронизации"
+                return@safeLaunch
+            }
+            var sent = 0
+            for (action in queued) {
+                try {
+                    executeOfflineAction(action.taskId, OfflineActionType.valueOf(action.type), offlineRepository.payload(action))
+                    offlineRepository.remove(action.id)
+                    sent++
+                } catch (error: Throwable) {
+                    offlineRepository.failed(action.id, error)
+                    break
+                }
+            }
+            val pending = offlineRepository.pendingCount(currentEmployee.id)
+            shift = shift.copy(pendingSyncEvents = pending)
+            if (pending == 0) {
+                tasks = tasks.map { it.copy(offlineEvents = 0) }
+                loadMyTasks(showLoading = false)
+                lastMessage = "Все изменения синхронизированы"
+            } else {
+                lastMessage = "Отправлено: $sent. В очереди осталось: $pending"
+            }
+            persistTasks()
         }
-        shift = shift.copy(pendingSyncEvents = 0)
-        tasks = tasks.map { it.copy(offlineEvents = 0) }
-        lastMessage = "Очередь синхронизации отправлена"
+    }
+
+    private suspend fun restoreOfflineState() {
+        offlineRepository.restoreShift(currentEmployee.id)?.let { cached ->
+            shift = cached.copy(isOnline = shift.isOnline)
+        }
+        val cached = offlineRepository.restoreTasks(currentEmployee.id)
+        if (cached.isNotEmpty()) {
+            tasks = cached
+            hasLoadedRemoteTasks = true
+        }
+        shift = shift.copy(pendingSyncEvents = offlineRepository.pendingCount(currentEmployee.id))
+        if (shift.isOnline && shift.pendingSyncEvents > 0) syncNow()
+    }
+
+    private fun persistTasks() {
+        val employeeId = currentEmployee.id
+        val snapshot = tasks
+        val shiftSnapshot = shift
+        viewModelScope.launch {
+            offlineRepository.saveTasks(employeeId, snapshot)
+            offlineRepository.saveShift(employeeId, shiftSnapshot)
+        }
+    }
+
+    private fun enqueueOffline(taskId: String, type: OfflineActionType, payload: OfflineActionPayload = OfflineActionPayload()) {
+        viewModelScope.launch {
+            offlineRepository.enqueue(currentEmployee.id, taskId, type, payload)
+            val pending = offlineRepository.pendingCount(currentEmployee.id)
+            shift = shift.copy(pendingSyncEvents = pending)
+            persistTasks()
+        }
+    }
+
+    private suspend fun executeOfflineAction(taskId: String, type: OfflineActionType, payload: OfflineActionPayload) {
+        when (type) {
+            OfflineActionType.START_PRODUCTION_TASK -> {
+                val response = productionCall { it.startTask(currentEmployee.id, taskId) }
+                if (!response.isSuccessful && response.code() != 409) throw HttpException(response)
+            }
+            OfflineActionType.START_WORK_TASK -> runCatching { workTaskApi.startWorkTask(taskId.toLong()) }
+                .getOrElse { if (it !is HttpException || it.code() != 409) throw it }
+            OfflineActionType.COMPLETE_PRODUCTION_TARGET -> productionCall { api ->
+                val result = Json.parseToJsonElement(payload.values.getValue("_resultJson")).jsonObject
+                runCatching {
+                    api.completeTarget(currentEmployee.id, taskId, requireNotNull(payload.itemId), CompleteTargetRequest(result, payload.values["rfid"], deviceId))
+                }.getOrElse { error ->
+                    if (error is HttpException && error.code() == 409) {
+                        val item = api.getTask(currentEmployee.id, taskId).toMobileTask(currentEmployee.id)
+                            .checklist.firstOrNull { it.id == payload.itemId }
+                        if (item?.status == ChecklistStatus.PENDING || item == null) throw error
+                    } else throw error
+                }
+            }
+            OfflineActionType.PROBLEM_PRODUCTION_TARGET -> productionCall { api ->
+                api.reportTargetCommentProblem(currentEmployee.id, taskId, requireNotNull(payload.itemId), ProductionTargetCommentProblemRequest(payload.comment ?: payload.reason ?: "Есть замечание"))
+            }
+            OfflineActionType.COMPLETE_WORK_SUBTASK -> runCatching {
+                workTaskApi.completeWorkSubtask(
+                    requireNotNull(payload.itemId).toLong(),
+                    CompleteWorkSubtaskRequest(payload.reason, payload.comment, null),
+                )
+            }.getOrElse { if (it !is HttpException || it.code() != 409) throw it }
+            OfflineActionType.COMPLETE_PRODUCTION_TASK -> productionCall { api ->
+                runCatching { api.completeTask(currentEmployee.id, taskId) }.getOrElse { error ->
+                    if (error is HttpException && error.code() == 409) {
+                        val status = api.getTask(currentEmployee.id, taskId).toMobileTask(currentEmployee.id).status
+                        if (status != TaskStatus.DONE) throw error
+                    } else throw error
+                }
+            }
+            OfflineActionType.COMPLETE_WORK_TASK -> {
+                payload.generalSubtaskIds.forEach { workTaskApi.completeWorkSubtask(it, CompleteWorkSubtaskRequest()) }
+                runCatching { workTaskApi.completeWorkTask(taskId.toLong(), CompleteWorkTaskRequest(payload.reason, payload.comment)) }
+                    .getOrElse { if (it !is HttpException || it.code() != 409) throw it }
+            }
+            OfflineActionType.ACCEPT_WORK_REPORT -> runCatching {
+                workTaskApi.acceptWorkReport(requireNotNull(payload.itemId).toLong())
+            }.getOrElse { if (it !is HttpException || it.code() != 409) throw it }
+        }
     }
     fun markNotificationAsRead(id: Long) {
         notificationRepository.markAsRead(id)
@@ -1081,6 +1202,7 @@ class MobileMesViewModel @Inject constructor(
             }
         }
         shift = queueOfflineChange()
+        persistTasks()
     }
     fun beginTask(taskId: String) {
         if (!canWorkOnTask(taskId)) {
@@ -1088,6 +1210,13 @@ class MobileMesViewModel @Inject constructor(
             return
         }
         val remoteTaskId = taskId.toLongOrNull()
+        if (!shift.isOnline) {
+            val type = if (remoteTaskId == null) OfflineActionType.START_PRODUCTION_TASK else OfflineActionType.START_WORK_TASK
+            enqueueOffline(taskId, type)
+            updateTask(taskId) { it.copy(status = TaskStatus.IN_PROGRESS).markOffline() }
+            lastMessage = "Задача начата офлайн"
+            return
+        }
         if (remoteTaskId == null) {
             val task = taskOrNull(taskId)
             if (
@@ -1535,6 +1664,32 @@ class MobileMesViewModel @Inject constructor(
                     settlementAgeDays?.let { put("age", it) }
                 }
             }
+            if (!shift.isOnline) {
+                val actionType = if (status == ChecklistStatus.PROBLEM) {
+                    OfflineActionType.PROBLEM_PRODUCTION_TARGET
+                } else {
+                    OfflineActionType.COMPLETE_PRODUCTION_TARGET
+                }
+                enqueueOffline(
+                    taskId,
+                    actionType,
+                    OfflineActionPayload(
+                        itemId = itemId,
+                        reason = reason.ifBlank { null },
+                        comment = comment.ifBlank { null },
+                        values = values + ("_resultJson" to resultJson.toString()),
+                    ),
+                )
+                rememberProductionTargetOverride(taskId, itemId, status, reason, comment, values)
+                updateChecklistItemLocally(taskId, itemId, status, reason, comment, values)
+                val isLastTarget = task.checklist.count { it.status == ChecklistStatus.PENDING } == 1
+                if (isLastTarget && isAnimalTargetTask) {
+                    enqueueOffline(taskId, OfflineActionType.COMPLETE_PRODUCTION_TASK)
+                    updateTask(taskId) { it.copy(status = TaskStatus.DONE, result = it.result.copy(completedAt = "now")).markOffline() }
+                }
+                lastMessage = "Результат сохранён офлайн"
+                return
+            }
             launchServerAction("Complete production target failed", fallbackMessage = "Не удалось сохранить результат") {
                 runCatching {
                     productionCall { api ->
@@ -1631,6 +1786,18 @@ class MobileMesViewModel @Inject constructor(
             return
         }
 
+        if (!shift.isOnline) {
+            val rfid = values["rfid"]?.trim().orEmpty()
+            val reportComment = buildList {
+                if (rfid.isNotEmpty()) add("RFID: $rfid")
+                if (comment.isNotBlank()) add(comment.trim())
+            }.joinToString("; ").ifBlank { null }
+            enqueueOffline(taskId, OfflineActionType.COMPLETE_WORK_SUBTASK, OfflineActionPayload(itemId = itemId, reason = reason.ifBlank { null }, comment = reportComment, values = values))
+            updateChecklistItemLocally(taskId, itemId, status, reason, comment, values)
+            lastMessage = "Подзадача сохранена офлайн"
+            return
+        }
+
         launchServerAction("Complete work subtask action failed", fallbackMessage = "Не удалось завершить подзадачу") {
             val rfid = values["rfid"]?.trim().orEmpty()
             val reportComment = buildList {
@@ -1721,6 +1888,38 @@ class MobileMesViewModel @Inject constructor(
             return
         }
         val remoteTaskId = taskId.toLongOrNull()
+        if (!shift.isOnline) {
+            val isProductionTask = remoteTaskId == null && (
+                currentTask.checklist.any { it.serverType == "production-target" } ||
+                    currentTask.operationType == OperationType.MORTALITY_ROUND ||
+                    currentTask.operationType == OperationType.ANIMAL_TRANSFER ||
+                    currentTask.operationType == OperationType.ANIMAL_SETTLEMENT ||
+                    currentTask.operationType.isFemaleArrival()
+                ) && !taskId.startsWith("demo-", ignoreCase = true)
+            if (isProductionTask) {
+                enqueueOffline(taskId, OfflineActionType.COMPLETE_PRODUCTION_TASK)
+            } else if (remoteTaskId != null) {
+                enqueueOffline(
+                    taskId,
+                    OfflineActionType.COMPLETE_WORK_TASK,
+                    OfflineActionPayload(
+                        reason = currentTask.result.problemReason,
+                        comment = completionComment.ifBlank { null },
+                        generalSubtaskIds = if (currentTask.isGeneral) currentTask.pendingGeneralSubtaskIds else emptyList(),
+                    ),
+                )
+            }
+            updateTask(taskId) { current ->
+                current.copy(
+                    status = TaskStatus.DONE,
+                    acceptanceStatus = if (current.requiresAcceptance) AcceptanceStatus.WAITING else AcceptanceStatus.NOT_REQUIRED,
+                    checklist = checklist,
+                    result = current.result.copy(completedAt = "now"),
+                ).markOffline()
+            }
+            lastMessage = "Задача завершена офлайн и добавлена в очередь"
+            return
+        }
         if (remoteTaskId == null) {
             if (
                 currentTask.checklist.any { it.serverType == "production-target" } ||
@@ -1829,6 +2028,12 @@ class MobileMesViewModel @Inject constructor(
         updateTask(taskId) { task ->
             task.copy(result = task.result.copy(problemReason = reason)).markOffline()
         }
+        if (!shift.isOnline) {
+            enqueueOffline(taskId, OfflineActionType.COMPLETE_WORK_TASK, OfflineActionPayload(reason = reason, comment = rejectionComment.ifBlank { null }))
+            updateTask(taskId) { it.copy(status = TaskStatus.DONE, result = it.result.copy(completedAt = "now")).markOffline() }
+            lastMessage = "Отклонение сохранено офлайн"
+            return
+        }
         launchServerAction("Reject general work task action failed", fallbackMessage = "Не удалось отклонить задачу") {
             runCatching {
                 workTaskApi.completeWorkTask(
@@ -1866,6 +2071,19 @@ class MobileMesViewModel @Inject constructor(
         val reportId = task.workReportId
         if (reportId == null) {
             lastMessage = "У задачи отсутствует серверный отчёт для приёмки"
+            return
+        }
+        if (!shift.isOnline) {
+            enqueueOffline(taskId, OfflineActionType.ACCEPT_WORK_REPORT, OfflineActionPayload(itemId = reportId.toString(), comment = comment.ifBlank { null }))
+            updateTask(taskId) { current ->
+                current.copy(
+                    status = TaskStatus.SENT,
+                    acceptanceStatus = AcceptanceStatus.ACCEPTED,
+                    acceptedByEmployeeId = currentEmployee.id,
+                    acceptanceComment = comment,
+                ).markOffline()
+            }
+            lastMessage = "Приёмка сохранена офлайн"
             return
         }
         launchServerAction("Accept work report failed", fallbackMessage = "Не удалось подтвердить выполнение задачи") {

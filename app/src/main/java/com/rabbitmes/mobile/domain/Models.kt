@@ -1,16 +1,26 @@
 package com.rabbitmes.mobile.domain
 
+import kotlinx.serialization.Serializable
+
+@Serializable
 enum class RoleId(val title: String) {
     OPERATOR("Оператор"), CHIEF_TECHNOLOGIST("Главный технолог"), CHIEF_MECHANIC("Главный механик"), GENERAL_WORKER("Разнорабочий")
 }
 
+@Serializable
 enum class TaskStatus(val title: String) { NEW("Новая"), IN_PROGRESS("В работе"), BLOCKED("Проблема"), DONE("Выполнена"), SENT("Отправлена"), SKIPPED("Пропущена") }
+@Serializable
 enum class ChecklistStatus(val title: String) { PENDING("Ожидает"), DONE("Готово"), PROBLEM("Проблема"), SKIPPED("Пропущено") }
+@Serializable
 enum class ReviewStatus(val title: String) { NOT_REVIEWED("Не проверено"), ACCEPTED("Принято"), REJECTED("Замечание") }
+@Serializable
 enum class AcceptanceStatus(val title: String) { NOT_REQUIRED("Не требуется"), WAITING("Ожидает"), ACCEPTED("Принята"), REJECTED("Отклонена") }
+@Serializable
 enum class TargetType { RABBIT, CAGE, ROW, HANGAR }
+@Serializable
 enum class Priority(val title: String, val weight: Int) { URGENT("Срочно", 0), HIGH("Важно", 1), NORMAL("Планово", 2) }
 
+@Serializable
 enum class OperationType(val title: String) {
     INSEMINATION("Осеменение"),
     PALPATION("Пальпация"),
@@ -48,23 +58,35 @@ enum class OperationType(val title: String) {
     CUSTOM_TASK("Поручение")
 }
 
+@Serializable
 data class Employee(val id: String, val fullName: String, val role: RoleId, val workshopIds: List<String>, val initials: String)
+@Serializable
 data class Workshop(val id: String, val name: String, val hangars: List<Hangar>)
+@Serializable
 data class Hangar(val id: String, val name: String, val rows: List<CageRow>)
+@Serializable
 data class CageRow(val id: String, val number: Int, val cages: List<Cage>)
+@Serializable
 data class Cage(val id: String, val rowNumber: Int, val number: Int, val code: String, val rfid: String, val hasNest: Boolean, val occupied: Boolean)
+@Serializable
 data class Rabbit(val id: String, val rfid: String, val earNumber: String, val cageId: String, val sex: String, val ageDays: Int, val lastWeightKg: Double, val lastInseminationDaysAgo: Int?, val lastPalpation: String?, val lactationStatus: String, val healthStatus: String)
 
+@Serializable
 enum class FieldType { TEXT, NUMBER, BOOLEAN, SELECT, PHOTO, VIDEO, FILE, TEMPERATURE, HOURS, FEED_TYPE }
+@Serializable
 enum class AttachmentType(val title: String, val emoji: String) {
     PHOTO("Фото", "📷"),
     VIDEO("Видео", "🎥"),
     FILE("Файл", "📎"),
 }
+@Serializable
 data class MediaAttachment(val id: String, val type: AttachmentType, val name: String, val localUri: String, val createdAt: String, val uploaded: Boolean = false)
+@Serializable
 data class OperationField(val id: String, val title: String, val type: FieldType, val required: Boolean = false, val unit: String? = null, val options: List<String> = emptyList(), val placeholder: String = "")
+@Serializable
 data class OperationDefinition(val type: OperationType, val targetType: TargetType, val requiresScan: Boolean, val completionLabel: String, val fields: List<OperationField>, val allowedRoles: List<RoleId>, val requiresAcceptanceDefault: Boolean = false)
 
+@Serializable
 data class ExecutionResult(
     val values: Map<String, String> = emptyMap(),
     val photos: List<String> = emptyList(),
@@ -76,6 +98,7 @@ data class ExecutionResult(
     val problemReason: String? = null
 )
 
+@Serializable
 data class ChecklistItem(
     val id: String,
     val label: String,
@@ -89,6 +112,7 @@ data class ChecklistItem(
     val reviewedAt: String? = null
 )
 
+@Serializable
 data class TaskTarget(
     val id: String,
     val label: String,
@@ -98,6 +122,7 @@ data class TaskTarget(
     val result: ExecutionResult = ExecutionResult(),
 )
 
+@Serializable
 data class MobileTask(
     val id: String,
     val title: String,
@@ -135,5 +160,7 @@ data class MobileTask(
     fun markOffline() = copy(offlineEvents = offlineEvents + 1)
 }
 
+@Serializable
 data class ShiftState(val employeeId: String, val startedAt: String? = null, val finishedAt: String? = null, val isOnline: Boolean = true, val pendingSyncEvents: Int = 0)
+@Serializable
 data class AcceptanceRemark(val id: String, val taskId: String, val itemId: String?, val reason: String, val comment: String, val attachments: List<MediaAttachment> = emptyList(), val createdAt: String)
