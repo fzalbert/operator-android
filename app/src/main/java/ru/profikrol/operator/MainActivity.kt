@@ -62,8 +62,9 @@ class MainActivity : ComponentActivity() {
     private fun updateOnlineState() {
         val activeNetwork = connectivityManager.activeNetwork
         val capabilities = activeNetwork?.let(connectivityManager::getNetworkCapabilities)
-        val isOnline = capabilities?.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET) == true &&
-            capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED)
+        // VALIDATED can lag behind a network that already reaches our API (notably on
+        // managed devices and emulators), which caused a false offline banner.
+        val isOnline = capabilities?.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET) == true
         runOnUiThread { vm.setOnline(isOnline) }
     }
 }

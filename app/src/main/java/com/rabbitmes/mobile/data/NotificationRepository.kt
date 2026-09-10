@@ -108,10 +108,18 @@ class NotificationRepository @Inject constructor(
                     Log.w(TAG, "Notification stream rejected the access token")
                     return
                 }
+                if (unauthenticated.isProtocolConfigurationError()) {
+                    Log.e(TAG, "Notification stream endpoint has incompatible TLS/HTTP configuration; retries stopped", unauthenticated)
+                    return
+                }
                 Log.w(TAG, "Notification stream disconnected; reconnecting after ${retryDelayMs}ms", unauthenticated)
                 delay(retryDelayMs)
                 retryDelayMs = (retryDelayMs * 2).coerceAtMost(MAX_RETRY_MS)
             } catch (error: Throwable) {
+                if (error.isProtocolConfigurationError()) {
+                    Log.e(TAG, "Notification stream endpoint has incompatible TLS/HTTP configuration; retries stopped", error)
+                    return
+                }
                 Log.w(TAG, "Notification stream disconnected; reconnecting after ${retryDelayMs}ms", error)
                 delay(retryDelayMs)
                 retryDelayMs = (retryDelayMs * 2).coerceAtMost(MAX_RETRY_MS)
@@ -121,6 +129,14 @@ class NotificationRepository @Inject constructor(
             }
         }
     }
+
+    private fun Throwable.isProtocolConfigurationError(): Boolean =
+        generateSequence(this) { it.cause }
+            .mapNotNull(Throwable::message)
+            .any { message ->
+                message.contains("Unable to parse TLS packet header", ignoreCase = true) ||
+                    message.contains("HTTP_1_1_REQUIRED", ignoreCase = true)
+            }
 
     private fun newChannel(): ManagedChannel {
         val builder = OkHttpChannelBuilder

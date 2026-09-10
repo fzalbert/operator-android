@@ -69,6 +69,7 @@ data class ProductionTaskDto(
     val durationMinutes: Int? = null,
     val requiresAcceptance: Boolean = false,
     val executionStatus: String? = null,
+    val startedAt: String? = null,
     val targets: List<ProductionTargetDto> = emptyList(),
     val checkList: List<ProductionTargetDto> = emptyList(),
 )

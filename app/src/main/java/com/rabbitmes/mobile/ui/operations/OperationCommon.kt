@@ -82,7 +82,7 @@ fun TaskExecutionScaffold(
 
     val startControl: @Composable ColumnScope.() -> Unit = {
         if (task.status == TaskStatus.NEW) {
-            Button(onClick = onBegin, Modifier.fillMaxWidth()) { Text("Приступить") }
+            Button(onClick = onBegin, Modifier.fillMaxWidth(), enabled = canEdit) { Text("Приступить") }
         }
     }
 
@@ -90,17 +90,11 @@ fun TaskExecutionScaffold(
         val pendingItems = task.checklist.count { it.status == ChecklistStatus.PENDING }
         if (allowRootComplete) {
             Button(onClick = onComplete, Modifier.fillMaxWidth()) {
-                Text(if (task.requiresAcceptance) "Отправить на приемку" else "Отправить результат")
+                Text(if (task.requiresAcceptance) "Завершить и отправить на приёмку" else "Завершить задачу")
             }
         } else {
             Button(onClick = onComplete, Modifier.fillMaxWidth(), enabled = pendingItems == 0) {
-                Text(
-                    when {
-                        pendingItems > 0 -> "Осталось обработать: $pendingItems"
-                        task.checklist.isEmpty() -> "Отправить результат"
-                        else -> "Отправить обработанный чек-лист"
-                    }
-                )
+                Text(if (pendingItems > 0) "Осталось обработать: $pendingItems" else "Завершить задачу")
             }
         }
         Spacer(Modifier.height(MesSpacing.contentGap))

@@ -32,6 +32,7 @@ import ru.profikrol.operator.data.remote.production.ProductionTargetCommentProbl
 import ru.profikrol.operator.data.remote.production.ProductionTargetDto
 import ru.profikrol.operator.data.remote.production.ProductionTaskApi
 import ru.profikrol.operator.data.remote.production.ProductionTaskDetailsDto
+import ru.profikrol.operator.data.remote.production.ProductionTaskDto
 import javax.inject.Inject
 import javax.inject.Named
 import com.rabbitmes.mobile.data.MockRepository
@@ -51,6 +52,7 @@ import java.io.IOException
 import retrofit2.HttpException
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
+import org.json.JSONObject
 
 private const val API_LOG_TAG = "RabbitApi"
 
@@ -182,6 +184,7 @@ private fun WorkTaskDto.toMobileTask(
             emptyList()
         },
         workReportId = report?.id,
+        startedAt = startedAt,
     )
 }
 
@@ -383,8 +386,12 @@ private fun ProductionTaskDetailsDto.toMobileTask(employeeId: String): MobileTas
         description = task.description.orEmpty(),
         operationTypeTitle = task.title.orEmpty().ifBlank { operationType.title },
         isGeneral = false,
+        startedAt = task.startedAt,
     )
 }
+
+private fun ProductionTaskDto.toMobileTask(employeeId: String): MobileTask =
+    ProductionTaskDetailsDto(task = this).toMobileTask(employeeId)
 
 private fun List<RabbitDto>.toRabbitChecklist(taskId: Long): List<ChecklistItem> =
     asSequence()
@@ -447,7 +454,11 @@ private fun String?.toDisplayTime(): String = this
     ?: "—"
 
 private fun Throwable.toUserMessage(fallback: String): String = when (this) {
-    is HttpException -> "$fallback: ошибка сервера ${code()}"
+    is HttpException -> {
+        val body = runCatching { response()?.errorBody()?.string() }.getOrNull().orEmpty()
+        val detail = runCatching { JSONObject(body).optString("detail") }.getOrNull().orEmpty()
+        if (detail.isNotBlank()) detail else "$fallback: ошибка сервера ${code()}"
+    }
     is IOException -> "$fallback: нет соединения с сервером"
     else -> fallback
 }
@@ -504,6 +515,8 @@ class MobileMesViewModel @Inject constructor(
     private val scannedValuesByTaskId = mutableStateMapOf<String, Map<String, String>>()
     private val mortalityRoundEventsByTaskId = mutableStateMapOf<String, List<ChecklistItem>>()
     private val productionTargetOverridesByTaskId = mutableStateMapOf<String, Map<String, ChecklistItem>>()
+    private val productionTaskStatusOverridesByTaskId = mutableStateMapOf<String, TaskStatus>()
+    private var activeTaskId: String? by mutableStateOf(null)
     var lastMessage: String? by mutableStateOf(null)
         private set
     var appError: AppErrorMessage? by mutableStateOf(null)
@@ -629,6 +642,8 @@ class MobileMesViewModel @Inject constructor(
     fun logout() {
         stopTasksAutoRefresh()
         notificationRepository.clear()
+        productionTaskStatusOverridesByTaskId.clear()
+        activeTaskId = null
         screen = AppScreen.Login
         safeLaunch("Logout failed", fallbackMessage = "Не удалось выйти из профиля") {
             authRepository.logout()
@@ -727,16 +742,16 @@ class MobileMesViewModel @Inject constructor(
                     API_LOG_TAG,
                     "Production getEmployeeTasks returned ${productionList.size} items: ${
                         productionList.joinToString { task ->
-                            "id=${task.id}, operationCode=${task.operationCode}, title=${task.title}"
+                            "id=${task.id}, status=${task.executionStatus}, operationCode=${task.operationCode}, title=${task.title}"
                         }
                     }",
                 )
-                productionList
-                    .map { productionTask ->
-                        Log.d(API_LOG_TAG, "Loading production task details. taskId=${productionTask.id}")
-                        productionCall { api -> api.getTask(currentEmployee.id, productionTask.id) }
-                            .toMobileTask(currentEmployee.id)
-                    }
+                // The employee endpoint already contains everything needed for the list,
+                // including targets. Loading every detail sequentially was slow and some
+                // detail responses omit targets, wiping the checklist on every refresh.
+                productionList.map {
+                    it.toMobileTask(currentEmployee.id).withProductionTaskStatusOverride()
+                }
             }.onFailure { error ->
                 Log.e(API_LOG_TAG, "Production tasks request failed: ${error.toHttpDebugMessage()}", error)
             }.getOrDefault(emptyList())
@@ -772,7 +787,14 @@ class MobileMesViewModel @Inject constructor(
                                     .thenBy { it.id },
                             )
                         }
-                    val needsRabbitChecklist = latestTasks.any { task ->
+                    val productionOperationTypes = productionTasks.mapTo(mutableSetOf(), MobileTask::operationType)
+                    val legacyCandidates = latestTasks.filterNot { task ->
+                        val operationType = task.resolveOperationType()
+                        operationType == OperationType.ANIMAL_SETTLEMENT ||
+                            operationType == OperationType.MORTALITY_ROUND ||
+                            operationType in productionOperationTypes
+                    }
+                    val needsRabbitChecklist = legacyCandidates.any { task ->
                         task.resolveOperationType() == OperationType.INSEMINATION ||
                             (task.subtasks.isEmpty() &&
                                 MockRepository.operation(task.resolveOperationType()).targetType == TargetType.RABBIT)
@@ -791,15 +813,11 @@ class MobileMesViewModel @Inject constructor(
                     } else {
                         emptyList()
                     }
-                    val needsCells = latestTasks.any {
+                    val needsCells = legacyCandidates.any {
                         it.resolveOperationType() == OperationType.ANIMAL_TRANSFER ||
                             MockRepository.operation(it.resolveOperationType()).targetType == TargetType.CAGE
-                    } || productionTasks.any {
-                        it.operationType == OperationType.MORTALITY_ROUND ||
-                            it.operationType == OperationType.ANIMAL_TRANSFER ||
-                            it.operationType == OperationType.NEST_CONTROL
                     }
-                    val cells = if (needsCells) {
+                    val cells = if (needsCells && serverCells.isEmpty()) {
                         runCatching { loadAllCells() }
                             .onSuccess { serverCells = it }
                             .onFailure { error ->
@@ -811,15 +829,8 @@ class MobileMesViewModel @Inject constructor(
                                 )
                             }
                             .getOrDefault(emptyList())
-                    } else {
-                        emptyList()
-                    }
-                    val remoteTasks = latestTasks
-                        .filterNot {
-                            val operationType = it.resolveOperationType()
-                            operationType == OperationType.ANIMAL_SETTLEMENT ||
-                                operationType == OperationType.MORTALITY_ROUND
-                        }
+                    } else serverCells
+                    val remoteTasks = legacyCandidates
                         .map { dto ->
                         dto.toMobileTask(currentEmployee.id, rabbits, cells).let { task ->
                             if (
@@ -985,7 +996,7 @@ class MobileMesViewModel @Inject constructor(
         }
     }
     fun tasksForAcceptance() = tasks.filter { it.requiresAcceptance && it.status == TaskStatus.DONE && it.acceptanceStatus == AcceptanceStatus.WAITING && it.acceptanceRole == currentEmployee.role }
-    fun nextTask() = tasksForCurrentEmployee().orderedOpenTasks().firstOrNull()
+    fun nextTask(): MobileTask? = tasksForCurrentEmployee().nextExecutableTask(activeTaskId)
     fun canWorkOnTask(taskId: String): Boolean = nextTask()?.id == taskId
     fun definition(type: OperationType): OperationDefinition {
         val definition = MockRepository.operation(type)
@@ -1030,6 +1041,8 @@ class MobileMesViewModel @Inject constructor(
     private fun MobileTask.withProductionTargetOverrides(): MobileTask {
         val overrides = productionTargetOverridesByTaskId[id].orEmpty()
         if (overrides.isEmpty()) return this
+        val serverItemIds = checklist.mapTo(mutableSetOf(), ChecklistItem::id)
+        val locallyCompletedItems = overrides.values.filter { it.id !in serverItemIds }
         return copy(
             checklist = checklist.map { item ->
                 val override = overrides[item.id] ?: return@map item
@@ -1042,8 +1055,25 @@ class MobileMesViewModel @Inject constructor(
                 } else {
                     item
                 }
-            },
+            } + locallyCompletedItems,
         )
+    }
+
+    private fun MobileTask.withProductionTaskStatusOverride(): MobileTask =
+        productionTaskStatusOverridesByTaskId[id]?.let { copy(status = it) } ?: this
+
+    private fun rememberProductionTaskStatus(taskId: String, status: TaskStatus) {
+        val current = productionTaskStatusOverridesByTaskId[taskId]
+        val currentIsTerminal = current == TaskStatus.DONE || current == TaskStatus.SENT || current == TaskStatus.SKIPPED
+        if (!currentIsTerminal) {
+            productionTaskStatusOverridesByTaskId[taskId] = status
+        }
+        val effectiveStatus = if (currentIsTerminal) current else status
+        if (effectiveStatus == TaskStatus.IN_PROGRESS) {
+            activeTaskId = taskId
+        } else if (activeTaskId == taskId) {
+            activeTaskId = null
+        }
     }
 
     private fun rememberProductionTargetOverride(
@@ -1101,10 +1131,14 @@ class MobileMesViewModel @Inject constructor(
                         val response = productionCall { api -> api.startTask(currentEmployee.id, taskId) }
                         if (!response.isSuccessful) throw HttpException(response)
                         runCatching { productionCall { api -> api.getTask(currentEmployee.id, taskId) }.toMobileTask(currentEmployee.id) }
+                            .map { refreshed -> refreshed.copy(checklist = refreshed.checklist.ifEmpty { task.checklist }) }
                             .getOrElse { task.copy(status = TaskStatus.IN_PROGRESS) }
                     }
                         .onSuccess { updated ->
-                            tasks = tasks.map { if (it.id == taskId) updated else it }
+                            rememberProductionTaskStatus(taskId, TaskStatus.IN_PROGRESS)
+                            tasks = tasks.map {
+                                if (it.id == taskId) updated.copy(status = TaskStatus.IN_PROGRESS) else it
+                            }
                             lastMessage = "Задача начата"
                         }
                         .onFailure { error ->
@@ -1113,7 +1147,10 @@ class MobileMesViewModel @Inject constructor(
                                     productionCall { api -> api.getTask(currentEmployee.id, taskId) }.toMobileTask(currentEmployee.id)
                                 }.getOrNull()
                                 if (syncedTask?.status == TaskStatus.IN_PROGRESS || syncedTask?.status == TaskStatus.DONE) {
-                                    tasks = tasks.map { if (it.id == taskId) syncedTask else it }
+                                    rememberProductionTaskStatus(taskId, syncedTask.status)
+                                    tasks = tasks.map {
+                                        if (it.id == taskId) syncedTask.copy(checklist = syncedTask.checklist.ifEmpty { it.checklist }) else it
+                                    }
                                     lastMessage = "Задача уже открыта"
                                 } else {
                                     handleError(error, "Не удалось начать задачу", "Start production task failed. taskId=$taskId")
@@ -1591,6 +1628,7 @@ class MobileMesViewModel @Inject constructor(
                     if (isLastTarget && isAnimalTargetTask) {
                         runCatching { productionCall { api -> api.completeTask(currentEmployee.id, taskId) } }
                             .onSuccess {
+                                rememberProductionTaskStatus(taskId, TaskStatus.DONE)
                                 updateTask(taskId) { current -> current.copy(status = TaskStatus.DONE, result = current.result.copy(completedAt = "now")) }
                                 lastMessage = "$operationTitle успешно завершено"
                             }
@@ -1729,6 +1767,7 @@ class MobileMesViewModel @Inject constructor(
                 launchServerAction("Complete production task failed", fallbackMessage = "Не удалось завершить задачу") {
                     runCatching { productionCall { api -> api.completeTask(currentEmployee.id, taskId) } }
                         .onSuccess {
+                            rememberProductionTaskStatus(taskId, TaskStatus.DONE)
                             updateTask(taskId) { current -> current.copy(status = TaskStatus.DONE, checklist = checklist, result = current.result.copy(completedAt = "now")) }
                             lastMessage = "Задача завершена"
                         }
@@ -1737,6 +1776,7 @@ class MobileMesViewModel @Inject constructor(
                                 productionCall { api -> api.getTask(currentEmployee.id, taskId) }.toMobileTask(currentEmployee.id)
                             }.getOrNull()
                             if (syncedTask?.status == TaskStatus.DONE) {
+                                rememberProductionTaskStatus(taskId, TaskStatus.DONE)
                                 updateTask(taskId) { syncedTask.copy(checklist = syncedTask.checklist.ifEmpty { checklist }) }
                                 lastMessage = "Задача завершена"
                             } else {
