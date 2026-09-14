@@ -11,18 +11,8 @@ import androidx.compose.ui.unit.dp
 import com.rabbitmes.mobile.data.MockRepository
 import com.rabbitmes.mobile.domain.*
 import com.rabbitmes.mobile.ui.components.*
-import ru.profikrol.operator.domain.model.Rabbit as RabbitInfo
-import ru.profikrol.operator.feature.rfidscanresult.RabbitInfoCard
 
 private const val SHOW_BLUETOOTH_SCALE_BUTTON = false
-
-private val inseminationProblemReasons = listOf(
-    "Самка не готова к осеменению",
-    "Проблема со здоровьем",
-    "RFID не считывается",
-    "Нет нужного материала",
-    "Другая причина",
-)
 
 @Composable
 fun InseminationScreen(
@@ -49,15 +39,8 @@ fun InseminationScreen(
 ) {
     var rfidInput by remember(task.id) { mutableStateOf("") }
     var selectedRfid by remember(task.id) { mutableStateOf<String?>(null) }
-    var maleMaterialCode by remember(task.id) { mutableStateOf(task.result.values["maleMaterialCode"].orEmpty()) }
-    var inseminated by remember(task.id, scannedValues) {
-        mutableStateOf(scannedValues["inseminated"]?.toBooleanStrictOrNull() ?: false)
-    }
     var hasProblem by remember(task.id, scannedValues) {
         mutableStateOf(!scannedValues[PROBLEM_REASON_KEY].isNullOrBlank())
-    }
-    var problemReason by remember(task.id, scannedValues) {
-        mutableStateOf(scannedValues[PROBLEM_REASON_KEY]?.takeIf { it.isNotBlank() } ?: inseminationProblemReasons.first())
     }
     var problemComment by remember(task.id, scannedValues) {
         mutableStateOf(scannedValues[PROBLEM_COMMENT_KEY].orEmpty())
@@ -69,6 +52,8 @@ fun InseminationScreen(
             val isPending = task.checklist.any {
                 it.targetType == TargetType.RABBIT &&
                     (it.targetId.equals(scannedRfid, ignoreCase = true) ||
+                        it.rabbitId.equals(scannedRfid, ignoreCase = true) ||
+                        it.scanIdentifier.equals(scannedRfid, ignoreCase = true) ||
                         rabbitId?.let { id -> it.targetId.equals(id, ignoreCase = true) } == true ||
                         it.label.contains(scannedRfid, ignoreCase = true)) &&
                     it.status == ChecklistStatus.PENDING
@@ -88,16 +73,16 @@ fun InseminationScreen(
         task.checklist.firstOrNull {
             it.targetType == TargetType.RABBIT &&
                 (it.targetId.equals(selected, ignoreCase = true) ||
+                    it.rabbitId.equals(selected, ignoreCase = true) ||
+                    it.scanIdentifier.equals(selected, ignoreCase = true) ||
                     rabbitId?.let { id -> it.targetId.equals(id, ignoreCase = true) } == true ||
                     it.label.contains(selected, ignoreCase = true))
         }
     }
     val scannerValues = buildMap {
-        put("maleMaterialCode", maleMaterialCode)
-        put("inseminated", inseminated.toString())
         if (hasProblem) {
-            put(PROBLEM_REASON_KEY, problemReason)
-            put(PROBLEM_COMMENT_KEY, problemComment.ifBlank { problemReason })
+            put(PROBLEM_REASON_KEY, problemComment)
+            put(PROBLEM_COMMENT_KEY, problemComment)
         }
     }
 
@@ -128,126 +113,71 @@ fun InseminationScreen(
                 label = { Text("RFID самки") },
                 singleLine = true,
             )
-            Row(
+            Button(
+                onClick = {
+                    if (rfidInput.isNotBlank()) selectedRfid = rfidInput.trim()
+                    else onOpenRfidScanner(scannerValues)
+                },
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(MesSpacing.smallGap),
-            ) {
-                Button(
-                    onClick = {
-                        if (rfidInput.isNotBlank()) selectedRfid = rfidInput.trim()
-                        else onOpenRfidScanner(scannerValues)
-                    },
-                    modifier = Modifier.weight(1f),
-                ) { Text("Скан") }
-                OutlinedButton(
-                    onClick = {
-                        val serverRfid = task.checklist.firstOrNull {
-                            it.targetType == TargetType.RABBIT && it.status == ChecklistStatus.PENDING
-                        }?.targetId.orEmpty()
-                        rfidInput = serverRfid
-                        selectedRfid = serverRfid.takeIf { it.isNotBlank() }
-                    },
-                    modifier = Modifier.weight(1f),
-                ) { Text("Mock RFID") }
-            }
+            ) { Text("Скан") }
 
             if (selectedRfid != null && checklistItem == null) {
                 Text("Самка с таким RFID не найдена", color = MaterialTheme.colorScheme.error)
             }
 
             selectedRfid?.takeIf { checklistItem != null }?.let { selected ->
-                RabbitInfoCard(
-                    isLoading = false,
-                    rabbit = RabbitInfo(
-                        rfidCode = selected,
-                        status = "К работе",
-                        age = "—",
-                        cage = "—",
-                        weight = "—",
-                        diagnosis = "—",
-                    ),
-                    onClick = { onOpenAnimal(selected) },
-                )
+                Column(verticalArrangement = Arrangement.spacedBy(MesSpacing.contentGap)) {
+                    Text("RFID найден: $selected", color = MaterialTheme.colorScheme.primary)
 
-                OutlinedTextField(
-                    value = maleMaterialCode,
-                    onValueChange = {
-                        maleMaterialCode = it
-                        onValue("maleMaterialCode", it)
-                    },
-                    modifier = Modifier.fillMaxWidth(),
-                    label = { Text("Код самца / материала") },
-                    singleLine = true,
-                )
-
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
-                ) {
-                    Text("Самка осеменена", fontWeight = FontWeight.SemiBold)
-                    Checkbox(checked = inseminated, onCheckedChange = { inseminated = it })
-                }
-
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
-                ) {
-                    Text("Есть проблема", fontWeight = FontWeight.SemiBold)
-                    Checkbox(checked = hasProblem, onCheckedChange = { hasProblem = it })
-                }
-
-                if (hasProblem) {
-                    SelectionDropdown(
-                        value = problemReason,
-                        onValueChange = { problemReason = it },
-                        options = inseminationProblemReasons,
-                        label = "Причина",
+                    Row(
                         modifier = Modifier.fillMaxWidth(),
-                    )
-                    OutlinedTextField(
-                        value = problemComment,
-                        onValueChange = { problemComment = it },
-                        modifier = Modifier.fillMaxWidth(),
-                        label = { Text("Комментарий") },
-                    )
-                    AttachmentPickerButtons(onAttachment = { type, name, uri ->
-                        when (type) {
-                            AttachmentType.PHOTO -> onPhoto(name, uri)
-                            AttachmentType.VIDEO -> onVideo(name, uri)
-                            AttachmentType.FILE -> onFile(name, uri)
-                        }
-                    })
-                }
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
+                    ) {
+                        Text("Есть проблема", fontWeight = FontWeight.SemiBold)
+                        Checkbox(checked = hasProblem, onCheckedChange = { hasProblem = it })
+                    }
 
-                Button(
-                    onClick = {
-                        val rfid = selectedRfid ?: return@Button
-                        val values = buildMap {
-                            if (maleMaterialCode.isNotBlank()) {
-                                put("Код самца / материала", maleMaterialCode.trim())
+                    if (hasProblem) {
+                        OutlinedTextField(
+                            value = problemComment,
+                            onValueChange = { problemComment = it },
+                            modifier = Modifier.fillMaxWidth(),
+                            label = { Text("Опишите проблему") },
+                            minLines = 3,
+                        )
+                        AttachmentPickerButtons(onAttachment = { type, name, uri ->
+                            when (type) {
+                                AttachmentType.PHOTO -> onPhoto(name, uri)
+                                AttachmentType.VIDEO -> onVideo(name, uri)
+                                AttachmentType.FILE -> onFile(name, uri)
                             }
-                            put("Самка осеменена", inseminated.toString())
+                        })
+                    }
+
+                    Button(
+                        onClick = {
+                            val rfid = selectedRfid ?: return@Button
+                            val values = buildMap {
+                            put("inseminated", (!hasProblem).toString())
                             if (hasProblem) {
-                                put(PROBLEM_REASON_KEY, problemReason)
-                                put(PROBLEM_COMMENT_KEY, problemComment.ifBlank { problemReason })
+                                put(PROBLEM_REASON_KEY, problemComment.trim())
+                                put(PROBLEM_COMMENT_KEY, problemComment.trim())
+                                }
                             }
-                        }
-                        onScan(rfid, values)
-                        rfidInput = ""
-                        selectedRfid = null
-                        maleMaterialCode = ""
-                        inseminated = false
-                        hasProblem = false
-                        problemComment = ""
-                    },
-                    enabled = task.status != TaskStatus.NEW &&
-                        checklistItem?.status == ChecklistStatus.PENDING &&
-                        (inseminated || hasProblem),
-                    modifier = Modifier.fillMaxWidth(),
-                ) {
-                    Text(if (hasProblem) "Сохранить результат" else "Самка осеменена")
+                            onScan(rfid, values)
+                            rfidInput = ""
+                            selectedRfid = null
+                            hasProblem = false
+                            problemComment = ""
+                        },
+                        enabled = task.status != TaskStatus.NEW &&
+                            checklistItem?.status == ChecklistStatus.PENDING &&
+                            (!hasProblem || problemComment.isNotBlank()),
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Text(if (hasProblem) "Самка не осеменена" else "Самка осеменена")
+                    }
                 }
             }
         }

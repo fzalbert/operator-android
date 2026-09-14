@@ -404,6 +404,9 @@ private fun ProductionTaskDetailsDto.toMobileTask(employeeId: String): MobileTas
                     TargetType.HANGAR -> target.targetId ?: target.hangarId?.toString() ?: target.id
                     TargetType.ROW -> target.targetId ?: target.id
                 },
+                rabbitId = target.rabbitId,
+                scanIdentifier = target.scanIdentifier?.trim()?.takeIf { it.isNotBlank() }
+                    ?: target.displayCode?.trim()?.takeIf { targetType == TargetType.RABBIT && it.isNotBlank() },
                 serverType = "production-target",
                 status = target.status.orEmpty().toChecklistStatus(),
                 result = ExecutionResult(scannedRfid = target.scanIdentifier, completedAt = target.completedAt),
@@ -1092,9 +1095,21 @@ class MobileMesViewModel @Inject constructor(
             OfflineActionType.START_WORK_TASK -> runCatching { workTaskApi.startWorkTask(taskId.toLong()) }
                 .getOrElse { if (it !is HttpException || it.code() != 409) throw it }
             OfflineActionType.COMPLETE_PRODUCTION_TARGET -> productionCall { api ->
-                val result = Json.parseToJsonElement(payload.values.getValue("_resultJson")).jsonObject
+                val noPayload = payload.values["_noPayload"].toBoolean()
+                val result = if (noPayload) null else {
+                    Json.parseToJsonElement(payload.values.getValue("_resultJson")).jsonObject
+                }
                 runCatching {
-                    api.completeTarget(currentEmployee.id, taskId, requireNotNull(payload.itemId), CompleteTargetRequest(result, payload.values["rfid"], deviceId))
+                    api.completeTarget(
+                        currentEmployee.id,
+                        taskId,
+                        requireNotNull(payload.itemId),
+                        CompleteTargetRequest(
+                            result = result,
+                            rfid = payload.values["rfid"].takeUnless { noPayload },
+                            deviceId = deviceId.takeUnless { noPayload },
+                        ),
+                    )
                 }.getOrElse { error ->
                     if (error is HttpException && error.code() == 409) {
                         val item = api.getTask(currentEmployee.id, taskId).toMobileTask(currentEmployee.id)
@@ -1386,6 +1401,8 @@ class MobileMesViewModel @Inject constructor(
                 item.status != ChecklistStatus.PENDING &&
                     (
                         item.targetId.equals(normalizedRfid, ignoreCase = true) ||
+                            item.rabbitId.equals(normalizedRfid, ignoreCase = true) ||
+                            item.scanIdentifier.equals(normalizedRfid, ignoreCase = true) ||
                             item.result.scannedRfid.equals(normalizedRfid, ignoreCase = true) ||
                             item.label.equals(normalizedRfid, ignoreCase = true)
                         )
@@ -1402,6 +1419,8 @@ class MobileMesViewModel @Inject constructor(
             item.targetType == TargetType.RABBIT &&
                 (
                     item.targetId.equals(normalizedRfid, ignoreCase = true) ||
+                        item.rabbitId.equals(normalizedRfid, ignoreCase = true) ||
+                        item.scanIdentifier.equals(normalizedRfid, ignoreCase = true) ||
                         scannedRabbitId?.let { item.targetId.equals(it, ignoreCase = true) } == true ||
                         item.result.scannedRfid.equals(normalizedRfid, ignoreCase = true) ||
                         item.label.contains(normalizedRfid, ignoreCase = true)
@@ -1713,6 +1732,7 @@ class MobileMesViewModel @Inject constructor(
             }
             val isAnimalTargetTask = task.operationType.isFemaleArrival() ||
                 task.operationType == OperationType.ANIMAL_TRANSFER
+            val completesWithoutPayload = task.operationType == OperationType.INSEMINATION
             val operationTitle = if (task.operationType == OperationType.ANIMAL_TRANSFER) "Переселение" else "Заселение"
             val resultJson = buildJsonObject {
                 if (task.operationType == OperationType.NEST_SELECTION) {
@@ -1727,6 +1747,8 @@ class MobileMesViewModel @Inject constructor(
                     task.operationType == OperationType.WEIGHING_RABBIT
                 ) {
                     put("weightGrams", values["weightGrams"]?.toIntOrNull() ?: 0)
+                } else if (completesWithoutPayload) {
+                    // The target identifies the rabbit; insemination success has no request payload.
                 } else {
                     values.filterKeys { it != "rfid" && it != PROBLEM_REASON_KEY && it != PROBLEM_COMMENT_KEY }
                         .forEach { (key, value) -> put(key, value) }
@@ -1750,7 +1772,9 @@ class MobileMesViewModel @Inject constructor(
                         itemId = itemId,
                         reason = reason.ifBlank { null },
                         comment = comment.ifBlank { null },
-                        values = values + ("_resultJson" to resultJson.toString()),
+                        values = values +
+                            ("_resultJson" to resultJson.toString()) +
+                            ("_noPayload" to completesWithoutPayload.toString()),
                     ),
                 )
                 rememberProductionTargetOverride(taskId, itemId, status, reason, comment, values)
@@ -1777,15 +1801,15 @@ class MobileMesViewModel @Inject constructor(
                                 request = ProductionTargetCommentProblemRequest(comment = targetComment),
                             )
                         } else {
-                            Log.d(API_LOG_TAG, "Sending production target completion. taskId=$taskId targetId=$itemId operation=${task.operationType} rfid=$rfid result=$resultJson")
+                            Log.d(API_LOG_TAG, "Sending production target completion. taskId=$taskId targetId=$itemId operation=${task.operationType} noPayload=$completesWithoutPayload")
                             api.completeTarget(
                                 employeeId = currentEmployee.id,
                                 taskId = taskId,
                                 targetId = itemId,
                                 request = CompleteTargetRequest(
-                                    result = resultJson,
-                                    rfid = rfid,
-                                    deviceId = deviceId,
+                                    result = resultJson.takeUnless { completesWithoutPayload },
+                                    rfid = rfid.takeUnless { completesWithoutPayload },
+                                    deviceId = deviceId.takeUnless { completesWithoutPayload },
                                 ),
                             )
                         }
