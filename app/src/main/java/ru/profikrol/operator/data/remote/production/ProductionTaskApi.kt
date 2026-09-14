@@ -33,6 +33,9 @@ interface ProductionTaskApi {
     @POST("api/v1/production/tasks/{id}/targets/{targetId}/problem")
     suspend fun reportMortalityCountProblem(@Header("X-Employee-Id") employeeId: String, @Path("id") taskId: String, @Path("targetId") targetId: String, @Body request: ProductionMortalityCountProblemRequest)
 
+    @POST("api/v1/production/tasks/{id}/result")
+    suspend fun submitTaskResult(@Header("X-Employee-Id") employeeId: String, @Path("id") taskId: String, @Body request: SubmitProductionTaskResultRequest)
+
     @POST("api/v1/production/tasks/{id}/complete")
     suspend fun completeTask(@Header("X-Employee-Id") employeeId: String, @Path("id") taskId: String)
 }
@@ -46,6 +49,9 @@ data class AddProductionTargetRequest(
 
 @Serializable
 data class CompleteTargetRequest(val result: JsonObject? = null, val rfid: String? = null, val deviceId: String? = null)
+
+@Serializable
+data class SubmitProductionTaskResultRequest(val resultJson: String? = null)
 
 @Serializable
 data class ProductionTargetCommentProblemRequest(val comment: String)
@@ -69,6 +75,7 @@ data class ProductionTaskDto(
     val durationMinutes: Int? = null,
     val requiresAcceptance: Boolean = false,
     val executionStatus: String? = null,
+    val sortOrder: Int = Int.MAX_VALUE,
     val targets: List<ProductionTargetDto> = emptyList(),
     val checkList: List<ProductionTargetDto> = emptyList(),
 )

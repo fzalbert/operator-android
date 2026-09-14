@@ -19,4 +19,8 @@ fun Iterable<MobileTask>.orderedOpenTasks(): List<MobileTask> =
         it.status != TaskStatus.DONE &&
             it.status != TaskStatus.SENT &&
             it.status != TaskStatus.SKIPPED
-    }.sortedWith(mobileTaskExecutionComparator)
+    }.sortedWith(
+        compareBy<MobileTask> { it.status.executionOrder() }
+            .thenBy { it.sortOrder }
+            .then(mobileTaskExecutionComparator),
+    )

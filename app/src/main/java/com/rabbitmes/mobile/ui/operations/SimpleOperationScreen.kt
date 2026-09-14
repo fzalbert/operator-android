@@ -1012,6 +1012,7 @@ fun ProductionMortalityRoundScreen(
     onOpenScanner: (Map<String, String>) -> Unit,
     onAddProblem: (String, String, String, String, Int?) -> Unit,
     onComplete: () -> Unit,
+    resolveRabbitId: (String) -> String?,
     canEdit: Boolean,
 ) {
     val fixedItems = task.checklist.filter { it.status != ChecklistStatus.PENDING }
@@ -1027,6 +1028,7 @@ fun ProductionMortalityRoundScreen(
     }
     var cageId by remember(task.id) { mutableStateOf("") }
     var rabbitId by remember(task.id) { mutableStateOf("") }
+    var rabbitRfid by remember(task.id) { mutableStateOf("") }
     var comment by remember(task.id) { mutableStateOf("") }
     var count by remember(task.id) { mutableStateOf("") }
     var error by remember(task.id) { mutableStateOf("") }
@@ -1035,6 +1037,7 @@ fun ProductionMortalityRoundScreen(
     fun resetForm() {
         cageId = ""
         rabbitId = ""
+        rabbitRfid = ""
         comment = ""
         count = ""
         error = ""
@@ -1043,17 +1046,21 @@ fun ProductionMortalityRoundScreen(
     LaunchedEffect(scannedRfid, selectedType.code) {
         if (!selectedType.requiresRabbit || scannedRfid.isNullOrBlank()) return@LaunchedEffect
         val rabbit = MockRepository.rabbitByRfid(scannedRfid)
+        val resolvedRabbitId = resolveRabbitId(scannedRfid) ?: rabbit?.id
         when {
-            rabbit == null -> {
+            resolvedRabbitId == null -> {
                 rabbitId = ""
+                rabbitRfid = ""
                 error = "Самка с RFID $scannedRfid не найдена"
             }
-            !rabbit.sex.equals("Самка", ignoreCase = true) -> {
+            rabbit != null && !rabbit.sex.equals("Самка", ignoreCase = true) -> {
                 rabbitId = ""
+                rabbitRfid = ""
                 error = "RFID $scannedRfid принадлежит не самке"
             }
             else -> {
-                rabbitId = rabbit.id
+                rabbitId = resolvedRabbitId
+                rabbitRfid = scannedRfid
                 error = ""
             }
         }
@@ -1122,7 +1129,7 @@ fun ProductionMortalityRoundScreen(
                     }
                     if (selectedType.requiresRabbit) {
                         SimpleButton(
-                            if (selectedRabbit == null) "Сканировать RFID самки" else "Сканировать другую самку",
+                            if (rabbitId.isBlank()) "Сканировать RFID самки" else "Сканировать другую самку",
                             { onOpenScanner(mapOf("targetKind" to selectedType.code)) },
                             modifier = Modifier.fillMaxWidth(),
                             secondary = true,
@@ -1131,6 +1138,7 @@ fun ProductionMortalityRoundScreen(
                             onClick = {
                                 MockRepository.rabbits.firstOrNull { it.sex.equals("Самка", ignoreCase = true) }?.let { rabbit ->
                                     rabbitId = rabbit.id
+                                    rabbitRfid = rabbit.rfid
                                     error = ""
                                 }
                             },
@@ -1139,6 +1147,9 @@ fun ProductionMortalityRoundScreen(
                         selectedRabbit?.let { rabbit ->
                             SimpleReadonly("Выбранная самка", "${rabbit.earNumber} · RFID ${rabbit.rfid}")
                             SimpleReadonly("Текущая клетка", MockRepository.cage(rabbit.cageId)?.code ?: rabbit.cageId)
+                        } ?: rabbitId.takeIf(String::isNotBlank)?.let {
+                            SimpleReadonly("Выбранная самка", "RFID $rabbitRfid")
+                            SimpleReadonly("ID кролика", it)
                         }
                     }
                     if (selectedType.requiresCount) {
@@ -1174,11 +1185,11 @@ fun ProductionMortalityRoundScreen(
                             val mortalityCount = count.toIntOrNull()
                             when {
                                 selectedType.requiresCage && cageId.isBlank() -> error = "Укажите ID клетки"
-                                selectedType.requiresRabbit && selectedRabbit == null -> error = "Отсканируйте RFID самки"
+                                selectedType.requiresRabbit && rabbitId.isBlank() -> error = "Отсканируйте RFID самки"
                                 selectedType.requiresCount && (mortalityCount == null || mortalityCount <= 0) -> error = "Укажите количество погибших"
                                 !selectedType.requiresCount && comment.isBlank() -> error = "Комментарий обязателен"
                                 else -> {
-                                    onAddProblem(selectedType.code, cageId, selectedRabbit?.id.orEmpty(), comment.trim(), mortalityCount)
+                                    onAddProblem(selectedType.code, cageId, rabbitId, comment.trim(), mortalityCount)
                                     resetForm()
                                 }
                             }

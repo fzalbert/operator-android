@@ -149,6 +149,7 @@ data class MobileTask(
     val pendingGeneralSubtaskIds: List<Long> = emptyList(),
     val workReportId: Long? = null,
     val targets: List<TaskTarget> = emptyList(),
+    val sortOrder: Int = Int.MAX_VALUE,
 ) {
     val progress: Int get() {
         val executionItems = checklist.size + targets.size

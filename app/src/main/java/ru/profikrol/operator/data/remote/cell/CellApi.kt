@@ -2,6 +2,7 @@ package ru.profikrol.operator.data.remote.cell
 
 import kotlinx.serialization.Serializable
 import retrofit2.http.GET
+import retrofit2.http.Path
 import retrofit2.http.Query
 
 interface CellApi {
@@ -10,6 +11,9 @@ interface CellApi {
         @Query("page") page: Int = 1,
         @Query("pageSize") pageSize: Int = 100,
     ): CellPageDto
+
+    @GET("api/v1/cells/by-hangar/{hangarId}")
+    suspend fun getCellsByHangar(@Path("hangarId") hangarId: Long): List<CellDto>
 }
 
 @Serializable

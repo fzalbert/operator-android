@@ -61,7 +61,6 @@ object MockRepository {
             OperationField("photo", "Фото показаний весов", FieldType.PHOTO)
         ), listOf(RoleId.OPERATOR)),
         OperationDefinition(OperationType.WEIGHING_RABBIT, TargetType.RABBIT, false, "Сохранить вес кролика", listOf(
-            OperationField("rfid", "RFID кролика", FieldType.TEXT, true),
             OperationField("weightGrams", "Вес мясного кролика", FieldType.NUMBER, true, "г"),
             OperationField("photo", "Фото показаний весов", FieldType.PHOTO)
         ), listOf(RoleId.OPERATOR)),
@@ -87,7 +86,7 @@ object MockRepository {
             OperationField("removed", "Забрали", FieldType.NUMBER, true),
             OperationField("added", "Добавили", FieldType.NUMBER, true)
         ), listOf(RoleId.OPERATOR, RoleId.CHIEF_TECHNOLOGIST), true),
-        OperationDefinition(OperationType.ANIMAL_TRANSFER, TargetType.RABBIT, true, "Переселить", listOf(OperationField("rfid", "RFID", FieldType.TEXT, true), OperationField("cellId", "ID новой клетки", FieldType.SELECT, true), OperationField("comment", "Комментарий", FieldType.TEXT)), listOf(RoleId.OPERATOR, RoleId.GENERAL_WORKER)),
+        OperationDefinition(OperationType.ANIMAL_TRANSFER, TargetType.HANGAR, true, "Переселить", listOf(OperationField("rfid", "RFID", FieldType.TEXT, true), OperationField("cellId", "Клетка назначения", FieldType.TEXT, true), OperationField("comment", "Комментарий", FieldType.TEXT)), listOf(RoleId.OPERATOR, RoleId.GENERAL_WORKER)),
         OperationDefinition(OperationType.ANIMAL_SETTLEMENT, TargetType.RABBIT, true, "Выполнить", emptyList(), listOf(RoleId.OPERATOR, RoleId.GENERAL_WORKER)),
         OperationDefinition(OperationType.OKROL, TargetType.CAGE, false, "Окрол учтен", listOf(OperationField("cellId", "Клетка", FieldType.SELECT, true), OperationField("bornAlive", "Живых", FieldType.NUMBER, true), OperationField("bornDead", "Мертвых", FieldType.NUMBER, true)), listOf(RoleId.OPERATOR), true),
         OperationDefinition(OperationType.LACTATION_CONTROL, TargetType.CAGE, false, "Лактация проверена", listOf(OperationField("cellId", "Клетка", FieldType.SELECT, true), OperationField("status", "Статус", FieldType.SELECT, true, options = listOf("Норма", "Недостаточно молока", "Нужна подсадка", "Нужен технолог"))), listOf(RoleId.CHIEF_TECHNOLOGIST)),

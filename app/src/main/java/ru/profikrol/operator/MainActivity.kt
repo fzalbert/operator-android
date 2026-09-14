@@ -62,8 +62,7 @@ class MainActivity : ComponentActivity() {
     private fun updateOnlineState() {
         val activeNetwork = connectivityManager.activeNetwork
         val capabilities = activeNetwork?.let(connectivityManager::getNetworkCapabilities)
-        val isOnline = capabilities?.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET) == true &&
-            capabilities.hasCapability(NetworkCapabilities.NET_CAPABILITY_VALIDATED)
+        val isOnline = capabilities?.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET) == true
         runOnUiThread { vm.setOnline(isOnline) }
     }
 }

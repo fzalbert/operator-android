@@ -4,6 +4,7 @@ import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -70,6 +71,10 @@ fun SelectionDropdown(
     label: String,
     modifier: Modifier = Modifier,
 ) {
+    if (options.size > 100) {
+        SearchableSelectionDropdown(value, onValueChange, options, label, modifier)
+        return
+    }
     var expanded by remember { mutableStateOf(false) }
     ExposedDropdownMenuBox(
         expanded = expanded,
@@ -100,6 +105,80 @@ fun SelectionDropdown(
                 )
             }
         }
+    }
+}
+
+@Composable
+private fun SearchableSelectionDropdown(
+    value: String,
+    onValueChange: (String) -> Unit,
+    options: List<String>,
+    label: String,
+    modifier: Modifier,
+) {
+    var dialogOpen by remember { mutableStateOf(false) }
+    var query by remember { mutableStateOf("") }
+    val filteredOptions = remember(options, query) {
+        options.asSequence()
+            .filter { query.isBlank() || it.contains(query.trim(), ignoreCase = true) }
+            .take(100)
+            .toList()
+    }
+
+    Box(modifier) {
+        OutlinedTextField(
+            value = value,
+            onValueChange = {},
+            readOnly = true,
+            label = { Text(label) },
+            trailingIcon = { Icon(Icons.Default.ArrowDropDown, contentDescription = null) },
+            modifier = Modifier.fillMaxWidth(),
+        )
+        Box(
+            Modifier
+                .matchParentSize()
+                .clickable {
+                    query = ""
+                    dialogOpen = true
+                },
+        )
+    }
+
+    if (dialogOpen) {
+        AlertDialog(
+            onDismissRequest = { dialogOpen = false },
+            title = { Text(label) },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OutlinedTextField(
+                        value = query,
+                        onValueChange = { query = it },
+                        label = { Text("Поиск") },
+                        singleLine = true,
+                        modifier = Modifier.fillMaxWidth(),
+                    )
+                    LazyColumn(modifier = Modifier.heightIn(max = 420.dp)) {
+                        filteredOptions.forEach { option ->
+                            item(key = option) {
+                                DropdownMenuItem(
+                                    text = { Text(option) },
+                                    onClick = {
+                                        onValueChange(option)
+                                        dialogOpen = false
+                                    },
+                                )
+                            }
+                        }
+                    }
+                    if (filteredOptions.isEmpty()) {
+                        Text("Ничего не найдено", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { dialogOpen = false }) { Text("Закрыть") }
+            },
+        )
     }
 }
 

@@ -44,6 +44,7 @@ fun InseminationScreen(
     onComplete: () -> Unit,
     onSkip: (String) -> Unit,
     onOpenAnimal: (String) -> Unit,
+    resolveRabbitId: (String) -> String?,
     canEdit: Boolean = true,
 ) {
     var rfidInput by remember(task.id) { mutableStateOf("") }
@@ -64,9 +65,12 @@ fun InseminationScreen(
 
     LaunchedEffect(scannedRfid) {
         if (!scannedRfid.isNullOrBlank()) {
+            val rabbitId = resolveRabbitId(scannedRfid)
             val isPending = task.checklist.any {
                 it.targetType == TargetType.RABBIT &&
-                    it.targetId.equals(scannedRfid, ignoreCase = true) &&
+                    (it.targetId.equals(scannedRfid, ignoreCase = true) ||
+                        rabbitId?.let { id -> it.targetId.equals(id, ignoreCase = true) } == true ||
+                        it.label.contains(scannedRfid, ignoreCase = true)) &&
                     it.status == ChecklistStatus.PENDING
             }
             if (isPending) {
@@ -80,8 +84,12 @@ fun InseminationScreen(
     }
 
     val checklistItem = selectedRfid?.let { selected ->
+        val rabbitId = resolveRabbitId(selected)
         task.checklist.firstOrNull {
-            it.targetType == TargetType.RABBIT && it.targetId.equals(selected, ignoreCase = true)
+            it.targetType == TargetType.RABBIT &&
+                (it.targetId.equals(selected, ignoreCase = true) ||
+                    rabbitId?.let { id -> it.targetId.equals(id, ignoreCase = true) } == true ||
+                    it.label.contains(selected, ignoreCase = true))
         }
     }
     val scannerValues = buildMap {
@@ -541,17 +549,29 @@ fun FeedOperationScreen(task: MobileTask, onBack: () -> Unit, onBegin: () -> Uni
 }
 
 @Composable
-fun OperationScreenFactory(task: MobileTask, definition: OperationDefinition, onBack: () -> Unit, onBegin: () -> Unit, scannedRfid: String? = null, scannedValues: Map<String, String> = emptyMap(), onScan: (String, Map<String,String>) -> Unit, onOpenRfidScanner: (Map<String, String>) -> Unit, onValue: (String,String) -> Unit, onPhoto: (String,String)->Unit, onVideo: (String,String)->Unit, onFile: (String,String)->Unit, onComment: (String)->Unit, onChecklistDone: (String)->Unit, onChecklistDoneWithValues: (String, Map<String, String>)->Unit, onChecklistProblem: (String,String,String)->Unit, onChecklistSkip: (String,String)->Unit, onMortalityRoundProblem: (String, String, String, String, Int?) -> Unit, onComplete: () -> Unit, onSkip: (String)->Unit, onGeneralComplete: (String)->Unit, onGeneralReject: (String, String)->Unit, onOpenAnimal: (String)->Unit, canEdit: Boolean = true) {
+fun OperationScreenFactory(task: MobileTask, definition: OperationDefinition, onBack: () -> Unit, onBegin: () -> Unit, scannedRfid: String? = null, scannedValues: Map<String, String> = emptyMap(), onScan: (String, Map<String,String>) -> Unit, onOpenRfidScanner: (Map<String, String>) -> Unit, onValue: (String,String) -> Unit, onPhoto: (String,String)->Unit, onVideo: (String,String)->Unit, onFile: (String,String)->Unit, onComment: (String)->Unit, onChecklistDone: (String)->Unit, onChecklistDoneWithValues: (String, Map<String, String>)->Unit, onChecklistProblem: (String,String,String)->Unit, onChecklistSkip: (String,String)->Unit, onMortalityRoundProblem: (String, String, String, String, Int?) -> Unit, onComplete: () -> Unit, onSkip: (String)->Unit, onGeneralComplete: (String)->Unit, onGeneralReject: (String, String)->Unit, onOpenAnimal: (String)->Unit, resolveRabbitId: (String) -> String?, canEdit: Boolean = true) {
     if (task.operationType == OperationType.NEST_SELECTION) {
         ProductionNestAlignmentScreen(task, onBack, onBegin, onChecklistDoneWithValues, onComplete, canEdit)
     } else if (task.operationType == OperationType.FEMALE_DELIVERY) {
         ProductionAnimalSettlementScreen(task, scannedRfid, onBack, onBegin, onScan, onOpenRfidScanner, onPhoto, onVideo, onFile, canEdit)
     } else if (task.operationType == OperationType.MORTALITY_ROUND) {
-        ProductionMortalityRoundScreen(task, definition, scannedRfid, scannedValues, onBack, onBegin, onOpenRfidScanner, onMortalityRoundProblem, onComplete, canEdit)
+        ProductionMortalityRoundScreen(task, definition, scannedRfid, scannedValues, onBack, onBegin, onOpenRfidScanner, onMortalityRoundProblem, onComplete, resolveRabbitId, canEdit)
     } else if (task.operationType == OperationType.INSEMINATION) {
-        InseminationScreen(task, scannedRfid, scannedValues, onBack, onBegin, onScan, onOpenRfidScanner, onValue, onPhoto, onVideo, onFile, onComment, onChecklistDone, onChecklistProblem, onChecklistSkip, onComplete, onSkip, onOpenAnimal, canEdit)
+        InseminationScreen(task, scannedRfid, scannedValues, onBack, onBegin, onScan, onOpenRfidScanner, onValue, onPhoto, onVideo, onFile, onComment, onChecklistDone, onChecklistProblem, onChecklistSkip, onComplete, onSkip, onOpenAnimal, resolveRabbitId, canEdit)
     } else if (task.operationType == OperationType.PALPATION) {
         PalpationScreen(task, scannedRfid, onBack, onBegin, onScan, onOpenRfidScanner, onValue, onPhoto, onVideo, onFile, onComment, onChecklistDone, onChecklistProblem, onChecklistSkip, onComplete, onSkip, onOpenAnimal, canEdit)
+    } else if (
+        task.operationType == OperationType.ANIMAL_TRANSFER &&
+        task.id.toLongOrNull() == null &&
+        task.checklist.isEmpty()
+    ) {
+        ProductionAnimalTransferTaskScreen(task, scannedRfid, onBack, onBegin, onOpenRfidScanner, onValue, onComplete, canEdit)
+    } else if (task.operationType == OperationType.CLEANING) {
+        ProductionCleaningScreen(task, onBack, onBegin, onValue, onComment, onComplete, canEdit)
+    } else if (task.operationType == OperationType.LIGHTING_CHECK) {
+        ProductionLightCheckScreen(task, onBack, onBegin, onValue, onComment, onComplete, canEdit)
+    } else if (task.operationType == OperationType.WEIGHING_RABBIT) {
+        ProductionRabbitWeighingScreen(task, onBack, onBegin, onChecklistDoneWithValues, onChecklistProblem, onComplete, canEdit)
     } else {
         SimpleOperationScreen(task, definition, scannedRfid, onBack, onBegin, onScan, onOpenRfidScanner, onValue, onChecklistDone, onChecklistDoneWithValues, onChecklistProblem, onComplete, onSkip, onGeneralComplete, onGeneralReject, onPhoto, onVideo, onFile, onComment, onOpenAnimal, canEdit)
     }
