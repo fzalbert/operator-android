@@ -39,6 +39,7 @@ fun InseminationScreen(
 ) {
     var rfidInput by remember(task.id) { mutableStateOf("") }
     var selectedRfid by remember(task.id) { mutableStateOf<String?>(null) }
+    var submittedRfid by remember(task.id) { mutableStateOf<String?>(null) }
     var hasProblem by remember(task.id, scannedValues) {
         mutableStateOf(!scannedValues[PROBLEM_REASON_KEY].isNullOrBlank())
     }
@@ -48,6 +49,11 @@ fun InseminationScreen(
 
     LaunchedEffect(scannedRfid) {
         if (!scannedRfid.isNullOrBlank()) {
+            if (scannedRfid == submittedRfid) {
+                rfidInput = ""
+                selectedRfid = null
+                return@LaunchedEffect
+            }
             val rabbitId = resolveRabbitId(scannedRfid)
             val isPending = task.checklist.any {
                 it.targetType == TargetType.RABBIT &&
@@ -165,6 +171,7 @@ fun InseminationScreen(
                                 put(PROBLEM_COMMENT_KEY, problemComment.trim())
                                 }
                             }
+                            submittedRfid = rfid
                             onScan(rfid, values)
                             rfidInput = ""
                             selectedRfid = null
@@ -185,48 +192,117 @@ fun InseminationScreen(
 }
 
 @Composable
-fun PalpationScreen(task: MobileTask, scannedRfid: String?, onBack: () -> Unit, onBegin: () -> Unit, onScan: (String, Map<String,String>) -> Unit, onOpenRfidScanner: (Map<String, String>) -> Unit, onValue: (String,String) -> Unit, onPhoto: (String,String)->Unit, onVideo: (String,String)->Unit, onFile: (String,String)->Unit, onComment: (String)->Unit, onChecklistDone: (String)->Unit, onChecklistProblem: (String,String,String)->Unit, onChecklistSkip: (String,String)->Unit, onComplete: () -> Unit, onSkip: (String)->Unit, onOpenAnimal: (String)->Unit, canEdit: Boolean = true) {
-    var result by remember { mutableStateOf("Сукрольная") }
-    TaskExecutionScaffold(task, onBack, onBegin, onComplete, onSkip, onChecklistDone, onChecklistProblem, onChecklistSkip, allowRootComplete = false, canEdit = canEdit) {
+fun PalpationScreen(
+    task: MobileTask,
+    scannedRfid: String?,
+    onBack: () -> Unit,
+    onBegin: () -> Unit,
+    onScan: (String, Map<String, String>) -> Unit,
+    onOpenRfidScanner: (Map<String, String>) -> Unit,
+    onChecklistDone: (String) -> Unit,
+    onChecklistProblem: (String, String, String) -> Unit,
+    onChecklistSkip: (String, String) -> Unit,
+    onComplete: () -> Unit,
+    onSkip: (String) -> Unit,
+    resolveRabbitId: (String) -> String?,
+    canEdit: Boolean = true,
+) {
+    var rfidInput by remember(task.id) { mutableStateOf("") }
+    var selectedRfid by remember(task.id) { mutableStateOf<String?>(null) }
+    var submittedRfid by remember(task.id) { mutableStateOf<String?>(null) }
+
+    LaunchedEffect(scannedRfid) {
+        if (!scannedRfid.isNullOrBlank()) {
+            if (scannedRfid == submittedRfid) {
+                rfidInput = ""
+                selectedRfid = null
+                return@LaunchedEffect
+            }
+            rfidInput = scannedRfid
+            selectedRfid = scannedRfid
+        }
+    }
+
+    val checklistItem = selectedRfid?.let { selected ->
+        val rabbitId = resolveRabbitId(selected)
+        task.checklist.firstOrNull {
+            it.targetType == TargetType.RABBIT &&
+                (it.targetId.equals(selected, ignoreCase = true) ||
+                    it.rabbitId.equals(selected, ignoreCase = true) ||
+                    it.scanIdentifier.equals(selected, ignoreCase = true) ||
+                    rabbitId?.let { id -> it.targetId.equals(id, ignoreCase = true) } == true ||
+                    it.label.contains(selected, ignoreCase = true))
+        }
+    }
+
+    TaskExecutionScaffold(
+        task = task,
+        onBack = onBack,
+        onBegin = onBegin,
+        onComplete = onComplete,
+        onSkip = onSkip,
+        onChecklistDone = onChecklistDone,
+        onChecklistProblem = onChecklistProblem,
+        onChecklistSkip = onChecklistSkip,
+        allowRootComplete = false,
+        canEdit = canEdit,
+        checklistAfterContent = true,
+        checklistDescription = "Пальпация закрывает пункт выбранной самки.",
+        afterChecklist = { ExecutionEvidencePanel(task) },
+    ) {
         MesCard {
-            Text("Результат пальпации", fontWeight = FontWeight.Bold)
-            Column(verticalArrangement = Arrangement.spacedBy(MesSpacing.smallGap)) {
-                Row(horizontalArrangement = Arrangement.spacedBy(MesSpacing.smallGap)) {
-                    listOf("Сукрольная", "Не сукрольная").forEach { option ->
-                        FilterChip(
-                            selected = result == option,
-                            onClick = { result = option; onValue("palpationResult", option) },
-                            label = { Text(option) },
-                            modifier = Modifier.weight(1f),
-                        )
-                    }
-                }
-                FilterChip(
-                    selected = result == "Сомнительно",
-                    onClick = { result = "Сомнительно"; onValue("palpationResult", "Сомнительно") },
-                    label = { Text("Сомнительно") },
+            Text("Сканирование RFID", fontWeight = FontWeight.Bold)
+            OutlinedTextField(
+                value = rfidInput,
+                onValueChange = {
+                    rfidInput = it
+                    selectedRfid = null
+                },
+                modifier = Modifier.fillMaxWidth(),
+                label = { Text("RFID самки") },
+                singleLine = true,
+            )
+            Button(
+                onClick = {
+                    if (rfidInput.isNotBlank()) selectedRfid = rfidInput.trim()
+                    else onOpenRfidScanner(emptyMap())
+                },
+                modifier = Modifier.fillMaxWidth(),
+            ) { Text("Скан") }
+
+            if (selectedRfid != null && checklistItem == null) {
+                Text("Самка с таким RFID не найдена", color = MaterialTheme.colorScheme.error)
+            }
+
+            selectedRfid?.takeIf { checklistItem != null }?.let { rfid ->
+                Text("RFID найден: $rfid", color = MaterialTheme.colorScheme.primary)
+                Row(
                     modifier = Modifier.fillMaxWidth(),
-                )
+                    horizontalArrangement = Arrangement.spacedBy(MesSpacing.smallGap),
+                ) {
+                    Button(
+                        onClick = {
+                            submittedRfid = rfid
+                            onScan(rfid, mapOf("pregnant" to "true", "palpationResult" to "Сукрольная"))
+                            rfidInput = ""
+                            selectedRfid = null
+                        },
+                        enabled = task.status != TaskStatus.NEW && checklistItem?.status == ChecklistStatus.PENDING,
+                        modifier = Modifier.weight(1f),
+                    ) { Text("Беременна") }
+                    OutlinedButton(
+                        onClick = {
+                            submittedRfid = rfid
+                            onScan(rfid, mapOf("pregnant" to "false", "palpationResult" to "Не беременна"))
+                            rfidInput = ""
+                            selectedRfid = null
+                        },
+                        enabled = task.status != TaskStatus.NEW && checklistItem?.status == ChecklistStatus.PENDING,
+                        modifier = Modifier.weight(1f),
+                    ) { Text("Не беременна") }
+                }
             }
         }
-        ScanPanel(
-            "RFID самки",
-            "RFID",
-            onScan = { rfid ->
-                val values = buildMap {
-                    put("palpationResult", result)
-                    if (result != "Сукрольная") {
-                        put(PROBLEM_REASON_KEY, result)
-                        put(PROBLEM_COMMENT_KEY, "Пальпация: $result")
-                    }
-                }
-                onScan(rfid, values)
-            },
-            onOpenScanner = { onOpenRfidScanner(mapOf("palpationResult" to result)) },
-            initialRfid = scannedRfid,
-        )
-        ProblemAndMediaControls(onPhoto, onVideo, onFile, onComment)
-        ExecutionEvidencePanel(task)
     }
 }
 
@@ -479,17 +555,17 @@ fun FeedOperationScreen(task: MobileTask, onBack: () -> Unit, onBegin: () -> Uni
 }
 
 @Composable
-fun OperationScreenFactory(task: MobileTask, definition: OperationDefinition, onBack: () -> Unit, onBegin: () -> Unit, scannedRfid: String? = null, scannedValues: Map<String, String> = emptyMap(), onScan: (String, Map<String,String>) -> Unit, onOpenRfidScanner: (Map<String, String>) -> Unit, onValue: (String,String) -> Unit, onPhoto: (String,String)->Unit, onVideo: (String,String)->Unit, onFile: (String,String)->Unit, onComment: (String)->Unit, onChecklistDone: (String)->Unit, onChecklistDoneWithValues: (String, Map<String, String>)->Unit, onChecklistProblem: (String,String,String)->Unit, onChecklistSkip: (String,String)->Unit, onMortalityRoundProblem: (String, String, String, String, Int?) -> Unit, onComplete: () -> Unit, onSkip: (String)->Unit, onGeneralComplete: (String)->Unit, onGeneralReject: (String, String)->Unit, onOpenAnimal: (String)->Unit, resolveRabbitId: (String) -> String?, canEdit: Boolean = true) {
+fun OperationScreenFactory(task: MobileTask, definition: OperationDefinition, onBack: () -> Unit, onBegin: () -> Unit, scannedRfid: String? = null, scannedValues: Map<String, String> = emptyMap(), onScan: (String, Map<String,String>) -> Unit, onOpenRfidScanner: (Map<String, String>) -> Unit, onValue: (String,String) -> Unit, onPhoto: (String,String)->Unit, onVideo: (String,String)->Unit, onFile: (String,String)->Unit, onComment: (String)->Unit, onChecklistDone: (String)->Unit, onChecklistDoneWithValues: (String, Map<String, String>)->Unit, onChecklistProblem: (String,String,String)->Unit, onChecklistSkip: (String,String)->Unit, onMortalityRoundProblem: (String, String, String, String, String, Int?, Int?, Int?) -> Unit, onComplete: () -> Unit, onSkip: (String)->Unit, onGeneralComplete: (String)->Unit, onGeneralReject: (String, String)->Unit, onOpenAnimal: (String)->Unit, resolveRabbitId: (String) -> String?, canEdit: Boolean = true) {
     if (task.operationType == OperationType.NEST_SELECTION) {
         ProductionNestAlignmentScreen(task, onBack, onBegin, onChecklistDoneWithValues, onComplete, canEdit)
     } else if (task.operationType == OperationType.FEMALE_DELIVERY) {
         ProductionAnimalSettlementScreen(task, scannedRfid, onBack, onBegin, onScan, onOpenRfidScanner, onPhoto, onVideo, onFile, canEdit)
     } else if (task.operationType == OperationType.MORTALITY_ROUND) {
-        ProductionMortalityRoundScreen(task, definition, scannedRfid, scannedValues, onBack, onBegin, onOpenRfidScanner, onMortalityRoundProblem, onComplete, resolveRabbitId, canEdit)
+        ProductionMortalityRoundScreen(task, definition, onBack, onBegin, onMortalityRoundProblem, onComplete, resolveRabbitId, canEdit)
     } else if (task.operationType == OperationType.INSEMINATION) {
         InseminationScreen(task, scannedRfid, scannedValues, onBack, onBegin, onScan, onOpenRfidScanner, onValue, onPhoto, onVideo, onFile, onComment, onChecklistDone, onChecklistProblem, onChecklistSkip, onComplete, onSkip, onOpenAnimal, resolveRabbitId, canEdit)
     } else if (task.operationType == OperationType.PALPATION) {
-        PalpationScreen(task, scannedRfid, onBack, onBegin, onScan, onOpenRfidScanner, onValue, onPhoto, onVideo, onFile, onComment, onChecklistDone, onChecklistProblem, onChecklistSkip, onComplete, onSkip, onOpenAnimal, canEdit)
+        PalpationScreen(task, scannedRfid, onBack, onBegin, onScan, onOpenRfidScanner, onChecklistDone, onChecklistProblem, onChecklistSkip, onComplete, onSkip, resolveRabbitId, canEdit)
     } else if (
         task.operationType == OperationType.ANIMAL_TRANSFER &&
         task.id.toLongOrNull() == null &&

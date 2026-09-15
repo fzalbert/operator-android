@@ -28,14 +28,6 @@ private val taskSkipReasons = listOf(
     "Другая причина",
 )
 
-private val checklistIssueReasons = listOf(
-    "RFID не считывается",
-    "Животное отсутствует",
-    "Клетка или объект недоступны",
-    "Операцию невозможно выполнить",
-    "Другая причина",
-)
-
 @Composable
 fun TaskExecutionScaffold(
     task: MobileTask,
@@ -353,7 +345,6 @@ fun ChecklistExecutionBlock(
             }
         }
         if (isExpanded) visibleItems.forEach { item ->
-            var reason by remember(item.id) { mutableStateOf(checklistIssueReasons.first()) }
             var comment by remember(item.id) { mutableStateOf("") }
             Surface(color = MaterialTheme.colorScheme.background, shape = MaterialTheme.shapes.medium, modifier = Modifier.fillMaxWidth().padding(vertical = MesSpacing.smallGap)) {
                 Column(Modifier.padding(MesSpacing.contentGap)) {
@@ -377,17 +368,24 @@ fun ChecklistExecutionBlock(
                     }
                     if (canEdit && openedItemId == item.id) {
                         Spacer(Modifier.height(MesSpacing.smallGap))
-                        SelectionDropdown(
-                            value = reason,
-                            onValueChange = { reason = it },
-                            options = checklistIssueReasons,
-                            label = "Причина проблемы/пропуска",
+                        OutlinedTextField(
+                            value = comment,
+                            onValueChange = { comment = it },
                             modifier = Modifier.fillMaxWidth(),
+                            label = { Text("Опишите проблему или причину пропуска") },
+                            minLines = 3,
                         )
-                        OutlinedTextField(comment, { comment = it }, Modifier.fillMaxWidth(), label = { Text("Комментарий по объекту") })
                         Row(horizontalArrangement = Arrangement.spacedBy(MesSpacing.smallGap), modifier = Modifier.fillMaxWidth()) {
-                            OutlinedButton(onClick = { onProblem(item.id, reason, comment) }, modifier = Modifier.weight(1f)) { Text("Проблема") }
-                            OutlinedButton(onClick = { onSkip(item.id, reason) }, modifier = Modifier.weight(1f)) { Text("Пропустить") }
+                            OutlinedButton(
+                                onClick = { onProblem(item.id, comment.trim(), comment.trim()) },
+                                enabled = comment.isNotBlank(),
+                                modifier = Modifier.weight(1f),
+                            ) { Text("Проблема") }
+                            OutlinedButton(
+                                onClick = { onSkip(item.id, comment.trim()) },
+                                enabled = comment.isNotBlank(),
+                                modifier = Modifier.weight(1f),
+                            ) { Text("Пропустить") }
                         }
                     }
                 }

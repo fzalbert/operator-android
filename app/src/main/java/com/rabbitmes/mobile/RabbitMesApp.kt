@@ -116,7 +116,10 @@ fun RabbitMesApp(vm: MobileMesViewModel) {
                     scannedValues = vm.scannedValuesForTask(task.id),
                     onBack = { vm.navigate(AppScreen.Tasks) },
                     onBegin = { vm.beginTask(task.id) },
-                    onScan = { rfid, values -> vm.scanRfidAndCompleteItem(task.id, rfid, values) },
+                    onScan = { rfid, values ->
+                        vm.scanRfidAndCompleteItem(task.id, rfid, values)
+                        vm.clearScannedRfid(task.id)
+                    },
                     onOpenRfidScanner = { values ->
                         values.forEach { (key, value) -> vm.updateTaskValue(task.id, key, value) }
                         vm.navigate(AppScreen.RfidScan(task.id, values))
@@ -130,8 +133,8 @@ fun RabbitMesApp(vm: MobileMesViewModel) {
                     onChecklistDoneWithValues = { itemId, values -> vm.completeChecklistItem(task.id, itemId, values) },
                     onChecklistProblem = { itemId, reason, comment -> vm.markChecklistItem(task.id, itemId, ChecklistStatus.PROBLEM, reason, comment) },
                     onChecklistSkip = { itemId, reason -> vm.markChecklistItem(task.id, itemId, ChecklistStatus.SKIPPED, reason, "Пропущено") },
-                    onMortalityRoundProblem = { targetKind, cageId, rabbitId, comment, count ->
-                        vm.addMortalityRoundProblem(task.id, targetKind, cageId, rabbitId, comment, count)
+                    onMortalityRoundProblem = { targetKind, rowId, cageId, rabbitId, comment, count, aliveBorn, stillborn ->
+                        vm.addMortalityRoundProblem(task.id, targetKind, rowId, cageId, rabbitId, comment, count, aliveBorn, stillborn)
                     },
                     onComplete = { vm.completeTask(task.id); vm.navigate(AppScreen.Tasks) },
                     onSkip = {

@@ -23,6 +23,8 @@ import ru.profikrol.operator.data.remote.rabbit.RabbitApi
 import ru.profikrol.operator.data.remote.rabbit.RabbitDto
 import ru.profikrol.operator.data.remote.cell.CellApi
 import ru.profikrol.operator.data.remote.cell.CellDto
+import ru.profikrol.operator.data.remote.cell.RowDto
+import ru.profikrol.operator.data.remote.cell.localizeCellPositions
 import ru.profikrol.operator.data.remote.worktask.WorkTaskApi
 import ru.profikrol.operator.data.remote.worktask.WorkTaskDto
 import ru.profikrol.operator.data.remote.worktask.CompleteWorkSubtaskRequest
@@ -293,13 +295,14 @@ private fun String.operationLookupKey(): String = trim()
 
 private fun mortalityRoundTargetLabel(
     targetKind: String,
+    rowId: String = "",
     cageId: String = "",
     rabbitId: String = "",
     count: Int? = null,
 ): String = when (targetKind) {
     "light_check" -> "Свет"
-    "feed_check" -> "Корм"
-    "water_check" -> "Вода"
+    "feed_check" -> "Корм · ряд ${rowId.ifBlank { "—" }}"
+    "water_check" -> "Вода · ряд ${rowId.ifBlank { "—" }}"
     "nest_control" -> "Гнездо / клетка ${cageId.ifBlank { "—" }}"
     "mortality_count" -> "Погибшие животные: ${count ?: 0} / клетка ${cageId.ifBlank { "—" }}"
     "female_culling" -> "Выбраковка самки ${rabbitId.ifBlank { "—" }}"
@@ -320,7 +323,7 @@ private fun ProductionTaskDetailsDto.allTargets(): List<ProductionTargetDto> =
     (targets + checklist + task.targets + task.checkList).distinctBy { it.id }
 
 private fun ProductionTargetDto.toDisplayLabel(targetType: TargetType): String {
-    val code = displayCode?.trim().orEmpty()
+    val code = displayCode?.trim().orEmpty().localizeCellPositions()
     if (targetType == TargetType.CAGE) {
         val cage = cageId?.toString() ?: targetId?.trim().orEmpty()
         return when {
@@ -405,6 +408,7 @@ private fun ProductionTaskDetailsDto.toMobileTask(employeeId: String): MobileTas
                     TargetType.ROW -> target.targetId ?: target.id
                 },
                 rabbitId = target.rabbitId,
+                cageId = target.cageId?.toString(),
                 scanIdentifier = target.scanIdentifier?.trim()?.takeIf { it.isNotBlank() }
                     ?: target.displayCode?.trim()?.takeIf { targetType == TargetType.RABBIT && it.isNotBlank() },
                 serverType = "production-target",
@@ -553,6 +557,7 @@ class MobileMesViewModel @Inject constructor(
     val operations = MockRepository.operationDefinitions
     private var serverRabbits by mutableStateOf<List<RabbitDto>>(emptyList())
     private var serverCells by mutableStateOf<List<CellDto>>(emptyList())
+    private var serverRows by mutableStateOf<List<RowDto>>(emptyList())
     private var serverCellHangarIds: Set<Long> = emptySet()
     private val deviceId: String by lazy {
         Settings.Secure.getString(appContext.contentResolver, Settings.Secure.ANDROID_ID)
@@ -845,7 +850,10 @@ class MobileMesViewModel @Inject constructor(
                     } || productionTasks.any {
                         it.operationType == OperationType.MORTALITY_ROUND ||
                             it.operationType == OperationType.ANIMAL_TRANSFER ||
-                        it.operationType == OperationType.NEST_CONTROL
+                            it.operationType == OperationType.NEST_CONTROL ||
+                            it.operationType == OperationType.WEIGHING ||
+                            it.operationType == OperationType.WEIGHING_CAGE ||
+                            it.operationType == OperationType.WEIGHING_RABBIT
                     }
                     val requiredCellHangarIds = productionTasks
                         .mapNotNull { task -> task.hangarId.toLongOrNull() }
@@ -870,6 +878,13 @@ class MobileMesViewModel @Inject constructor(
                     } else {
                         emptyList()
                     }
+                    if (needsCells && requiredCellHangarIds.isNotEmpty()) {
+                        runCatching { loadRows(requiredCellHangarIds) }
+                            .onSuccess { serverRows = it }
+                            .onFailure { error ->
+                                Log.w(API_LOG_TAG, "Rows request failed: ${error.toHttpDebugMessage()}", error)
+                            }
+                    }
                     val remoteTasks = latestTasks
                         .filterNot {
                             val operationType = it.resolveOperationType()
@@ -890,8 +905,21 @@ class MobileMesViewModel @Inject constructor(
                             } else task
                         }
                     }
+                    val productionTasksWithCells = productionTasks.map { task ->
+                        task.copy(
+                            checklist = task.checklist.map { item ->
+                                val cell = item.cageId?.toLongOrNull()?.let { cageId ->
+                                    cells.firstOrNull { it.id == cageId }
+                                }
+                                if (cell == null) item else item.copy(
+                                    cageLabel = cell.displayName,
+                                    rabbitCount = cell.meatRabbitsCount,
+                                )
+                            },
+                        )
+                    }
                     tasks = (
-                        productionTasks.map { it.withProductionTargetOverrides().withMortalityRoundEvents() } +
+                        productionTasksWithCells.map { it.withProductionTargetOverrides().withMortalityRoundEvents() } +
                             remoteTasks
                         ).distinctBy(MobileTask::id).map { remote ->
                             val local = tasks.firstOrNull { it.id == remote.id }
@@ -983,9 +1011,16 @@ class MobileMesViewModel @Inject constructor(
     private suspend fun loadCells(hangarIds: Set<Long>): List<CellDto> {
         if (hangarIds.isEmpty()) return loadAllCells()
         return hangarIds
-            .flatMap { hangarId -> cellApi.getCellsByHangar(hangarId) }
+            .flatMap { hangarId ->
+                runCatching { cellApi.getCellsInfoByHangar(hangarId) }
+                    .getOrElse { cellApi.getCellsByHangar(hangarId) }
+            }
             .distinctBy(CellDto::id)
     }
+
+    private suspend fun loadRows(hangarIds: Set<Long>): List<RowDto> = hangarIds
+        .flatMap { hangarId -> cellApi.getRowsByHangar(hangarId) }
+        .distinctBy { Triple(it.id, it.hangarId, it.number) }
 
     fun startTasksAutoRefresh() {
         if (sessionStore.currentUser == null || tasksAutoRefreshJob?.isActive == true) return
@@ -1106,8 +1141,8 @@ class MobileMesViewModel @Inject constructor(
                         requireNotNull(payload.itemId),
                         CompleteTargetRequest(
                             result = result,
-                            rfid = payload.values["rfid"].takeUnless { noPayload },
-                            deviceId = deviceId.takeUnless { noPayload },
+                            rfid = payload.values["rfid"],
+                            deviceId = deviceId,
                         ),
                     )
                 }.getOrElse { error ->
@@ -1161,7 +1196,10 @@ class MobileMesViewModel @Inject constructor(
 
     fun task(id: String) = tasks.first { it.id == id }
     fun taskOrNull(id: String) = tasks.firstOrNull { it.id == id }
-    fun scannedRfidForTask(taskId: String): String? = scannedRfidByTaskId[taskId] ?: task(taskId).result.scannedRfid
+    // The RFID shown in an execution form is transient input. A value stored in the
+    // task result belongs to an already processed target and must not be restored
+    // into the field for the next animal.
+    fun scannedRfidForTask(taskId: String): String? = scannedRfidByTaskId[taskId]
     fun scannedValuesForTask(taskId: String): Map<String, String> = scannedValuesByTaskId[taskId].orEmpty()
     fun rabbitIdForRfid(rfid: String): String? {
         val value = rfid.trim()
@@ -1174,6 +1212,10 @@ class MobileMesViewModel @Inject constructor(
         lastScannedRfid = rfid
         scannedRfidByTaskId[taskId] = rfid
         scannedValuesByTaskId[taskId] = values
+    }
+    fun clearScannedRfid(taskId: String) {
+        scannedRfidByTaskId.remove(taskId)
+        scannedValuesByTaskId.remove(taskId)
     }
     fun nextPendingRfid(taskId: String): String? {
         val item = taskOrNull(taskId)?.checklist?.firstOrNull { it.status == ChecklistStatus.PENDING } ?: return null
@@ -1202,11 +1244,22 @@ class MobileMesViewModel @Inject constructor(
         val cellOptions = serverCells.map(CellDto::displayName)
         if (type == OperationType.MORTALITY_ROUND) {
             return definition.copy(
-                fields = definition.fields + OperationField(
-                    id = "cageId",
-                    title = "ID клетки",
-                    type = FieldType.SELECT,
-                    options = listOf("Выберите клетку") + cellOptions,
+                fields = definition.fields + listOf(
+                    OperationField(
+                        id = "rowId",
+                        title = "Ряд",
+                        type = FieldType.SELECT,
+                        options = listOf("Выберите ряд") + serverRows
+                            .map { "Ряд ${it.number}" }
+                            .distinct()
+                            .sortedBy { it.substringAfterLast(' ').toIntOrNull() },
+                    ),
+                    OperationField(
+                        id = "cageId",
+                        title = "ID клетки",
+                        type = FieldType.SELECT,
+                        options = listOf("Выберите клетку") + cellOptions,
+                    ),
                 ),
             )
         }
@@ -1581,29 +1634,43 @@ class MobileMesViewModel @Inject constructor(
     fun addMortalityRoundProblem(
         taskId: String,
         targetKind: String,
+        rowId: String,
         cageId: String,
         rabbitId: String,
         comment: String,
         count: Int?,
+        aliveBorn: Int?,
+        stillborn: Int?,
     ) {
         val task = taskOrNull(taskId) ?: return
         val normalizedKind = targetKind.trim()
+        val normalizedRowId = rowId.trim()
         val normalizedCageId = cageId.trim().productionIdValue()
         val normalizedRabbitId = rabbitId.trim()
         val normalizedComment = comment.trim()
         val targetType = when (normalizedKind) {
+            "feed_check",
+            "water_check" -> TargetType.ROW
             "nest_control",
             "mortality_count" -> TargetType.CAGE
             "female_culling" -> TargetType.RABBIT
             else -> TargetType.HANGAR
         }
-        val targetLabel = mortalityRoundTargetLabel(normalizedKind, normalizedCageId, normalizedRabbitId, count)
+        val targetLabel = mortalityRoundTargetLabel(normalizedKind, normalizedRowId, normalizedCageId, normalizedRabbitId, count)
+        val serverComment = buildList {
+            if (normalizedRowId.isNotBlank()) add(normalizedRowId)
+            if (normalizedComment.isNotBlank()) add(normalizedComment)
+        }.joinToString(". ")
         val values = buildMap {
             put("Тип", mortalityRoundKindTitle(normalizedKind))
+            if (normalizedRowId.isNotBlank()) put("Ряд", normalizedRowId)
             if (normalizedCageId.isNotBlank()) put("Клетка", normalizedCageId)
             if (normalizedRabbitId.isNotBlank()) put("Самка", normalizedRabbitId)
             if (normalizedComment.isNotBlank()) put("Комментарий", normalizedComment)
             if (count != null) put("Количество", count.toString())
+            if (aliveBorn != null) put("Живорождённые", aliveBorn.toString())
+            if (stillborn != null) put("Мертворождённые", stillborn.toString())
+            if (aliveBorn != null && stillborn != null) put("Всего родилось", (aliveBorn + stillborn).toString())
         }
 
         if (taskId.startsWith("demo-", ignoreCase = true)) {
@@ -1614,14 +1681,14 @@ class MobileMesViewModel @Inject constructor(
                         id = "demo-mortality-${System.currentTimeMillis()}",
                         label = targetLabel,
                         targetType = targetType,
-                        targetId = normalizedRabbitId.ifBlank { normalizedCageId.ifBlank { normalizedKind } },
+                        targetId = normalizedRabbitId.ifBlank { normalizedCageId.ifBlank { normalizedRowId.ifBlank { normalizedKind } } },
                         serverType = normalizedKind,
                         status = ChecklistStatus.PROBLEM,
                         result = ExecutionResult(
                             values = values,
                             completedAt = "now",
                             problemReason = normalizedKind,
-                            comment = normalizedComment,
+                            comment = serverComment,
                         ),
                     ),
                 ).markOffline()
@@ -1653,7 +1720,7 @@ class MobileMesViewModel @Inject constructor(
                         (
                             target.targetKind.equals(normalizedKind, ignoreCase = true) ||
                                 target.displayCode.equals(mortalityRoundKindTitle(normalizedKind), ignoreCase = true) ||
-                                target.displayCode.equals(mortalityRoundTargetLabel(normalizedKind, normalizedCageId, normalizedRabbitId, count), ignoreCase = true)
+                                target.displayCode.equals(mortalityRoundTargetLabel(normalizedKind, normalizedRowId, normalizedCageId, normalizedRabbitId, count), ignoreCase = true)
                             )
                 }
             val targetIdForProblem = createdTarget?.id ?: createdTargetId
@@ -1663,7 +1730,20 @@ class MobileMesViewModel @Inject constructor(
             )
 
             productionCall { api ->
-                if (normalizedKind == "mortality_count") {
+                if (normalizedKind == "nest_control") {
+                    api.completeTarget(
+                        employeeId = currentEmployee.id,
+                        taskId = taskId,
+                        targetId = targetIdForProblem,
+                        request = CompleteTargetRequest(
+                            result = buildJsonObject {
+                                put("aliveBorn", requireNotNull(aliveBorn))
+                                put("stillborn", requireNotNull(stillborn))
+                                put("bornTotal", aliveBorn + stillborn)
+                            },
+                        ),
+                    )
+                } else if (normalizedKind == "mortality_count") {
                     api.reportMortalityCountProblem(
                         employeeId = currentEmployee.id,
                         taskId = taskId,
@@ -1677,7 +1757,7 @@ class MobileMesViewModel @Inject constructor(
                         employeeId = currentEmployee.id,
                         taskId = taskId,
                         targetId = targetIdForProblem,
-                        request = ProductionTargetCommentProblemRequest(comment = normalizedComment),
+                        request = ProductionTargetCommentProblemRequest(comment = serverComment),
                     )
                 }
             }
@@ -1687,14 +1767,14 @@ class MobileMesViewModel @Inject constructor(
                     id = "mortality-event-$normalizedKind-$targetIdForProblem-${System.currentTimeMillis()}",
                     label = targetLabel,
                     targetType = targetType,
-                    targetId = normalizedRabbitId.ifBlank { normalizedCageId.ifBlank { targetIdForProblem } },
+                    targetId = normalizedRabbitId.ifBlank { normalizedCageId.ifBlank { normalizedRowId.ifBlank { targetIdForProblem } } },
                     serverType = "mortality-round-event",
                     status = ChecklistStatus.PROBLEM,
                     result = ExecutionResult(
                         values = values,
                         completedAt = "now",
                         problemReason = normalizedKind,
-                        comment = normalizedComment,
+                        comment = serverComment,
                     ),
                 )
                 mortalityRoundEventsByTaskId[taskId] = mortalityRoundEventsByTaskId[taskId].orEmpty() + savedItem
@@ -1721,8 +1801,13 @@ class MobileMesViewModel @Inject constructor(
         val item = task.checklist.firstOrNull { it.id == itemId }
         if (item?.serverType == "production-target") {
             val rfid = values["rfid"]?.trim()
-            if (task.operationType.isFemaleArrival() && rfid.isNullOrBlank()) {
-                lastMessage = "Для заселения RFID обязателен"
+            if (
+                (task.operationType.isFemaleArrival() ||
+                    task.operationType == OperationType.INSEMINATION ||
+                    task.operationType == OperationType.PALPATION) &&
+                rfid.isNullOrBlank()
+            ) {
+                lastMessage = "RFID обязателен"
                 return
             }
             val settlementAgeDays = values["age"]?.trim()?.toIntOrNull()
@@ -1732,7 +1817,7 @@ class MobileMesViewModel @Inject constructor(
             }
             val isAnimalTargetTask = task.operationType.isFemaleArrival() ||
                 task.operationType == OperationType.ANIMAL_TRANSFER
-            val completesWithoutPayload = task.operationType == OperationType.INSEMINATION
+            val completesWithoutPayload = false
             val operationTitle = if (task.operationType == OperationType.ANIMAL_TRANSFER) "Переселение" else "Заселение"
             val resultJson = buildJsonObject {
                 if (task.operationType == OperationType.NEST_SELECTION) {
@@ -1742,13 +1827,21 @@ class MobileMesViewModel @Inject constructor(
                     put("added", values["added"]?.toLongOrNull() ?: 0L)
                 } else if (task.operationType == OperationType.SLAUGHTER_SHIPMENT) {
                     put("count", values["count"]?.toIntOrNull() ?: 0)
-                } else if (
-                    task.operationType == OperationType.WEIGHING ||
-                    task.operationType == OperationType.WEIGHING_RABBIT
-                ) {
+                } else if (task.operationType == OperationType.WEIGHING_RABBIT) {
+                    val rabbitOrdinal = item.rabbitId?.toIntOrNull()
+                        ?: item.targetId.substringAfterLast('-').toIntOrNull()
+                        ?: item.label.substringAfterLast(' ').toIntOrNull()
+                    put("rabbitId", requireNotNull(rabbitOrdinal))
                     put("weightGrams", values["weightGrams"]?.toIntOrNull() ?: 0)
-                } else if (completesWithoutPayload) {
-                    // The target identifies the rabbit; insemination success has no request payload.
+                } else if (task.operationType == OperationType.WEIGHING) {
+                    put("weightGrams", values["weightGrams"]?.toIntOrNull() ?: 0)
+                } else if (task.operationType == OperationType.PALPATION) {
+                    put(
+                        "result",
+                        if (values["pregnant"].toBoolean()) "pregnant" else "not_pregnant",
+                    )
+                } else if (task.operationType == OperationType.INSEMINATION) {
+                    put("inseminated", values["inseminated"]?.toBooleanStrictOrNull() ?: true)
                 } else {
                     values.filterKeys { it != "rfid" && it != PROBLEM_REASON_KEY && it != PROBLEM_COMMENT_KEY }
                         .forEach { (key, value) -> put(key, value) }
@@ -1808,8 +1901,8 @@ class MobileMesViewModel @Inject constructor(
                                 targetId = itemId,
                                 request = CompleteTargetRequest(
                                     result = resultJson.takeUnless { completesWithoutPayload },
-                                    rfid = rfid.takeUnless { completesWithoutPayload },
-                                    deviceId = deviceId.takeUnless { completesWithoutPayload },
+                                    rfid = rfid,
+                                    deviceId = deviceId,
                                 ),
                             )
                         }
@@ -1985,10 +2078,12 @@ class MobileMesViewModel @Inject constructor(
             return
         }
         val remoteTaskId = taskId.toLongOrNull()
+        val shouldSubmitStandaloneResult = currentTask.checklist.isEmpty() &&
+            currentTask.operationType != OperationType.MORTALITY_ROUND
         if (!shift.isOnline) {
             val isProductionTask = taskId.isProductionTaskId()
             if (isProductionTask) {
-                if (currentTask.checklist.isEmpty()) {
+                if (shouldSubmitStandaloneResult) {
                     enqueueOffline(
                         taskId,
                         OfflineActionType.SUBMIT_PRODUCTION_RESULT,
@@ -2023,7 +2118,7 @@ class MobileMesViewModel @Inject constructor(
                 launchServerAction("Complete production task failed", fallbackMessage = "Не удалось завершить задачу") {
                     runCatching {
                         productionCall { api ->
-                            if (currentTask.checklist.isEmpty()) {
+                            if (shouldSubmitStandaloneResult) {
                                 val resultJson = currentTask.productionResultJson(completionComment)
                                 Log.d(API_LOG_TAG, "Sending production task result. taskId=$taskId operation=${currentTask.operationType} result=$resultJson")
                                 api.submitTaskResult(currentEmployee.id, taskId, SubmitProductionTaskResultRequest(resultJson))

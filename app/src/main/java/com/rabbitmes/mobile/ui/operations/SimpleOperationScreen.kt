@@ -452,9 +452,9 @@ fun ProductionNestAlignmentScreen(
     canEdit: Boolean,
 ) {
     var openedItemId by remember(task.id) { mutableStateOf<String?>(null) }
-    var alive by remember(task.id) { mutableStateOf("0") }
-    var stillborn by remember(task.id) { mutableStateOf("0") }
-    var movement by remember(task.id) { mutableStateOf("0") }
+    var alive by remember(task.id) { mutableStateOf("") }
+    var stillborn by remember(task.id) { mutableStateOf("") }
+    var movement by remember(task.id) { mutableStateOf("") }
     var movementType by remember(task.id) { mutableStateOf("removed") }
     var validationError by remember(task.id) { mutableStateOf("") }
     val processedCount = task.checklist.count { it.status != ChecklistStatus.PENDING }
@@ -464,9 +464,9 @@ fun ProductionNestAlignmentScreen(
 
     fun openItem(itemId: String?) {
         openedItemId = itemId
-        alive = "0"
-        stillborn = "0"
-        movement = "0"
+        alive = ""
+        stillborn = ""
+        movement = ""
         movementType = "removed"
         validationError = ""
     }
@@ -579,8 +579,8 @@ fun ProductionNestAlignmentScreen(
                                 val aliveValue = alive.toIntOrNull()
                                 val stillbornValue = stillborn.toLongOrNull()
                                 val movementValue = movement.toLongOrNull()
-                                if (aliveValue == null || stillbornValue == null || movementValue == null || movementValue <= 0) {
-                                    validationError = "Проверьте значения: количество должно быть больше нуля"
+                                if (aliveValue == null || stillbornValue == null || movementValue == null) {
+                                    validationError = "Заполните все числовые поля"
                                 } else {
                                     onChecklistDoneWithValues(
                                         selectedItem.id,
@@ -987,6 +987,7 @@ fun ProductionAnimalTransferScreen(
 private data class MortalityRoundEventType(
     val code: String,
     val title: String,
+    val requiresRow: Boolean = false,
     val requiresCage: Boolean = false,
     val requiresRabbit: Boolean = false,
     val requiresCount: Boolean = false,
@@ -994,8 +995,8 @@ private data class MortalityRoundEventType(
 
 private val mortalityRoundEventTypes = listOf(
     MortalityRoundEventType("light_check", "Свет"),
-    MortalityRoundEventType("feed_check", "Корм"),
-    MortalityRoundEventType("water_check", "Вода"),
+    MortalityRoundEventType("feed_check", "Корм", requiresRow = true),
+    MortalityRoundEventType("water_check", "Вода", requiresRow = true),
     MortalityRoundEventType("nest_control", "Гнездо", requiresCage = true),
     MortalityRoundEventType("mortality_count", "Погибшие животные", requiresCage = true, requiresCount = true),
     MortalityRoundEventType("female_culling", "Выбраковка самки", requiresRabbit = true),
@@ -1005,12 +1006,9 @@ private val mortalityRoundEventTypes = listOf(
 fun ProductionMortalityRoundScreen(
     task: MobileTask,
     definition: OperationDefinition,
-    scannedRfid: String?,
-    scannedValues: Map<String, String>,
     onBack: () -> Unit,
     onBegin: () -> Unit,
-    onOpenScanner: (Map<String, String>) -> Unit,
-    onAddProblem: (String, String, String, String, Int?) -> Unit,
+    onAddProblem: (String, String, String, String, String, Int?, Int?, Int?) -> Unit,
     onComplete: () -> Unit,
     resolveRabbitId: (String) -> String?,
     canEdit: Boolean,
@@ -1022,48 +1020,33 @@ fun ProductionMortalityRoundScreen(
         .orEmpty()
         .filterNot { it.startsWith("Выберите", ignoreCase = true) }
         .ifEmpty { MockRepository.allCages.map { it.id } }
-    val scanTargetKind = scannedValues["targetKind"]
-    var selectedType by remember(task.id, scanTargetKind) {
-        mutableStateOf(mortalityRoundEventTypes.firstOrNull { it.code == scanTargetKind } ?: mortalityRoundEventTypes.first())
-    }
+    val rowOptions = definition.fields
+        .firstOrNull { it.id == "rowId" }
+        ?.options
+        .orEmpty()
+        .filterNot { it.startsWith("Выберите", ignoreCase = true) }
+    var selectedType by remember(task.id) { mutableStateOf(mortalityRoundEventTypes.first()) }
+    var rowId by remember(task.id) { mutableStateOf("") }
     var cageId by remember(task.id) { mutableStateOf("") }
     var rabbitId by remember(task.id) { mutableStateOf("") }
     var rabbitRfid by remember(task.id) { mutableStateOf("") }
     var comment by remember(task.id) { mutableStateOf("") }
     var count by remember(task.id) { mutableStateOf("") }
+    var aliveBorn by remember(task.id) { mutableStateOf("") }
+    var stillborn by remember(task.id) { mutableStateOf("") }
     var error by remember(task.id) { mutableStateOf("") }
     val selectedRabbit = rabbitId.takeIf(String::isNotBlank)?.let(MockRepository::rabbit)
 
     fun resetForm() {
+        rowId = ""
         cageId = ""
         rabbitId = ""
         rabbitRfid = ""
         comment = ""
         count = ""
+        aliveBorn = ""
+        stillborn = ""
         error = ""
-    }
-
-    LaunchedEffect(scannedRfid, selectedType.code) {
-        if (!selectedType.requiresRabbit || scannedRfid.isNullOrBlank()) return@LaunchedEffect
-        val rabbit = MockRepository.rabbitByRfid(scannedRfid)
-        val resolvedRabbitId = resolveRabbitId(scannedRfid) ?: rabbit?.id
-        when {
-            resolvedRabbitId == null -> {
-                rabbitId = ""
-                rabbitRfid = ""
-                error = "Самка с RFID $scannedRfid не найдена"
-            }
-            rabbit != null && !rabbit.sex.equals("Самка", ignoreCase = true) -> {
-                rabbitId = ""
-                rabbitRfid = ""
-                error = "RFID $scannedRfid принадлежит не самке"
-            }
-            else -> {
-                rabbitId = resolvedRabbitId
-                rabbitRfid = scannedRfid
-                error = ""
-            }
-        }
     }
 
     LazyColumn(
@@ -1115,6 +1098,18 @@ fun ProductionMortalityRoundScreen(
                         label = "Тип события",
                         modifier = Modifier.fillMaxWidth(),
                     )
+                    if (selectedType.requiresRow) {
+                        SelectionDropdown(
+                            value = rowId,
+                            onValueChange = {
+                                rowId = it
+                                error = ""
+                            },
+                            options = rowOptions,
+                            label = "Ряд",
+                            modifier = Modifier.fillMaxWidth(),
+                        )
+                    }
                     if (selectedType.requiresCage) {
                         SelectionDropdown(
                             value = cageId,
@@ -1128,22 +1123,18 @@ fun ProductionMortalityRoundScreen(
                         )
                     }
                     if (selectedType.requiresRabbit) {
-                        SimpleButton(
-                            if (rabbitId.isBlank()) "Сканировать RFID самки" else "Сканировать другую самку",
-                            { onOpenScanner(mapOf("targetKind" to selectedType.code)) },
-                            modifier = Modifier.fillMaxWidth(),
-                            secondary = true,
-                        )
-                        OutlinedButton(
-                            onClick = {
-                                MockRepository.rabbits.firstOrNull { it.sex.equals("Самка", ignoreCase = true) }?.let { rabbit ->
-                                    rabbitId = rabbit.id
-                                    rabbitRfid = rabbit.rfid
-                                    error = ""
-                                }
+                        OutlinedTextField(
+                            value = rabbitRfid,
+                            onValueChange = { value ->
+                                rabbitRfid = value.trim()
+                                rabbitId = resolveRabbitId(rabbitRfid).orEmpty()
+                                error = ""
                             },
                             modifier = Modifier.fillMaxWidth(),
-                        ) { Text("Mock RFID самки") }
+                            label = { Text("RFID самки") },
+                            singleLine = true,
+                            shape = RoundedCornerShape(16.dp),
+                        )
                         selectedRabbit?.let { rabbit ->
                             SimpleReadonly("Выбранная самка", "${rabbit.earNumber} · RFID ${rabbit.rfid}")
                             SimpleReadonly("Текущая клетка", MockRepository.cage(rabbit.cageId)?.code ?: rabbit.cageId)
@@ -1152,7 +1143,28 @@ fun ProductionMortalityRoundScreen(
                             SimpleReadonly("ID кролика", it)
                         }
                     }
-                    if (selectedType.requiresCount) {
+                    if (selectedType.code == "nest_control") {
+                        OutlinedTextField(
+                            value = aliveBorn,
+                            onValueChange = { aliveBorn = it.filter(Char::isDigit); error = "" },
+                            modifier = Modifier.fillMaxWidth(),
+                            label = { Text("Живорождённые") },
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                            singleLine = true,
+                            shape = RoundedCornerShape(16.dp),
+                        )
+                        OutlinedTextField(
+                            value = stillborn,
+                            onValueChange = { stillborn = it.filter(Char::isDigit); error = "" },
+                            modifier = Modifier.fillMaxWidth(),
+                            label = { Text("Мертворождённые") },
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                            singleLine = true,
+                            shape = RoundedCornerShape(16.dp),
+                        )
+                        val bornTotal = (aliveBorn.toIntOrNull() ?: 0) + (stillborn.toIntOrNull() ?: 0)
+                        SimpleReadonly("Всего родилось", bornTotal.toString())
+                    } else if (selectedType.requiresCount) {
                         OutlinedTextField(
                             value = count,
                             onValueChange = {
@@ -1183,13 +1195,19 @@ fun ProductionMortalityRoundScreen(
                         "Зафиксировать событие",
                         {
                             val mortalityCount = count.toIntOrNull()
+                            val aliveBornCount = aliveBorn.toIntOrNull()
+                            val stillbornCount = stillborn.toIntOrNull()
                             when {
+                                selectedType.requiresRow && rowId.isBlank() -> error = "Выберите ряд"
                                 selectedType.requiresCage && cageId.isBlank() -> error = "Укажите ID клетки"
-                                selectedType.requiresRabbit && rabbitId.isBlank() -> error = "Отсканируйте RFID самки"
+                                selectedType.requiresRabbit && rabbitRfid.isBlank() -> error = "Введите RFID самки"
+                                selectedType.requiresRabbit && rabbitId.isBlank() -> error = "Самка с таким RFID не найдена"
+                                selectedType.code == "nest_control" && aliveBornCount == null -> error = "Укажите количество живорождённых"
+                                selectedType.code == "nest_control" && stillbornCount == null -> error = "Укажите количество мертворождённых"
                                 selectedType.requiresCount && (mortalityCount == null || mortalityCount <= 0) -> error = "Укажите количество погибших"
-                                !selectedType.requiresCount && comment.isBlank() -> error = "Комментарий обязателен"
+                                selectedType.code != "nest_control" && !selectedType.requiresCount && comment.isBlank() -> error = "Комментарий обязателен"
                                 else -> {
-                                    onAddProblem(selectedType.code, cageId, rabbitId, comment.trim(), mortalityCount)
+                                    onAddProblem(selectedType.code, rowId, cageId, rabbitId, comment.trim(), mortalityCount, aliveBornCount, stillbornCount)
                                     resetForm()
                                 }
                             }
