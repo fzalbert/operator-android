@@ -74,6 +74,7 @@ data class ProductionTaskDto(
     val scheduledDate: String = "",
     val title: String? = null,
     val description: String? = null,
+    val taskType: String? = null,
     val assignedEmployeeId: String? = null,
     val durationMinutes: Int? = null,
     val requiresAcceptance: Boolean = false,
