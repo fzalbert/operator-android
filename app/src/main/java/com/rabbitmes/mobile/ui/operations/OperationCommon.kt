@@ -305,6 +305,7 @@ fun ChecklistExecutionBlock(
     onSkip: (String, String) -> Unit,
     description: String? = null,
     canEdit: Boolean = true,
+    allowIssues: Boolean = true,
 ) {
     var openedItemId by remember { mutableStateOf<String?>(null) }
     var showCompleted by remember { mutableStateOf(false) }
@@ -351,7 +352,9 @@ fun ChecklistExecutionBlock(
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                         Column(Modifier.weight(1f)) {
                             Text(item.label, fontWeight = FontWeight.SemiBold)
-                            Text(item.secondaryTargetLabel(), color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            item.secondaryTargetLabel().takeIf { it.isNotBlank() }?.let {
+                                Text(it, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
                             if (item.result.scannedRfid != null) Text("RFID: ${item.result.scannedRfid}", color = mobileSuccessGreen)
                             if (item.result.values.isNotEmpty()) Text(item.result.values.entries.joinToString { "${it.key}: ${it.value}" }, color = MaterialTheme.colorScheme.onSurfaceVariant)
                             if (item.result.problemReason != null) Text(item.result.problemReason, color = MaterialTheme.colorScheme.error)
@@ -363,7 +366,9 @@ fun ChecklistExecutionBlock(
                             if (item.status == ChecklistStatus.PENDING && item.targetType != TargetType.RABBIT) {
                                 Button(onClick = { onDone(item.id) }, modifier = Modifier.weight(1f)) { Text("Выполнено") }
                             }
-                            OutlinedButton(onClick = { openedItemId = if (openedItemId == item.id) null else item.id }, modifier = Modifier.weight(1f)) { Text("Детали / проблема") }
+                            if (allowIssues) {
+                                OutlinedButton(onClick = { openedItemId = if (openedItemId == item.id) null else item.id }, modifier = Modifier.weight(1f)) { Text("Детали / проблема") }
+                            }
                         }
                     }
                     if (canEdit && openedItemId == item.id) {
@@ -394,11 +399,14 @@ fun ChecklistExecutionBlock(
     }
 }
 
-private fun ChecklistItem.secondaryTargetLabel(): String = when (targetType) {
-    TargetType.CAGE -> "ID клетки: $targetId"
-    TargetType.RABBIT -> "ID кролика: $targetId"
-    TargetType.ROW -> "ID ряда: $targetId"
-    TargetType.HANGAR -> "ID ангара: $targetId"
+private fun ChecklistItem.secondaryTargetLabel(): String {
+    if (serverType == "production-checklist") return ""
+    return when (targetType) {
+        TargetType.CAGE -> "ID клетки: $targetId"
+        TargetType.RABBIT -> "ID кролика: $targetId"
+        TargetType.ROW -> "ID ряда: $targetId"
+        TargetType.HANGAR -> "ID ангара: $targetId"
+    }
 }
 
 @Composable

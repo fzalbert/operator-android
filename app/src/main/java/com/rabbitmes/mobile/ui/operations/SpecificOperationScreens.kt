@@ -573,7 +573,17 @@ fun OperationScreenFactory(task: MobileTask, definition: OperationDefinition, on
     ) {
         ProductionAnimalTransferTaskScreen(task, scannedRfid, onBack, onBegin, onOpenRfidScanner, onValue, onComplete, canEdit)
     } else if (task.operationType == OperationType.CLEANING) {
-        ProductionCleaningScreen(task, onBack, onBegin, onValue, onComment, onComplete, canEdit)
+        ProductionCleaningScreen(
+            task,
+            onBack,
+            onBegin,
+            onChecklistDone,
+            onChecklistProblem,
+            onChecklistSkip,
+            onComment,
+            onComplete,
+            canEdit,
+        )
     } else if (task.operationType == OperationType.LIGHTING_CHECK) {
         ProductionLightCheckScreen(task, onBack, onBegin, onValue, onComment, onComplete, canEdit)
     } else if (task.operationType == OperationType.WEIGHING_RABBIT) {

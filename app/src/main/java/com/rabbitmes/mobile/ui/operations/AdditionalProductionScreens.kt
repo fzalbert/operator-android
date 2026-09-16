@@ -153,29 +153,41 @@ fun ProductionCleaningScreen(
     task: MobileTask,
     onBack: () -> Unit,
     onBegin: () -> Unit,
-    onValue: (String, String) -> Unit,
+    onChecklistDone: (String) -> Unit,
+    onChecklistProblem: (String, String, String) -> Unit,
+    onChecklistSkip: (String, String) -> Unit,
     onComment: (String) -> Unit,
     onComplete: () -> Unit,
     canEdit: Boolean,
 ) {
-    var passesSwept by remember(task.id) { mutableStateOf(task.result.values["passesSwept"] == "true") }
-    var corpseFridge by remember(task.id) { mutableStateOf(task.result.values["corpseFridge"] == "true") }
     var comment by remember(task.id) { mutableStateOf(task.result.comment) }
+    val allItemsProcessed = task.checklist.isNotEmpty() &&
+        task.checklist.none { it.status == ChecklistStatus.PENDING }
     ProductionPage(task, "Уборка", onBack, onBegin, canEdit) {
+        if (task.checklist.isEmpty()) {
+            ProductionCard {
+                Text("Сервер не передал пункты уборки", color = ProductionMuted)
+            }
+        } else {
+            ChecklistExecutionBlock(
+                items = task.checklist,
+                onDone = onChecklistDone,
+                onProblem = onChecklistProblem,
+                onSkip = onChecklistSkip,
+                description = "Отметьте результат по каждому полученному пункту.",
+                canEdit = canEdit,
+                allowIssues = false,
+            )
+        }
         ProductionCard {
-            Text("Контроль уборки", color = ProductionText, fontSize = 20.sp, fontWeight = FontWeight.Bold)
-            CheckRow("Проходы подметены", passesSwept) { passesSwept = it; onValue("passesSwept", it.toString()) }
-            CheckRow("Падеж убран в холодильник", corpseFridge) { corpseFridge = it; onValue("corpseFridge", it.toString()) }
             OutlinedTextField(comment, { comment = it; onComment(it) }, Modifier.fillMaxWidth(), label = { Text("Комментарий") }, minLines = 2)
             ProductionButton(
                 "Завершить уборку",
                 {
-                    onValue("passesSwept", passesSwept.toString())
-                    onValue("corpseFridge", corpseFridge.toString())
                     onComment(comment.trim())
                     onComplete()
                 },
-                passesSwept,
+                allItemsProcessed,
             )
         }
     }

@@ -27,6 +27,9 @@ interface ProductionTaskApi {
     @POST("api/v1/production/tasks/{id}/targets/{targetId}/complete")
     suspend fun completeTarget(@Header("X-Employee-Id") employeeId: String, @Path("id") taskId: String, @Path("targetId") targetId: String, @Body request: CompleteTargetRequest)
 
+    @POST("api/v1/production/tasks/{id}/checklist/{itemId}/complete")
+    suspend fun completeChecklistItem(@Header("X-Employee-Id") employeeId: String, @Path("id") taskId: String, @Path("itemId") itemId: String)
+
     @POST("api/v1/production/tasks/{id}/targets/{targetId}/problem")
     suspend fun reportTargetCommentProblem(@Header("X-Employee-Id") employeeId: String, @Path("id") taskId: String, @Path("targetId") targetId: String, @Body request: ProductionTargetCommentProblemRequest)
 
@@ -90,6 +93,10 @@ data class ProductionTaskDetailsDto(
 @Serializable
 data class ProductionTargetDto(
     val id: String,
+    val title: String? = null,
+    val description: String? = null,
+    val isRequired: Boolean? = null,
+    val isCompleted: Boolean? = null,
     val targetType: String? = null,
     val targetId: String? = null,
     val targetKind: String? = null,

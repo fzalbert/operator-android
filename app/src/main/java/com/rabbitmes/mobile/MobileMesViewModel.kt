@@ -319,10 +319,21 @@ private fun mortalityRoundKindTitle(targetKind: String): String = when (targetKi
     else -> targetKind
 }
 
+private data class ProductionExecutionItem(
+    val value: ProductionTargetDto,
+    val serverType: String,
+)
+
+private fun ProductionTaskDetailsDto.allExecutionItems(): List<ProductionExecutionItem> =
+    (targets + task.targets).map { ProductionExecutionItem(it, "production-target") }
+        .plus((checklist + task.checkList).map { ProductionExecutionItem(it, "production-checklist") })
+        .distinctBy { it.value.id }
+
 private fun ProductionTaskDetailsDto.allTargets(): List<ProductionTargetDto> =
-    (targets + checklist + task.targets + task.checkList).distinctBy { it.id }
+    allExecutionItems().map { it.value }
 
 private fun ProductionTargetDto.toDisplayLabel(targetType: TargetType): String {
+    title?.trim()?.takeIf { it.isNotBlank() }?.let { return it }
     val code = displayCode?.trim().orEmpty().localizeCellPositions()
     if (targetType == TargetType.CAGE) {
         val cage = cageId?.toString() ?: targetId?.trim().orEmpty()
@@ -390,12 +401,14 @@ private fun ProductionTaskDetailsDto.toMobileTask(employeeId: String): MobileTas
         plannedDurationMinutes = task.durationMinutes ?: 0,
         priority = Priority.NORMAL,
         status = task.executionStatus.orEmpty().toTaskStatus(),
-        checklist = allTargets().sortedBy { it.sortOrder }.map { target ->
+        checklist = allExecutionItems().sortedBy { it.value.sortOrder }.map { executionItem ->
+            val target = executionItem.value
             val targetType = when (target.targetType?.lowercase()) {
                 "cage" -> TargetType.CAGE
                 "hangar" -> TargetType.HANGAR
                 "row" -> TargetType.ROW
-                else -> TargetType.RABBIT
+                "rabbit" -> TargetType.RABBIT
+                else -> MockRepository.operation(operationType).targetType
             }
             ChecklistItem(
                 id = target.id,
@@ -411,8 +424,8 @@ private fun ProductionTaskDetailsDto.toMobileTask(employeeId: String): MobileTas
                 cageId = target.cageId?.toString(),
                 scanIdentifier = target.scanIdentifier?.trim()?.takeIf { it.isNotBlank() }
                     ?: target.displayCode?.trim()?.takeIf { targetType == TargetType.RABBIT && it.isNotBlank() },
-                serverType = "production-target",
-                status = target.status.orEmpty().toChecklistStatus(),
+                serverType = executionItem.serverType,
+                status = if (target.isCompleted == true) ChecklistStatus.DONE else target.status.orEmpty().toChecklistStatus(),
                 result = ExecutionResult(scannedRfid = target.scanIdentifier, completedAt = target.completedAt),
             )
         },
@@ -1129,6 +1142,17 @@ class MobileMesViewModel @Inject constructor(
             }
             OfflineActionType.START_WORK_TASK -> runCatching { workTaskApi.startWorkTask(taskId.toLong()) }
                 .getOrElse { if (it !is HttpException || it.code() != 409) throw it }
+            OfflineActionType.COMPLETE_PRODUCTION_CHECKLIST_ITEM -> productionCall { api ->
+                runCatching {
+                    api.completeChecklistItem(currentEmployee.id, taskId, requireNotNull(payload.itemId))
+                }.getOrElse { error ->
+                    if (error is HttpException && error.code() == 409) {
+                        val item = api.getTask(currentEmployee.id, taskId).toMobileTask(currentEmployee.id)
+                            .checklist.firstOrNull { it.id == payload.itemId }
+                        if (item?.status == ChecklistStatus.PENDING || item == null) throw error
+                    } else throw error
+                }
+            }
             OfflineActionType.COMPLETE_PRODUCTION_TARGET -> productionCall { api ->
                 val noPayload = payload.values["_noPayload"].toBoolean()
                 val result = if (noPayload) null else {
@@ -1799,6 +1823,50 @@ class MobileMesViewModel @Inject constructor(
     ) {
         val task = taskOrNull(taskId) ?: return
         val item = task.checklist.firstOrNull { it.id == itemId }
+        if (item?.serverType == "production-checklist") {
+            if (!shift.isOnline) {
+                enqueueOffline(
+                    taskId,
+                    OfflineActionType.COMPLETE_PRODUCTION_CHECKLIST_ITEM,
+                    OfflineActionPayload(itemId = itemId),
+                )
+                updateChecklistItemLocally(taskId, itemId, ChecklistStatus.DONE, reason, comment, values)
+                lastMessage = "Пункт сохранён офлайн"
+                return
+            }
+            launchServerAction("Complete production checklist item failed", fallbackMessage = "Не удалось отметить пункт") {
+                runCatching {
+                    productionCall { api -> api.completeChecklistItem(currentEmployee.id, taskId, itemId) }
+                }.onSuccess {
+                    Log.d(API_LOG_TAG, "Production checklist item completed. taskId=$taskId itemId=$itemId")
+                    val syncedTask = runCatching {
+                        productionCall { api -> api.getTask(currentEmployee.id, taskId) }.toMobileTask(currentEmployee.id)
+                    }.getOrNull()
+                    if (syncedTask != null) {
+                        tasks = tasks.map { current -> if (current.id == taskId) syncedTask else current }
+                    } else {
+                        updateChecklistItemLocally(taskId, itemId, ChecklistStatus.DONE, reason, comment, values)
+                    }
+                    lastMessage = "Пункт выполнен"
+                }.onFailure { error ->
+                    if (error is HttpException && error.code() == 409) {
+                        val syncedTask = runCatching {
+                            productionCall { api -> api.getTask(currentEmployee.id, taskId) }.toMobileTask(currentEmployee.id)
+                        }.getOrNull()
+                        val syncedItem = syncedTask?.checklist?.firstOrNull { it.id == itemId }
+                        if (syncedTask != null && syncedItem?.status != ChecklistStatus.PENDING) {
+                            updateTask(taskId) { syncedTask }
+                            lastMessage = "Пункт уже выполнен"
+                        } else {
+                            handleError(error, "Не удалось отметить пункт", "Complete production checklist item failed. taskId=$taskId itemId=$itemId")
+                        }
+                    } else {
+                        handleError(error, "Не удалось отметить пункт", "Complete production checklist item failed. taskId=$taskId itemId=$itemId")
+                    }
+                }
+            }
+            return
+        }
         if (item?.serverType == "production-target") {
             val rfid = values["rfid"]?.trim()
             if (
