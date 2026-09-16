@@ -395,7 +395,7 @@ private fun ProductionTaskDetailsDto.toMobileTask(employeeId: String): MobileTas
         operationType = operationType,
         workshopId = task.workshopId.toString(),
         hangarId = task.hangarId?.toString().orEmpty(),
-        assignedEmployeeId = task.assignedEmployeeId ?: employeeId,
+        assignedEmployeeId = task.assignedEmployeeId.orEmpty(),
         dueDate = task.scheduledDate,
         plannedStart = "—",
         plannedDurationMinutes = task.durationMinutes ?: 0,
@@ -792,6 +792,10 @@ class MobileMesViewModel @Inject constructor(
                     }",
                 )
                 productionList
+                    .filter { task ->
+                        task.assignedEmployeeId == currentEmployee.id &&
+                            task.taskType?.lowercase() !in setOf("automation", "scada")
+                    }
                     .map { productionTask ->
                         Log.d(API_LOG_TAG, "Loading production task details. taskId=${productionTask.id}")
                         productionCall { api -> api.getTask(currentEmployee.id, productionTask.id) }
