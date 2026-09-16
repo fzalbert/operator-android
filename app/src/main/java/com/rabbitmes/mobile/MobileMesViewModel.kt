@@ -46,10 +46,13 @@ import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineExceptionHandler
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.supervisorScope
 import com.rabbitmes.mobile.domain.*
 import com.rabbitmes.mobile.ui.operations.PROBLEM_COMMENT_KEY
 import com.rabbitmes.mobile.ui.operations.PROBLEM_REASON_KEY
@@ -791,12 +794,23 @@ class MobileMesViewModel @Inject constructor(
                         }
                     }",
                 )
-                productionList
-                    .map { productionTask ->
-                        Log.d(API_LOG_TAG, "Loading production task details. taskId=${productionTask.id}")
-                        productionCall { api -> api.getTask(currentEmployee.id, productionTask.id) }
-                            .toMobileTask(currentEmployee.id)
-                    }
+                supervisorScope {
+                    productionList.map { productionTask ->
+                        async {
+                            Log.d(API_LOG_TAG, "Loading production task details. taskId=${productionTask.id}")
+                            runCatching {
+                                productionCall { api -> api.getTask(currentEmployee.id, productionTask.id) }
+                                    .toMobileTask(currentEmployee.id)
+                            }.onFailure { error ->
+                                Log.e(
+                                    API_LOG_TAG,
+                                    "Production task details failed: ${error.toHttpDebugMessage()}. taskId=${productionTask.id}",
+                                    error,
+                                )
+                            }.getOrNull()
+                        }
+                    }.awaitAll().filterNotNull()
+                }
             }.onFailure { error ->
                 Log.e(API_LOG_TAG, "Production tasks request failed: ${error.toHttpDebugMessage()}", error)
             }.getOrDefault(emptyList())
