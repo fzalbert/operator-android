@@ -1,13 +1,19 @@
 package com.rabbitmes.mobile.ui.operations
 
 import android.util.Log
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.QrCodeScanner
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.focus.FocusRequester
@@ -15,6 +21,7 @@ import androidx.compose.ui.focus.focusRequester
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import com.rabbitmes.mobile.data.MockRepository
 import com.rabbitmes.mobile.domain.*
 import com.rabbitmes.mobile.ui.components.*
@@ -27,6 +34,110 @@ private val taskSkipReasons = listOf(
     "Не хватает времени смены",
     "Другая причина",
 )
+
+private val UnifiedHeaderGreen = Color(0xFF1F8A5B)
+private val UnifiedHeaderDarkGreen = Color(0xFF0B2F24)
+private val UnifiedHeaderMuted = Color(0xFFD6EEE2)
+
+@Composable
+fun UnifiedTaskHeader(
+    task: MobileTask,
+    onBack: () -> Unit,
+    onBegin: (() -> Unit)? = null,
+    canEdit: Boolean = true,
+    title: String = task.title,
+) {
+    val processedCount = task.checklist.count { it.status != ChecklistStatus.PENDING }
+    Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        Text(
+            "← Назад",
+            color = UnifiedHeaderGreen,
+            fontWeight = FontWeight.ExtraBold,
+            fontSize = 17.sp,
+            modifier = Modifier.padding(vertical = 10.dp).clickable(onClick = onBack),
+        )
+        Column(
+            Modifier.fillMaxWidth()
+                .clip(RoundedCornerShape(26.dp))
+                .background(Brush.linearGradient(listOf(UnifiedHeaderGreen, UnifiedHeaderDarkGreen)))
+                .padding(18.dp),
+        ) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
+            ) {
+                UnifiedPriorityBadge(task.priority)
+                Text(
+                    "${task.plannedStart} · ${task.plannedDurationMinutes} мин",
+                    color = UnifiedHeaderMuted,
+                    fontSize = 13.sp,
+                )
+            }
+            Spacer(Modifier.height(12.dp))
+            Text(
+                title.ifBlank { task.operationTypeTitle },
+                color = Color.White,
+                style = MaterialTheme.typography.headlineSmall,
+                fontWeight = FontWeight.Black,
+            )
+            Spacer(Modifier.height(5.dp))
+            Text(
+                "Обработано $processedCount из ${task.checklist.size}",
+                color = UnifiedHeaderMuted,
+            )
+            if (task.status == TaskStatus.NEW && canEdit && onBegin != null) {
+                Spacer(Modifier.height(14.dp))
+                Button(
+                    onClick = onBegin,
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(16.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = UnifiedHeaderGreen),
+                ) {
+                    Text("Приступить", fontWeight = FontWeight.ExtraBold)
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun UnifiedPriorityBadge(priority: Priority) {
+    val (background, content) = when (priority) {
+        Priority.URGENT -> Color(0xFFFFE4E4) to Color(0xFFB42323)
+        Priority.HIGH -> Color(0xFFFFEDC2) to Color(0xFF804B00)
+        Priority.NORMAL -> Color(0xFFE3F4EB) to Color(0xFF12633F)
+    }
+    Surface(
+        color = background,
+        shape = RoundedCornerShape(99.dp),
+        border = androidx.compose.foundation.BorderStroke(1.dp, content.copy(alpha = 0.28f)),
+    ) {
+        Text(
+            text = priority.title,
+            color = content,
+            fontWeight = FontWeight.ExtraBold,
+            style = MaterialTheme.typography.labelMedium,
+            modifier = Modifier.padding(horizontal = 11.dp, vertical = 6.dp),
+        )
+    }
+}
+
+@Composable
+fun UnifiedReadOnlyNotice() {
+    Surface(
+        color = Color.White,
+        shape = RoundedCornerShape(26.dp),
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Text(
+            "Задача доступна только для просмотра",
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            style = MaterialTheme.typography.bodyLarge,
+            modifier = Modifier.padding(horizontal = 22.dp, vertical = 24.dp),
+        )
+    }
+}
 
 @Composable
 fun TaskExecutionScaffold(
@@ -58,23 +169,6 @@ fun TaskExecutionScaffold(
                 description = checklistDescription,
                 canEdit = canEdit,
             )
-        }
-    }
-
-    val readonlyNotice: @Composable ColumnScope.() -> Unit = {
-        if (!canEdit) {
-            StatusBadge("Только просмотр", MaterialTheme.colorScheme.onSurfaceVariant)
-            Spacer(Modifier.height(MesSpacing.contentGap))
-            Text(
-                "Эту задачу можно посмотреть, но взять в работу получится только после завершения предыдущей задачи.",
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
-        }
-    }
-
-    val startControl: @Composable ColumnScope.() -> Unit = {
-        if (task.status == TaskStatus.NEW) {
-            Button(onClick = onBegin, Modifier.fillMaxWidth()) { Text("Приступить") }
         }
     }
 
@@ -112,39 +206,24 @@ fun TaskExecutionScaffold(
         }
     }
 
-    LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = MesSpacing.screenBottom)) {
-        item { AppHeader(task.title, "${task.plannedStart} · ${task.operationTypeTitle}", onBack) }
-        item {
-            MesCard {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(MesSpacing.smallGap),
-                    verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
-                ) {
-                    TaskStatusBadge(task.status)
-                    StatusBadge("${task.plannedDurationMinutes} мин", operationAccent(task.operationType))
-                    PriorityBadge(task.priority)
-                }
-                if (task.requiresAcceptance) {
-                    Spacer(Modifier.height(MesSpacing.smallGap))
-                    StatusBadge("Приемка", MaterialTheme.colorScheme.tertiary)
-                }
-                if (task.checklist.isNotEmpty()) {
-                    Spacer(Modifier.height(MesSpacing.contentGap))
-                    ProgressLine(task.checklist.count { it.status != ChecklistStatus.PENDING }, task.checklist.size)
-                }
-            }
-        }
+    LazyColumn(
+        Modifier.fillMaxSize().statusBarsPadding(),
+        contentPadding = PaddingValues(
+            start = 18.dp,
+            top = 0.dp,
+            end = 18.dp,
+            bottom = MesSpacing.screenBottom,
+        ),
+        verticalArrangement = Arrangement.spacedBy(10.dp),
+    ) {
+        item { UnifiedTaskHeader(task, onBack, onBegin, canEdit) }
         if (!canEdit) {
-            item { MesCard { readonlyNotice() } }
+            item { UnifiedReadOnlyNotice() }
         }
         if (!checklistAfterContent && task.checklist.isNotEmpty()) {
             item { checklist() }
         }
         if (canEdit) {
-            if (task.status == TaskStatus.NEW) {
-                item { MesCard { startControl() } }
-            }
             item { Column { bottom() } }
             if (!checklistAfterContent) {
                 item { Column { afterChecklist() } }

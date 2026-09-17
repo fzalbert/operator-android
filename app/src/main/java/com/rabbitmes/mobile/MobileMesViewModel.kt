@@ -61,6 +61,11 @@ import retrofit2.HttpException
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonObject
 
 private const val API_LOG_TAG = "RabbitApi"
@@ -500,15 +505,70 @@ private fun String?.toDisplayTime(): String = this
     ?.takeIf(String::isNotBlank)
     ?: "—"
 
-private fun Throwable.toUserMessage(fallback: String): String = when (this) {
-    is HttpException -> "$fallback: ошибка сервера ${code()}"
+internal fun Throwable.toUserMessage(fallback: String): String = when (this) {
+    is HttpException -> toUserMessage(fallback)
     is IOException -> "$fallback: нет соединения с сервером"
     else -> fallback
 }
 
+private fun HttpException.toUserMessage(fallback: String): String {
+    val serverMessage = peekErrorBody()
+        .extractServerErrorMessage()
+        ?.takeIf(String::isSuitableForUser)
+    if (serverMessage != null) return serverMessage
+
+    return when (code()) {
+        400 -> "$fallback. Проверьте введённые данные"
+        401 -> "Сессия истекла. Войдите в приложение снова"
+        403 -> "У вас нет доступа к этому действию"
+        404 -> "$fallback. Данные не найдены или уже недоступны"
+        409 -> "$fallback. Действие уже выполнено или задача находится в другом состоянии"
+        422 -> "$fallback. Проверьте обязательные поля"
+        429 -> "Слишком много запросов. Попробуйте немного позже"
+        in 500..599 -> "Сервис временно недоступен. Попробуйте позже"
+        else -> fallback
+    }
+}
+
+private fun HttpException.peekErrorBody(): String = runCatching {
+    response()?.errorBody()?.source()?.let { source ->
+        source.request(Long.MAX_VALUE)
+        source.buffer.clone().readUtf8()
+    }
+}.getOrNull().orEmpty()
+
+internal fun String.extractServerErrorMessage(): String? {
+    val body = trim()
+    if (body.isBlank()) return null
+    val parsed = runCatching { Json.parseToJsonElement(body) }.getOrNull()
+        ?: return body
+    val objectBody = parsed as? JsonObject ?: return parsed.errorText()
+    return listOf("detail", "message", "error", "errors", "title")
+        .firstNotNullOfOrNull { key -> objectBody[key]?.errorText() }
+}
+
+private fun JsonElement.errorText(): String? = when (this) {
+    is JsonPrimitive -> contentOrNull?.trim()?.takeIf(String::isNotBlank)
+    is JsonArray -> mapNotNull(JsonElement::errorText).distinct().joinToString(". ").takeIf(String::isNotBlank)
+    is JsonObject -> values.mapNotNull(JsonElement::errorText).distinct().joinToString(". ").takeIf(String::isNotBlank)
+}
+
+private fun String.isSuitableForUser(): Boolean {
+    if (length !in 3..300) return false
+    val technicalMarkers = listOf(
+        "exception",
+        "stack trace",
+        "unable to resolve service",
+        "sqlstate",
+        "system.",
+        "npgsql",
+    )
+    return technicalMarkers.none { contains(it, ignoreCase = true) }
+}
+
 private fun Throwable.toHttpDebugMessage(): String = when (this) {
     is HttpException -> {
-        val body = runCatching { response()?.errorBody()?.string() }.getOrNull().orEmpty()
+        val body = peekErrorBody()
         "HTTP ${code()} ${message()}${body.takeIf(String::isNotBlank)?.let { ", body=$it" }.orEmpty()}"
     }
     else -> "${this::class.java.simpleName}: ${message.orEmpty()}"

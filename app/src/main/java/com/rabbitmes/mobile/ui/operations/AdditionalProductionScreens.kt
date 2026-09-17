@@ -64,17 +64,16 @@ private fun ProductionPage(
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         item {
-            OutlinedButton(onClick = onBack) { Text("Назад") }
+            UnifiedTaskHeader(
+                task = task,
+                onBack = onBack,
+                onBegin = onBegin,
+                canEdit = canEdit,
+                title = task.title.ifBlank { title },
+            )
         }
-        item {
-            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                Text(title, color = ProductionText, fontSize = 28.sp, fontWeight = FontWeight.Black)
-                Text(task.description.ifBlank { task.operationTypeTitle }, color = ProductionMuted)
-                if (task.status == TaskStatus.NEW && canEdit) {
-                    Spacer(Modifier.height(6.dp))
-                    ProductionButton("Приступить", onBegin)
-                }
-            }
+        if (!canEdit) {
+            item { UnifiedReadOnlyNotice() }
         }
         if (task.status != TaskStatus.NEW && canEdit) item { content() }
         item { Spacer(Modifier.height(24.dp)) }
