@@ -1,10 +1,12 @@
 package ru.profikrol.operator.data.remote.auth
 
+import android.util.Log
 import okhttp3.Authenticator
 import okhttp3.Interceptor
 import okhttp3.Request
 import okhttp3.Response
 import okhttp3.Route
+import ru.profikrol.operator.BuildConfig
 import ru.profikrol.operator.data.local.SessionStore
 import javax.inject.Inject
 import javax.inject.Named
@@ -22,6 +24,9 @@ class AuthTokenInterceptor @Inject constructor(
 
         val token = sessionStore.currentUser?.token.orEmpty()
         val authorized = if (token.isBlank()) request else {
+            if (BuildConfig.DEBUG) {
+                Log.d(TOKEN_LOG_TAG, "${request.method} ${request.url} Authorization: Bearer $token")
+            }
             request.newBuilder().header(AUTHORIZATION, "Bearer $token").build()
         }
         return chain.proceed(authorized)
@@ -71,6 +76,9 @@ class AccessTokenAuthenticator @Inject constructor(
                 accessTokenExpiresAt = tokens?.expiresAt,
                 refreshTokenExpiresAt = tokens?.refreshTokenExpiresAt,
             )
+            if (BuildConfig.DEBUG) {
+                Log.d(TOKEN_LOG_TAG, "Access token refreshed: Bearer $newAccessToken")
+            }
             return response.request.withBearer(newAccessToken)
         }
     }
@@ -99,4 +107,5 @@ private fun String.looksLikeJwt(): Boolean =
     count { it == '.' } == 2 && split('.').all { it.isNotBlank() }
 
 private const val AUTHORIZATION = "Authorization"
+private const val TOKEN_LOG_TAG = "RabbitAuthToken"
 private const val MAX_RETRIES = 2

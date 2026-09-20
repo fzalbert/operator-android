@@ -264,16 +264,13 @@ fun ScanPanel(
         Text(title, fontWeight = FontWeight.Bold)
         Text("Отсканируйте RFID.", color = MaterialTheme.colorScheme.onSurfaceVariant)
         OutlinedTextField(rfid, { rfid = it; scannedRfid = null }, Modifier.fillMaxWidth(), label = { Text(placeholder) })
-        Row(horizontalArrangement = Arrangement.spacedBy(MesSpacing.smallGap), modifier = Modifier.fillMaxWidth()) {
-            Button(onClick = { onOpenScanner?.invoke() ?: run { scannedRfid = rfid } }, modifier = Modifier.weight(1f)) { Icon(Icons.Default.QrCodeScanner, null); Spacer(Modifier.width(MesSpacing.smallGap)); Text("Скан") }
-            OutlinedButton(
-                onClick = {
-                    val mockRfid = MockRepository.rabbits.first().rfid
-                    rfid = mockRfid
-                    scannedRfid = mockRfid
-                },
-                modifier = Modifier.weight(1f)
-            ) { Text("Mock RFID") }
+        Button(
+            onClick = { onOpenScanner?.invoke() ?: run { scannedRfid = rfid } },
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            Icon(Icons.Default.QrCodeScanner, null)
+            Spacer(Modifier.width(MesSpacing.smallGap))
+            Text("Скан")
         }
         val rabbit = scannedRfid?.let { MockRepository.rabbitByRfid(it) }
         if (rabbit != null) {
@@ -329,17 +326,10 @@ fun CageScanPanel(
             keyboardActions = KeyboardActions(onDone = { if (rfid.isNotBlank()) scannedRfid = rfid.trim() }),
         )
         if (showSelectionButtons) {
-            Row(horizontalArrangement = Arrangement.spacedBy(MesSpacing.smallGap), modifier = Modifier.fillMaxWidth()) {
-                Button(onClick = { onOpenScanner?.invoke() ?: run { scannedRfid = rfid } }, Modifier.weight(1f)) { Text("Выбрать клетку") }
-                OutlinedButton(
-                    onClick = {
-                        val mockRfid = MockRepository.allCages.first().rfid
-                        rfid = mockRfid
-                        scannedRfid = mockRfid
-                    },
-                    Modifier.weight(1f)
-                ) { Text("Mock") }
-            }
+            Button(
+                onClick = { onOpenScanner?.invoke() ?: run { scannedRfid = rfid } },
+                modifier = Modifier.fillMaxWidth(),
+            ) { Text("Выбрать клетку") }
         }
         val cage = scannedRfid?.let { MockRepository.cageByRfid(it) }
         if (cage != null) {

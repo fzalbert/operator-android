@@ -27,7 +27,6 @@ import com.rabbitmes.mobile.ui.components.BottomNav
 import com.rabbitmes.mobile.ui.operations.OperationScreenFactory
 import com.rabbitmes.mobile.ui.screens.*
 import ru.profikrol.operator.feature.auth.AuthScreen
-import ru.profikrol.operator.feature.rfidscan.RfidScanScreen
 import ru.profikrol.operator.feature.rabbitprofile.RabbitProfileScreen
 
 @Composable
@@ -75,7 +74,6 @@ fun RabbitMesApp(vm: MobileMesViewModel) {
             AppScreen.AcceptanceQueue -> vm.navigate(AppScreen.Tasks)
             is AppScreen.Acceptance -> vm.navigate(AppScreen.AcceptanceQueue)
             is AppScreen.TaskExecution -> vm.navigate(AppScreen.Tasks)
-            is AppScreen.RfidScan -> vm.navigate(AppScreen.TaskExecution(screen.taskId))
             is AppScreen.RabbitProfile -> vm.navigate(AppScreen.TaskExecution(screen.taskId))
             is AppScreen.AnimalHistory -> vm.navigate(AppScreen.Tasks)
             AppScreen.Login -> Unit
@@ -122,7 +120,7 @@ fun RabbitMesApp(vm: MobileMesViewModel) {
                     },
                     onOpenRfidScanner = { values ->
                         values.forEach { (key, value) -> vm.updateTaskValue(task.id, key, value) }
-                        vm.navigate(AppScreen.RfidScan(task.id, values))
+                        vm.startRfidScan(task.id, values)
                     },
                     onValue = { key, value -> vm.updateTaskValue(task.id, key, value) },
                     onPhoto = { name, uri -> vm.addPhoto(task.id, name, uri) },
@@ -154,18 +152,6 @@ fun RabbitMesApp(vm: MobileMesViewModel) {
                         canEdit = canEdit,
                     )
                 }
-            }
-            is AppScreen.RfidScan -> {
-                RfidScanScreen(
-                    onBack = {
-                        vm.navigate(AppScreen.TaskExecution(screen.taskId))
-                    },
-                    onScanned = { code ->
-                        vm.rememberScannedRfid(screen.taskId, code, screen.values)
-                        vm.navigate(AppScreen.TaskExecution(screen.taskId))
-                    },
-                    demoRfidCode = vm.nextPendingRfid(screen.taskId),
-                )
             }
             is AppScreen.Acceptance -> {
                 val task = vm.taskOrNull(screen.taskId)

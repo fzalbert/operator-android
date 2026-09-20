@@ -820,16 +820,6 @@ fun ProductionAnimalTransferScreen(
                         Modifier.fillMaxWidth(),
                         secondary = true,
                     )
-                    OutlinedButton(
-                        onClick = {
-                            selectedItemId = pendingItems.firstOrNull()?.id
-                            cellId = ""
-                            hasProblem = false
-                            error = ""
-                        },
-                        modifier = Modifier.fillMaxWidth(),
-                        enabled = pendingItems.isNotEmpty(),
-                    ) { Text("Mock RFID") }
                     if (error.isNotBlank()) Text(error, color = SimpleRed, fontWeight = FontWeight.Bold)
                 }
             }

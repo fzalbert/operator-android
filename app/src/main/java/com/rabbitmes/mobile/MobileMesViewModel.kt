@@ -16,6 +16,7 @@ import ru.profikrol.operator.data.local.offline.OfflineActionPayload
 import ru.profikrol.operator.data.local.offline.OfflineActionType
 import ru.profikrol.operator.data.local.offline.OfflineRepository
 import ru.profikrol.operator.domain.model.UserRole
+import ru.profikrol.operator.domain.nfc.NfcReader
 import ru.profikrol.operator.domain.repository.AuthRepository
 import ru.profikrol.operator.data.remote.profile.ProfileApi
 import ru.profikrol.operator.data.remote.profile.ShiftDto
@@ -99,10 +100,6 @@ sealed class AppScreen {
     data object Notifications : AppScreen()
     data object AcceptanceQueue : AppScreen()
     data class TaskExecution(val taskId: String) : AppScreen()
-    data class RfidScan(
-        val taskId: String,
-        val values: kotlin.collections.Map<String, String> = emptyMap(),
-    ) : AppScreen()
     data class Acceptance(val taskId: String) : AppScreen()
     data class AnimalHistory(val rabbitId: String) : AppScreen()
     data class RabbitProfile(val rfidCode: String, val taskId: String) : AppScreen()
@@ -587,6 +584,7 @@ class MobileMesViewModel @Inject constructor(
     private val rabbitApi: RabbitApi,
     private val cellApi: CellApi,
     private val offlineRepository: OfflineRepository,
+    private val nfcReader: NfcReader,
 ) : ViewModel() {
     private var nextErrorId = 0L
     private val globalErrorHandler = CoroutineExceptionHandler { _, error ->
@@ -618,6 +616,8 @@ class MobileMesViewModel @Inject constructor(
     var lastScannedRfid: String? by mutableStateOf(null)
     private val scannedRfidByTaskId = mutableStateMapOf<String, String>()
     private val scannedValuesByTaskId = mutableStateMapOf<String, Map<String, String>>()
+    private var activeRfidScanTaskId: String? = null
+    private var activeRfidScanValues: Map<String, String> = emptyMap()
     private val mortalityRoundEventsByTaskId = mutableStateMapOf<String, List<ChecklistItem>>()
     private val productionTargetOverridesByTaskId = mutableStateMapOf<String, Map<String, ChecklistItem>>()
     var lastMessage: String? by mutableStateOf(null)
@@ -715,7 +715,13 @@ class MobileMesViewModel @Inject constructor(
         }
     }
 
-    fun navigate(target: AppScreen) { screen = target; lastMessage = null }
+    fun navigate(target: AppScreen) {
+        if (target !is AppScreen.TaskExecution || target.taskId != activeRfidScanTaskId) {
+            stopRfidScan()
+        }
+        screen = target
+        lastMessage = null
+    }
     fun onLoggedInFromSession() {
         val sessionUser = sessionStore.currentUser
         val role = sessionUser?.role
@@ -806,7 +812,31 @@ class MobileMesViewModel @Inject constructor(
                         lastMessage = "Смена завершена"
                     }
                     .onFailure { error ->
-                        handleError(error, "Не удалось закрыть смену", "Close shift failed. reason=$reason")
+                        if (error is HttpException && error.code() == 400) {
+                            runCatching { profileApi.getMyProfile() }
+                                .onSuccess { profile ->
+                                    currentEmployee = currentEmployee.copy(id = profile.employeeId)
+                                    val serverShift = profile.shift.toShiftState(currentEmployee.id, shift)
+                                    if (!serverShift.isOpen()) {
+                                        shift = serverShift
+                                        tasks = emptyList()
+                                        stopTasksAutoRefresh()
+                                        offlineRepository.saveShift(currentEmployee.id, shift)
+                                        lastMessage = "Смена уже завершена"
+                                    } else {
+                                        handleError(error, "Не удалось закрыть смену", "Close shift failed. reason=$reason")
+                                    }
+                                }
+                                .onFailure { profileError ->
+                                    handleError(
+                                        profileError,
+                                        "Не удалось проверить состояние смены",
+                                        "Shift state refresh after close failure failed",
+                                    )
+                                }
+                        } else {
+                            handleError(error, "Не удалось закрыть смену", "Close shift failed. reason=$reason")
+                        }
                     }
             } finally {
                 isShiftActionInProgress = false
@@ -1320,14 +1350,34 @@ class MobileMesViewModel @Inject constructor(
         scannedRfidByTaskId.remove(taskId)
         scannedValuesByTaskId.remove(taskId)
     }
-    fun nextPendingRfid(taskId: String): String? {
-        val item = taskOrNull(taskId)?.checklist?.firstOrNull { it.status == ChecklistStatus.PENDING } ?: return null
-        return when (item.targetType) {
-            TargetType.RABBIT -> MockRepository.rabbit(item.targetId)?.rfid ?: item.targetId
-            TargetType.CAGE -> allCages.firstOrNull { it.id == item.targetId }?.rfid
-            TargetType.ROW,
-            TargetType.HANGAR -> null
+
+    fun startRfidScan(taskId: String, values: Map<String, String> = emptyMap()) {
+        if (!nfcReader.isAvailable) {
+            val message = "NFC недоступен. Включите NFC на устройстве и попробуйте снова"
+            lastMessage = message
+            appError = AppErrorMessage(++nextErrorId, message)
+            return
         }
+
+        activeRfidScanTaskId = taskId
+        activeRfidScanValues = values
+        lastMessage = "Поднесите RFID-метку к устройству"
+        nfcReader.start { payload ->
+            viewModelScope.launch {
+                val activeTaskId = activeRfidScanTaskId ?: return@launch
+                val rfid = payload.value.trim()
+                if (rfid.isBlank()) return@launch
+                rememberScannedRfid(activeTaskId, rfid, activeRfidScanValues)
+                lastMessage = "RFID считан"
+                stopRfidScan()
+            }
+        }
+    }
+
+    private fun stopRfidScan() {
+        nfcReader.stop()
+        activeRfidScanTaskId = null
+        activeRfidScanValues = emptyMap()
     }
     fun canReviewAcceptance() = tasks.any { it.acceptanceRole == currentEmployee.role }
     fun tasksForCurrentEmployee() = if (hasLoadedRemoteTasks) {
@@ -1649,8 +1699,14 @@ class MobileMesViewModel @Inject constructor(
             lastMessage = "Пункт чек-листа уже обработан: ${matchingItem.label}"
             return
         }
-        if (matchingItem.serverType == "production-target") {
-            Log.d("RFID_SETTLEMENT", "Production target selected. taskId=$taskId targetId=${matchingItem.id} rfid=$effectiveRfid")
+        if (
+            matchingItem.serverType == "production-target" ||
+            matchingItem.serverType == "production-checklist"
+        ) {
+            Log.d(
+                "RFID_SETTLEMENT",
+                "Production execution item selected. taskId=$taskId itemId=${matchingItem.id} serverType=${matchingItem.serverType} rfid=$effectiveRfid",
+            )
             completeChecklistItemOnServer(
                 taskId = taskId,
                 itemId = matchingItem.id,
@@ -2456,5 +2512,10 @@ class MobileMesViewModel @Inject constructor(
 
     fun rejectTask(taskId: String, comment: String) {
         lastMessage = "Возврат на доработку пока не поддерживается сервером"
+    }
+
+    override fun onCleared() {
+        stopRfidScan()
+        super.onCleared()
     }
 }
