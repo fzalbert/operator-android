@@ -57,11 +57,11 @@ object MockRepository {
             OperationField("photo", "Фото весов", FieldType.PHOTO)
         ), listOf(RoleId.OPERATOR)),
         OperationDefinition(OperationType.WEIGHING_CAGE, TargetType.CAGE, false, "Сохранить общий вес клетки", listOf(
-            OperationField("totalWeightGrams", "Общий вес клетки", FieldType.NUMBER, true, "г"),
+            OperationField("weightGrams", "Общий вес клетки", FieldType.NUMBER, true, "г"),
             OperationField("photo", "Фото показаний весов", FieldType.PHOTO)
         ), listOf(RoleId.OPERATOR)),
-        OperationDefinition(OperationType.WEIGHING_RABBIT, TargetType.RABBIT, false, "Сохранить вес кролика", listOf(
-            OperationField("weightGrams", "Вес мясного кролика", FieldType.NUMBER, true, "г"),
+        OperationDefinition(OperationType.WEIGHING_RABBIT, TargetType.CAGE, false, "Сохранить веса кроликов", listOf(
+            OperationField("weightsGrams", "Вес мясных кроликов", FieldType.NUMBER, true, "г"),
             OperationField("photo", "Фото показаний весов", FieldType.PHOTO)
         ), listOf(RoleId.OPERATOR)),
         OperationDefinition(OperationType.NEST_PREPARATION, TargetType.CAGE, false, "Гнездо подготовлено", listOf(
@@ -110,7 +110,7 @@ object MockRepository {
         OperationDefinition(OperationType.FIRST_WEIGHING, TargetType.HANGAR, false, "Первое взвешивание завершено", emptyList(), listOf(RoleId.OPERATOR, RoleId.CHIEF_TECHNOLOGIST)),
         OperationDefinition(OperationType.ANIMAL_DEPARTURE, TargetType.HANGAR, false, "Выбытие учтено", listOf(OperationField("count", "Количество", FieldType.NUMBER, true), OperationField("reason", "Причина", FieldType.SELECT, true, options = listOf("Падеж", "Выбраковка", "Перемещение"))), listOf(RoleId.OPERATOR, RoleId.CHIEF_TECHNOLOGIST)),
         OperationDefinition(OperationType.WEANING, TargetType.HANGAR, false, "Отъем завершен", listOf(OperationField("youngCount", "Количество молодняка", FieldType.NUMBER, true)), listOf(RoleId.OPERATOR, RoleId.CHIEF_TECHNOLOGIST)),
-        OperationDefinition(OperationType.SLAUGHTER_SHIPMENT, TargetType.CAGE, false, "Забой завершён", listOf(OperationField("count", "Количество", FieldType.NUMBER, true)), listOf(RoleId.OPERATOR, RoleId.GENERAL_WORKER)),
+        OperationDefinition(OperationType.SLAUGHTER_SHIPMENT, TargetType.CAGE, false, "Забой завершён", listOf(OperationField("animalCount", "Количество животных", FieldType.NUMBER, true)), listOf(RoleId.OPERATOR, RoleId.GENERAL_WORKER)),
         OperationDefinition(OperationType.FEMALE_DELIVERY, TargetType.CAGE, false, "Заселить самку", listOf(OperationField("age", "Возраст, дней", FieldType.NUMBER, true), OperationField("femaleRfid", "RFID самки", FieldType.TEXT, true)), listOf(RoleId.OPERATOR, RoleId.GENERAL_WORKER)),
         OperationDefinition(OperationType.DEWORMING_DOSATRON, TargetType.HANGAR, false, "Дозатрон запущен", listOf(OperationField("drug", "Препарат", FieldType.TEXT, true), OperationField("dosage", "Дозировка", FieldType.TEXT, true)), listOf(RoleId.OPERATOR, RoleId.CHIEF_MECHANIC))
     )

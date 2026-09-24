@@ -98,7 +98,7 @@ fun RabbitMesApp(vm: MobileMesViewModel) {
             AppScreen.Notifications -> NotificationsScreen(vm.notifications, { vm.navigate(AppScreen.Shift) }, vm::markNotificationAsRead, vm::markAllNotificationsAsRead)
             AppScreen.AcceptanceQueue -> AcceptanceQueueScreen(vm.tasksForAcceptance(), { vm.navigate(AppScreen.Acceptance(it)) }, { vm.navigate(AppScreen.Tasks) }, bottom("accept"))
             is AppScreen.TaskExecution -> {
-                val task = vm.taskOrNull(screen.taskId)
+                val task = vm.tasksForCurrentEmployee().firstOrNull { it.id == screen.taskId }
                 if (task == null) {
                     LaunchedEffect(screen.taskId) { vm.navigate(AppScreen.Tasks) }
                     TaskListScreen(vm.tasksForCurrentEmployee(), vm.nextTask(), vm.lastMessage, vm.shift.startedAt != null || vm.tasksForCurrentEmployee().any { it.id.startsWith("mock-") }, { vm.navigate(AppScreen.TaskExecution(it)) }, { vm.navigate(AppScreen.Shift) }, bottom("tasks"))
@@ -136,7 +136,7 @@ fun RabbitMesApp(vm: MobileMesViewModel) {
                     },
                     onComplete = { vm.completeTask(task.id); vm.navigate(AppScreen.Tasks) },
                     onSkip = {
-                        if (task.isGeneral) vm.rejectGeneralTask(task.id, it) else vm.skipTask(task.id, it)
+                        vm.rejectGeneralTask(task.id, it)
                         vm.navigate(AppScreen.Tasks)
                     },
                     onGeneralComplete = { comment ->

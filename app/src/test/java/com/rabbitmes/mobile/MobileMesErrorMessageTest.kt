@@ -51,6 +51,19 @@ class MobileMesErrorMessageTest {
         )
     }
 
+    @Test
+    fun `localizes nest alignment field names from backend`() {
+        val error = httpError(
+            400,
+            """{"detail":"Для выравнивания гнезд нужно указать либо \"added\", либо \"removed\" — одно из двух."}""",
+        )
+
+        assertEquals(
+            "Для выравнивания гнезд нужно указать либо «положили», либо «забрали» — одно из двух.",
+            error.toUserMessage("Не удалось сохранить результат"),
+        )
+    }
+
     private fun httpError(code: Int, body: String): HttpException = HttpException(
         Response.error<Any>(
             code,

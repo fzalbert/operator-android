@@ -19,10 +19,15 @@ import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.HorizontalDivider
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -132,13 +137,15 @@ fun ProductionAnimalTransferTaskScreen(
                 modifier = Modifier.fillMaxWidth(),
             ) { Text("Сканировать RFID") }
             OutlinedTextField(destinationCell, { destinationCell = it }, Modifier.fillMaxWidth(), label = { Text("Клетка назначения") }, singleLine = true)
-            OutlinedTextField(comment, { comment = it }, Modifier.fillMaxWidth(), label = { Text("Комментарий") }, minLines = 2)
+            OutlinedTextField(comment, { comment = it }, Modifier.fillMaxWidth().forceSoftwareKeyboardOnFocus(), label = { Text("Комментарий") }, minLines = 2)
             ProductionButton(
                 "Завершить перевод",
                 {
-                    onValue("rfid", rfid.trim())
+                    val submittedRfid = rfid.trim()
+                    onValue("rfid", submittedRfid)
                     onValue("cellId", destinationCell.trim())
                     onValue("comment", comment.trim())
+                    rfid = ""
                     onComplete()
                 },
                 rfid.isNotBlank() && destinationCell.isNotBlank(),
@@ -179,7 +186,7 @@ fun ProductionCleaningScreen(
             )
         }
         ProductionCard {
-            OutlinedTextField(comment, { comment = it; onComment(it) }, Modifier.fillMaxWidth(), label = { Text("Комментарий") }, minLines = 2)
+            OutlinedTextField(comment, { comment = it; onComment(it) }, Modifier.fillMaxWidth().forceSoftwareKeyboardOnFocus(), label = { Text("Комментарий") }, minLines = 2)
             ProductionButton(
                 "Завершить уборку",
                 {
@@ -220,13 +227,13 @@ fun ProductionLightCheckScreen(
             )
             OutlinedTextField(
                 broken,
-                { broken = it.filter(Char::isDigit); onValue("broken", broken) },
+                { broken = normalizeWholeNumberInput(it); onValue("broken", broken) },
                 Modifier.fillMaxWidth(),
                 label = { Text("Перегоревшие лампы") },
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                 singleLine = true,
             )
-            OutlinedTextField(comment, { comment = it; onComment(it) }, Modifier.fillMaxWidth(), label = { Text("Комментарий") }, minLines = 2)
+            OutlinedTextField(comment, { comment = it; onComment(it) }, Modifier.fillMaxWidth().forceSoftwareKeyboardOnFocus(), label = { Text("Комментарий") }, minLines = 2)
             ProductionButton(
                 "Сохранить проверку",
                 {
@@ -261,43 +268,50 @@ fun ProductionRabbitWeighingScreen(
     canEdit: Boolean,
 ) {
     var openedId by remember(task.id) { mutableStateOf<String?>(null) }
-    var weight by remember(openedId) { mutableStateOf("") }
-    var expandedCageId by remember(task.id) { mutableStateOf<String?>(null) }
-    val cageGroups = task.checklist
-        .groupBy { it.cageId ?: "unknown" }
-        .toList()
-        .sortedBy { (cageId) -> cageId.toLongOrNull() ?: Long.MAX_VALUE }
+    var weights by remember(openedId) { mutableStateOf(listOf("")) }
+    val cageTargets = task.checklist.sortedBy { target ->
+        (target.cageId ?: target.targetId).toLongOrNull() ?: Long.MAX_VALUE
+    }
+    val completedCount = cageTargets.count { it.status != ChecklistStatus.PENDING }
 
     ProductionPage(task, "Взвешивание кролика", onBack, onBegin, canEdit) {
         Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
             Text(
-                "Клеток: ${cageGroups.size} · Кроликов: ${task.checklist.size}",
+                "Клеток: ${cageTargets.size} · Готово: $completedCount",
                 color = ProductionMuted,
                 fontWeight = FontWeight.Bold,
             )
-            cageGroups.forEach { (cageKey, rabbits) ->
-                val expanded = expandedCageId == cageKey
-                val completedCount = rabbits.count { it.status != ChecklistStatus.PENDING }
+            cageTargets.forEach { target ->
+                val opened = openedId == target.id
                 RabbitCageWeightCard(
-                    cageKey = cageKey,
-                    rabbits = rabbits,
-                    expanded = expanded,
-                    completedCount = completedCount,
-                    openedId = openedId,
-                    weight = weight,
+                    target = target,
+                    opened = opened,
+                    weights = weights,
                     onToggle = {
-                        expandedCageId = if (expanded) null else cageKey
+                        openedId = if (opened) null else target.id
+                    },
+                    onWeightChange = { index, value ->
+                        weights = weights.toMutableList().also { it[index] = value }
+                    },
+                    onAddWeight = { weights = weights + "" },
+                    onRemoveWeight = { index ->
+                        weights = weights.filterIndexed { itemIndex, _ -> itemIndex != index }
+                            .ifEmpty { listOf("") }
+                    },
+                    onDone = {
+                        val validWeights = weights.mapNotNull(String::toIntOrNull).filter { it > 0 }
+                        onDone(target.id, mapOf("weightsGrams" to validWeights.joinToString(",")))
                         openedId = null
                     },
-                    onOpenedId = { openedId = it },
-                    onWeight = { weight = it },
-                    onDone = onDone,
-                    onProblem = onProblem,
+                    onProblem = {
+                        onProblem(target.id, "Не удалось взвесить", "")
+                        openedId = null
+                    },
                 )
             }
-            if (task.checklist.isNotEmpty() && task.checklist.all { it.status != ChecklistStatus.PENDING }) {
+            if (cageTargets.isNotEmpty() && completedCount == cageTargets.size) {
                 ProductionCard {
-                    Text("Все кролики взвешены", color = ProductionText, fontWeight = FontWeight.Bold)
+                    Text("Все клетки обработаны", color = ProductionText, fontWeight = FontWeight.Bold)
                     ProductionButton("Завершить задачу", onComplete)
                 }
             }
@@ -307,18 +321,18 @@ fun ProductionRabbitWeighingScreen(
 
 @Composable
 private fun RabbitCageWeightCard(
-    cageKey: String,
-    rabbits: List<ChecklistItem>,
-    expanded: Boolean,
-    completedCount: Int,
-    openedId: String?,
-    weight: String,
+    target: ChecklistItem,
+    opened: Boolean,
+    weights: List<String>,
     onToggle: () -> Unit,
-    onOpenedId: (String?) -> Unit,
-    onWeight: (String) -> Unit,
-    onDone: (String, Map<String, String>) -> Unit,
-    onProblem: (String, String, String) -> Unit,
+    onWeightChange: (Int, String) -> Unit,
+    onAddWeight: () -> Unit,
+    onRemoveWeight: (Int) -> Unit,
+    onDone: () -> Unit,
+    onProblem: () -> Unit,
 ) {
+    val completed = target.status != ChecklistStatus.PENDING
+    val enteredWeights = weights.mapNotNull(String::toIntOrNull).filter { it > 0 }
     Card(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(12.dp),
@@ -332,56 +346,62 @@ private fun RabbitCageWeightCard(
         ) {
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                 Text(
-                    rabbits.firstOrNull()?.cageLabel ?: cageKey.takeUnless { it == "unknown" }?.let { "Клетка $it" } ?: "Клетка не указана",
+                    target.cageLabel ?: target.label,
                     color = ProductionText,
                     fontSize = 18.sp,
                     fontWeight = FontWeight.Black,
                 )
                 Text(
-                    "Кроликов: ${rabbits.size} · Готово: $completedCount",
+                    when {
+                        completed -> "Взвешивание завершено"
+                        target.rabbitCount != null -> "Мясных кроликов в клетке: ${target.rabbitCount}"
+                        else -> "Введите результаты взвешивания"
+                    },
                     color = ProductionMuted,
                     fontSize = 13.sp,
                     fontWeight = FontWeight.Bold,
                 )
             }
-            Text(if (expanded) "Скрыть  ▲" else "Открыть  ▼", color = ProductionGreen, fontWeight = FontWeight.Bold)
+            if (!completed) {
+                Text(if (opened) "Скрыть  ▲" else "Открыть  ▼", color = ProductionGreen, fontWeight = FontWeight.Bold)
+            }
         }
-        if (expanded) {
+        if (opened && !completed) {
             HorizontalDivider(color = Color(0xFFE0E8E4))
             Column(Modifier.fillMaxWidth().padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                rabbits.forEachIndexed { index, target ->
-                    val opened = openedId == target.id
-                    val completed = target.status != ChecklistStatus.PENDING
-                    Column(
-                        Modifier.fillMaxWidth().background(Color(0xFFF6F9F7), RoundedCornerShape(8.dp)).padding(12.dp),
-                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                weights.forEachIndexed { index, weight ->
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        Row(Modifier.fillMaxWidth(), Arrangement.SpaceBetween, Alignment.CenterVertically) {
-                            Text("Кролик ${index + 1}", color = ProductionText, fontWeight = FontWeight.Bold)
-                            Text(if (completed) "Готово" else "Ожидает", color = if (completed) ProductionGreen else ProductionMuted, fontSize = 13.sp)
-                        }
-                        if (!completed && opened) {
-                            OutlinedTextField(
-                                weight,
-                                { onWeight(it.filter(Char::isDigit)) },
-                                Modifier.fillMaxWidth(),
-                                label = { Text("Вес кролика, г") },
-                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                                singleLine = true,
-                            )
-                            ProductionButton("Сохранить вес", {
-                                onDone(target.id, mapOf("weightGrams" to weight))
-                                onOpenedId(null)
-                            }, weight.toIntOrNull()?.let { it > 0 } == true)
-                            OutlinedButton({ onProblem(target.id, "Не удалось взвесить", ""); onOpenedId(null) }, Modifier.fillMaxWidth()) {
-                                Text("Не удалось взвесить", color = ProductionProblem)
-                            }
-                        } else if (!completed) {
-                            OutlinedButton(onClick = { onOpenedId(target.id) }, modifier = Modifier.fillMaxWidth()) {
-                                Text("Ввести вес")
+                        OutlinedTextField(
+                            value = weight,
+                            onValueChange = { onWeightChange(index, normalizeWholeNumberInput(it)) },
+                            modifier = Modifier.weight(1f),
+                            label = { Text("Кролик ${index + 1}, г") },
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                            singleLine = true,
+                        )
+                        if (weights.size > 1) {
+                            IconButton(onClick = { onRemoveWeight(index) }) {
+                                Icon(Icons.Default.Delete, contentDescription = "Удалить вес кролика ${index + 1}")
                             }
                         }
                     }
+                }
+                OutlinedButton(onClick = onAddWeight, modifier = Modifier.fillMaxWidth()) {
+                    Icon(Icons.Default.Add, contentDescription = null)
+                    Spacer(Modifier.padding(horizontal = 4.dp))
+                    Text("Добавить кролика")
+                }
+                ProductionButton(
+                    label = "Сохранить веса (${enteredWeights.size})",
+                    onClick = onDone,
+                    enabled = enteredWeights.isNotEmpty() && enteredWeights.size == weights.size,
+                )
+                OutlinedButton(onClick = onProblem, modifier = Modifier.fillMaxWidth()) {
+                    Text("Не удалось взвесить", color = ProductionProblem)
                 }
             }
         }

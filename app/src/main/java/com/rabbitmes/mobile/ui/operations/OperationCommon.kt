@@ -1,6 +1,9 @@
 package com.rabbitmes.mobile.ui.operations
 
+import android.content.Context
 import android.util.Log
+import android.view.MotionEvent
+import android.view.inputmethod.InputMethodManager
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -11,6 +14,7 @@ import androidx.compose.material.icons.filled.QrCodeScanner
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.ExperimentalComposeUiApi
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -18,6 +22,10 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.onFocusChanged
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
+import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.input.pointer.pointerInteropFilter
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.ui.unit.dp
@@ -26,6 +34,8 @@ import com.rabbitmes.mobile.data.MockRepository
 import com.rabbitmes.mobile.domain.*
 import com.rabbitmes.mobile.ui.components.*
 import ru.profikrol.operator.uikit.theme.mobileSuccessGreen
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 
 private val taskSkipReasons = listOf(
     "Нет доступа к объекту",
@@ -38,6 +48,40 @@ private val taskSkipReasons = listOf(
 private val UnifiedHeaderGreen = Color(0xFF1F8A5B)
 private val UnifiedHeaderDarkGreen = Color(0xFF0B2F24)
 private val UnifiedHeaderMuted = Color(0xFFD6EEE2)
+
+internal fun normalizeWholeNumberInput(value: String, maxLength: Int = Int.MAX_VALUE): String {
+    val digits = value.filter(Char::isDigit).take(maxLength)
+    if (digits.isEmpty()) return ""
+    return digits.trimStart('0').ifEmpty { "0" }
+}
+
+@Suppress("DEPRECATION")
+@OptIn(ExperimentalComposeUiApi::class)
+@Composable
+internal fun Modifier.forceSoftwareKeyboardOnFocus(): Modifier {
+    val keyboardController = LocalSoftwareKeyboardController.current
+    val view = LocalView.current
+    val scope = rememberCoroutineScope()
+
+    fun showKeyboard() {
+        scope.launch {
+            listOf(50L, 150L, 300L).forEach { delayMs ->
+                delay(delayMs)
+                keyboardController?.show()
+                val inputMethodManager = view.context
+                    .getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager
+                inputMethodManager.showSoftInput(view, InputMethodManager.SHOW_FORCED)
+            }
+        }
+    }
+
+    return onFocusChanged { state ->
+        if (state.isFocused) showKeyboard()
+    }.pointerInteropFilter { event ->
+        if (event.action == MotionEvent.ACTION_UP) showKeyboard()
+        false
+    }
+}
 
 @Composable
 fun UnifiedTaskHeader(
@@ -282,7 +326,15 @@ fun ScanPanel(
         }
         if (scannedRfid != null) {
             Spacer(Modifier.height(MesSpacing.contentGap))
-            Button(onClick = { onScan(scannedRfid!!) }, Modifier.fillMaxWidth()) { Text("Выполнено") }
+            Button(
+                onClick = {
+                    val submittedRfid = scannedRfid ?: return@Button
+                    rfid = ""
+                    scannedRfid = null
+                    onScan(submittedRfid)
+                },
+                modifier = Modifier.fillMaxWidth(),
+            ) { Text("Выполнено") }
         }
     }
 }
@@ -347,8 +399,11 @@ fun CageScanPanel(
         if (scannedRfid != null) {
             Spacer(Modifier.height(MesSpacing.contentGap))
             Button(onClick = {
-                Log.d("RabbitSettlement", "RFID confirmed in settlement UI. rfid=$scannedRfid")
-                onScan(scannedRfid!!)
+                val submittedRfid = scannedRfid ?: return@Button
+                Log.d("RabbitSettlement", "RFID confirmed in settlement UI. rfid=$submittedRfid")
+                rfid = ""
+                scannedRfid = null
+                onScan(submittedRfid)
             }, Modifier.fillMaxWidth()) { Text("Выполнено") }
         }
     }
@@ -445,7 +500,7 @@ fun ChecklistExecutionBlock(
                         OutlinedTextField(
                             value = comment,
                             onValueChange = { comment = it },
-                            modifier = Modifier.fillMaxWidth(),
+                            modifier = Modifier.fillMaxWidth().forceSoftwareKeyboardOnFocus(),
                             label = { Text("Опишите проблему или причину пропуска") },
                             minLines = 3,
                         )
@@ -497,7 +552,7 @@ fun ProblemAndMediaControls(
         }
         if (hasRemarks) {
             Spacer(Modifier.height(MesSpacing.smallGap))
-            OutlinedTextField(comment, { comment = it; onComment(it) }, Modifier.fillMaxWidth(), label = { Text("Комментарий исполнителя") })
+            OutlinedTextField(comment, { comment = it; onComment(it) }, Modifier.fillMaxWidth().forceSoftwareKeyboardOnFocus(), label = { Text("Комментарий исполнителя") })
             Spacer(Modifier.height(MesSpacing.contentGap))
             AttachmentPickerButtons(onAttachment = { type, name, uri ->
                 when (type) {

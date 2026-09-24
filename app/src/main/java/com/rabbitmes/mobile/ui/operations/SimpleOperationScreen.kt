@@ -9,17 +9,21 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -362,7 +366,7 @@ fun ProductionAnimalSettlementScreen(
                         SimpleSectionTitle("Данные кролика")
                         OutlinedTextField(
                             value = ageDays,
-                            onValueChange = { value -> ageDays = value.filter(Char::isDigit) },
+                            onValueChange = { value -> ageDays = normalizeWholeNumberInput(value) },
                             modifier = Modifier.fillMaxWidth(),
                             label = { Text("Возраст, дней") },
                             supportingText = { Text("Например: 10, 210 или 730") },
@@ -452,8 +456,8 @@ fun ProductionNestAlignmentScreen(
     canEdit: Boolean,
 ) {
     var openedItemId by remember(task.id) { mutableStateOf<String?>(null) }
-    var alive by remember(task.id) { mutableStateOf("") }
-    var stillborn by remember(task.id) { mutableStateOf("") }
+    var alive by remember(task.id) { mutableStateOf("0") }
+    var stillborn by remember(task.id) { mutableStateOf("0") }
     var movement by remember(task.id) { mutableStateOf("") }
     var movementType by remember(task.id) { mutableStateOf("removed") }
     var validationError by remember(task.id) { mutableStateOf("") }
@@ -464,8 +468,8 @@ fun ProductionNestAlignmentScreen(
 
     fun openItem(itemId: String?) {
         openedItemId = itemId
-        alive = ""
-        stillborn = ""
+        alive = "0"
+        stillborn = "0"
         movement = ""
         movementType = "removed"
         validationError = ""
@@ -516,7 +520,14 @@ fun ProductionNestAlignmentScreen(
                     SimpleCard {
                         Row(Modifier.fillMaxWidth(), Arrangement.SpaceBetween, Alignment.CenterVertically) {
                             Column(Modifier.weight(1f)) {
-                                Text(selectedItem.label, color = SimpleText, fontSize = 21.sp, fontWeight = FontWeight.Black)
+                                Text(
+                                    text = selectedItem.label.readableTargetLabel(),
+                                    color = SimpleText,
+                                    fontSize = 18.sp,
+                                    fontWeight = FontWeight.Black,
+                                    maxLines = 2,
+                                    overflow = TextOverflow.Ellipsis,
+                                )
                                 Text("Результат по клетке", color = SimpleMuted, fontSize = 13.sp)
                             }
                             IconButton(onClick = { openItem(null) }) {
@@ -533,7 +544,7 @@ fun ProductionNestAlignmentScreen(
                         ) {
                             OutlinedTextField(
                                 value = alive,
-                                onValueChange = { alive = it.filter(Char::isDigit).take(4) },
+                                onValueChange = { alive = normalizeWholeNumberInput(it, maxLength = 4) },
                                 modifier = Modifier.width(82.dp),
                                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                                 singleLine = true,
@@ -545,7 +556,7 @@ fun ProductionNestAlignmentScreen(
                         ) {
                             OutlinedTextField(
                                 value = stillborn,
-                                onValueChange = { stillborn = it.filter(Char::isDigit).take(4) },
+                                onValueChange = { stillborn = normalizeWholeNumberInput(it, maxLength = 4) },
                                 modifier = Modifier.width(82.dp),
                                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                                 singleLine = true,
@@ -564,12 +575,18 @@ fun ProductionNestAlignmentScreen(
                             )
                             OutlinedTextField(
                                 value = movement,
-                                onValueChange = { movement = it.filter(Char::isDigit).take(4) },
+                                onValueChange = { movement = normalizeWholeNumberInput(it, maxLength = 4) },
                                 modifier = Modifier.width(82.dp),
                                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                                placeholder = { Text("0") },
                                 singleLine = true,
                             )
                         }
+                        Text(
+                            "Если крольчат не перемещали, оставьте поле пустым или укажите 0.",
+                            color = SimpleMuted,
+                            fontSize = 12.sp,
+                        )
                         if (validationError.isNotBlank()) {
                             Text(validationError, color = SimpleRed, fontWeight = FontWeight.Bold)
                         }
@@ -578,18 +595,17 @@ fun ProductionNestAlignmentScreen(
                             onClick = {
                                 val aliveValue = alive.toIntOrNull()
                                 val stillbornValue = stillborn.toLongOrNull()
-                                val movementValue = movement.toLongOrNull()
-                                if (aliveValue == null || stillbornValue == null || movementValue == null) {
-                                    validationError = "Заполните все числовые поля"
+                                val movementValue = movement.toLongOrNull() ?: 0L
+                                if (aliveValue == null || stillbornValue == null) {
+                                    validationError = "Укажите количество живых и мертворождённых"
                                 } else {
                                     onChecklistDoneWithValues(
                                         selectedItem.id,
-                                        mapOf(
-                                            "alive" to aliveValue.toString(),
-                                            "stillborn" to stillbornValue.toString(),
-                                            "removed" to if (movementType == "removed") movementValue.toString() else "0",
-                                            "added" to if (movementType == "added") movementValue.toString() else "0",
-                                        ),
+                                        buildMap {
+                                            put("alive", aliveValue.toString())
+                                            put("stillborn", stillbornValue.toString())
+                                            put(movementType, movementValue.toString())
+                                        },
                                     )
                                     openItem(null)
                                 }
@@ -615,7 +631,14 @@ fun ProductionNestAlignmentScreen(
                                 Alignment.CenterVertically,
                             ) {
                                 Column(Modifier.weight(1f)) {
-                                    Text(item.label, color = SimpleText, fontSize = 17.sp, fontWeight = FontWeight.Bold)
+                                    Text(
+                                        text = item.label.readableTargetLabel(),
+                                        color = SimpleText,
+                                        fontSize = 17.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        maxLines = 2,
+                                        overflow = TextOverflow.Ellipsis,
+                                    )
                                     Text(item.status.title, color = if (item.status == ChecklistStatus.PENDING) SimpleMuted else SimpleGreen, fontSize = 13.sp)
                                 }
                                 if (item.status == ChecklistStatus.PENDING) {
@@ -726,17 +749,16 @@ fun ProductionAnimalTransferScreen(
         ?.options
         .orEmpty()
         .filterNot { it.startsWith("Выберите", ignoreCase = true) }
-        .ifEmpty {
-            MockRepository.allCages
-                .filterNot { it.occupied }
-                .map { it.id }
-        }
     var selectedItemId by remember(task.id) { mutableStateOf<String?>(null) }
     var cellId by remember(task.id) { mutableStateOf("") }
     var hasProblem by remember(task.id) { mutableStateOf(false) }
     var problemReason by remember(task.id) { mutableStateOf("") }
     var problemComment by remember(task.id) { mutableStateOf("") }
     var error by remember(task.id) { mutableStateOf("") }
+    var rfidInput by remember(task.id) { mutableStateOf("") }
+    var keyboardRfid by remember(task.id) { mutableStateOf<String?>(null) }
+    val rfidFocusRequester = remember { FocusRequester() }
+    val effectiveRfid = keyboardRfid ?: scannedRfid
 
     fun resetForm() {
         selectedItemId = null
@@ -744,17 +766,25 @@ fun ProductionAnimalTransferScreen(
         hasProblem = false
         problemReason = ""
         problemComment = ""
+        rfidInput = ""
+        keyboardRfid = null
         error = ""
     }
 
-    LaunchedEffect(scannedRfid, task.checklist) {
-        if (!scannedRfid.isNullOrBlank()) {
-            val scannedRabbit = MockRepository.rabbitByRfid(scannedRfid)
-            val item = pendingItems.firstOrNull { checklistItem ->
-                checklistItem.targetId.equals(scannedRfid, ignoreCase = true) ||
-                    checklistItem.label.contains(scannedRfid, ignoreCase = true) ||
-                    scannedRabbit?.id?.let { checklistItem.targetId.equals(it, ignoreCase = true) } == true
-            } ?: pendingItems.singleOrNull()
+    LaunchedEffect(effectiveRfid, task.checklist) {
+        if (!effectiveRfid.isNullOrBlank()) {
+            rfidInput = effectiveRfid
+            val scannedRabbit = MockRepository.rabbitByRfid(effectiveRfid)
+            val allRabbitItems = task.checklist.filter { it.targetType == TargetType.RABBIT }
+            fun ChecklistItem.matchesScannedRabbit(): Boolean =
+                targetId.equals(effectiveRfid, ignoreCase = true) ||
+                    rabbitId.equals(effectiveRfid, ignoreCase = true) ||
+                    scanIdentifier.equals(effectiveRfid, ignoreCase = true) ||
+                    label.contains(effectiveRfid, ignoreCase = true) ||
+                    scannedRabbit?.id?.let { targetId.equals(it, ignoreCase = true) } == true
+            val item = pendingItems.firstOrNull { it.matchesScannedRabbit() }
+                ?: allRabbitItems.firstOrNull { it.matchesScannedRabbit() }
+                ?: pendingItems.singleOrNull()
             if (item != null) {
                 selectedItemId = item.id
                 cellId = ""
@@ -763,10 +793,11 @@ fun ProductionAnimalTransferScreen(
                 problemComment = ""
                 error = ""
             } else {
-                error = "Кроль с RFID $scannedRfid не найден в этом задании или уже обработан"
+                error = "Кроль с RFID $effectiveRfid не найден в этом задании"
             }
         }
     }
+    LaunchedEffect(Unit) { rfidFocusRequester.requestFocus() }
 
     val selectedItem = task.checklist.firstOrNull { it.id == selectedItemId }
     val selectedRabbit = selectedItem?.let { item ->
@@ -814,8 +845,29 @@ fun ProductionAnimalTransferScreen(
                 SimpleCard {
                     SimpleSectionTitle("Сканирование")
                     Text("Отсканируйте RFID, чтобы открыть карточку кроля из задания.", color = SimpleMuted)
+                    OutlinedTextField(
+                        value = rfidInput,
+                        onValueChange = { raw ->
+                            val cleaned = raw.filterNot { it == '\n' || it == '\r' }
+                            rfidInput = cleaned
+                            keyboardRfid = if (
+                                raw.any { it == '\n' || it == '\r' } && cleaned.isNotBlank()
+                            ) cleaned.trim() else null
+                            error = ""
+                        },
+                        modifier = Modifier.fillMaxWidth().focusRequester(rfidFocusRequester),
+                        label = { Text("RFID кролика") },
+                        placeholder = { Text("Ожидание сканирования…") },
+                        singleLine = true,
+                        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+                        keyboardActions = KeyboardActions(
+                            onDone = {
+                                if (rfidInput.isNotBlank()) keyboardRfid = rfidInput.trim()
+                            },
+                        ),
+                    )
                     SimpleButton(
-                        if (scannedRfid.isNullOrBlank()) "Сканировать RFID" else "Сканировать другого кроля",
+                        if (effectiveRfid.isNullOrBlank()) "Сканировать RFID" else "Сканировать другого кроля",
                         { onOpenScanner(emptyMap()) },
                         Modifier.fillMaxWidth(),
                         secondary = true,
@@ -863,7 +915,7 @@ fun ProductionAnimalTransferScreen(
                                     problemComment = it
                                     error = ""
                                 },
-                                modifier = Modifier.fillMaxWidth(),
+                                modifier = Modifier.fillMaxWidth().forceSoftwareKeyboardOnFocus(),
                                 label = { Text("Комментарий почему не переселили") },
                                 minLines = 3,
                                 shape = RoundedCornerShape(16.dp),
@@ -888,6 +940,7 @@ fun ProductionAnimalTransferScreen(
                                 options = cellOptions,
                                 label = "ID новой клетки",
                                 modifier = Modifier.fillMaxWidth(),
+                                openImmediately = true,
                             )
                             selectedCell?.let { cell ->
                                 SimpleReadonly("Выбранная клетка", "${cell.code} · RFID ${cell.rfid}")
@@ -906,13 +959,14 @@ fun ProductionAnimalTransferScreen(
                                         resetForm()
                                     }
                                     cellId.isBlank() -> error = "Укажите ID новой клетки"
+                                    cellId.productionCellIdOrNull() == null -> error = "Выберите клетку из списка"
                                     else -> {
                                         onChecklistDoneWithValues(
                                             item.id,
                                             mapOf(
                                                 "rabbitId" to item.targetId,
-                                                "rfid" to (selectedRabbit?.rfid ?: scannedRfid.orEmpty()),
-                                                "cellId" to cellId,
+                                                "rfid" to (selectedRabbit?.rfid ?: effectiveRfid.orEmpty()),
+                                                "cellId" to cellId.productionCellIdOrNull().toString(),
                                                 "cellCode" to (selectedCell?.code ?: cellId),
                                             ),
                                         )
@@ -974,6 +1028,10 @@ fun ProductionAnimalTransferScreen(
     }
 }
 
+private fun String.productionCellIdOrNull(): Long? =
+    Regex("(?i)\\bID\\s*(\\d+)").find(this)?.groupValues?.getOrNull(1)?.toLongOrNull()
+        ?: trim().toLongOrNull()
+
 private data class MortalityRoundEventType(
     val code: String,
     val title: String,
@@ -991,6 +1049,11 @@ private val mortalityRoundEventTypes = listOf(
     MortalityRoundEventType("mortality_count", "Погибшие животные", requiresCage = true, requiresCount = true),
     MortalityRoundEventType("female_culling", "Выбраковка самки", requiresRabbit = true),
 )
+
+private fun String?.localizedMortalityRoundEventTitle(): String {
+    if (isNullOrBlank()) return "Есть замечание"
+    return mortalityRoundEventTypes.firstOrNull { it.code.equals(this, ignoreCase = true) }?.title ?: this
+}
 
 @Composable
 fun ProductionMortalityRoundScreen(
@@ -1136,7 +1199,7 @@ fun ProductionMortalityRoundScreen(
                     if (selectedType.code == "nest_control") {
                         OutlinedTextField(
                             value = aliveBorn,
-                            onValueChange = { aliveBorn = it.filter(Char::isDigit); error = "" },
+                            onValueChange = { aliveBorn = normalizeWholeNumberInput(it); error = "" },
                             modifier = Modifier.fillMaxWidth(),
                             label = { Text("Живорождённые") },
                             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
@@ -1145,7 +1208,7 @@ fun ProductionMortalityRoundScreen(
                         )
                         OutlinedTextField(
                             value = stillborn,
-                            onValueChange = { stillborn = it.filter(Char::isDigit); error = "" },
+                            onValueChange = { stillborn = normalizeWholeNumberInput(it); error = "" },
                             modifier = Modifier.fillMaxWidth(),
                             label = { Text("Мертворождённые") },
                             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
@@ -1158,7 +1221,7 @@ fun ProductionMortalityRoundScreen(
                         OutlinedTextField(
                             value = count,
                             onValueChange = {
-                                count = it.filter(Char::isDigit)
+                                count = normalizeWholeNumberInput(it)
                                 error = ""
                             },
                             modifier = Modifier.fillMaxWidth(),
@@ -1174,7 +1237,7 @@ fun ProductionMortalityRoundScreen(
                                 comment = it
                                 error = ""
                             },
-                            modifier = Modifier.fillMaxWidth(),
+                            modifier = Modifier.fillMaxWidth().forceSoftwareKeyboardOnFocus(),
                             label = { Text("Комментарий") },
                             minLines = 3,
                             shape = RoundedCornerShape(16.dp),
@@ -1453,8 +1516,8 @@ private fun NestControlRoundScreen(
                             issues.forEach { issue -> DropdownMenuItem(text = { Text(issue) }, onClick = { selectedIssue = issue; issueMenu = false }) }
                         }
                     }
-                    OutlinedTextField(count, { count = it.filter(Char::isDigit) }, Modifier.fillMaxWidth(), label = { Text("Количество (если применимо)") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number), shape = RoundedCornerShape(16.dp))
-                    OutlinedTextField(comment, { comment = it }, Modifier.fillMaxWidth(), label = { Text("Комментарий") }, minLines = 2, shape = RoundedCornerShape(16.dp))
+                    OutlinedTextField(count, { count = normalizeWholeNumberInput(it) }, Modifier.fillMaxWidth(), label = { Text("Количество (если применимо)") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number), shape = RoundedCornerShape(16.dp))
+                    OutlinedTextField(comment, { comment = it }, Modifier.fillMaxWidth().forceSoftwareKeyboardOnFocus(), label = { Text("Комментарий") }, minLines = 2, shape = RoundedCornerShape(16.dp))
                     if (error.isNotBlank()) Text(error, color = SimpleRed, fontWeight = FontWeight.Bold)
                     SimpleButton("Добавить замечание", {
                         when {
@@ -1499,6 +1562,10 @@ private fun SimpleScanPanel(
     onComment: (String) -> Unit,
     onOpenAnimal: (String) -> Unit,
 ) {
+    var rfidInput by remember(task.id) { mutableStateOf("") }
+    var keyboardRfid by remember(task.id) { mutableStateOf<String?>(null) }
+    var consumedRfid by remember(task.id) { mutableStateOf<String?>(null) }
+    val focusRequester = remember { FocusRequester() }
     val values = remember(task.id) {
         mutableStateMapOf<String, String>().apply {
             definition.fields.filterNot(::isRfidField).forEach { field ->
@@ -1516,16 +1583,46 @@ private fun SimpleScanPanel(
         mutableStateOf(task.result.values[PROBLEM_COMMENT_KEY].orEmpty())
     }
     var error by remember(task.id) { mutableStateOf("") }
+    val effectiveRfid = keyboardRfid
+        ?: scannedRfid?.takeUnless { it.equals(consumedRfid, ignoreCase = true) }
 
     LaunchedEffect(scannedRfid) {
-        if (!scannedRfid.isNullOrBlank()) error = ""
+        if (!scannedRfid.isNullOrBlank()) {
+            rfidInput = scannedRfid
+            keyboardRfid = scannedRfid
+            consumedRfid = null
+            error = ""
+        }
     }
+    LaunchedEffect(Unit) { focusRequester.requestFocus() }
 
     SimpleCard {
         Text("Сканирование RFID", color = SimpleText, fontSize = 20.sp, fontWeight = FontWeight.Black)
         Text("Сканируйте метку объекта, заполните несколько полей и сохраните результат.", color = SimpleMuted, fontSize = 14.sp)
+        OutlinedTextField(
+            value = rfidInput,
+            onValueChange = { raw ->
+                val cleaned = raw.filterNot { it == '\n' || it == '\r' }
+                rfidInput = cleaned
+                consumedRfid = null
+                keyboardRfid = if (
+                    raw.any { it == '\n' || it == '\r' } && cleaned.isNotBlank()
+                ) cleaned.trim() else null
+                error = ""
+            },
+            modifier = Modifier.fillMaxWidth().focusRequester(focusRequester),
+            label = { Text("RFID") },
+            placeholder = { Text("Ожидание сканирования…") },
+            singleLine = true,
+            keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+            keyboardActions = KeyboardActions(
+                onDone = {
+                    if (rfidInput.isNotBlank()) keyboardRfid = rfidInput.trim()
+                },
+            ),
+        )
         SimpleButton(
-            if (scannedRfid.isNullOrBlank()) "Сканировать RFID" else "Сканировать другую метку",
+            if (effectiveRfid.isNullOrBlank()) "Сканировать RFID" else "Сканировать другую метку",
             {
                 onOpenScanner(
                     values.toMap() + mapOf(
@@ -1537,12 +1634,15 @@ private fun SimpleScanPanel(
             Modifier.fillMaxWidth(),
             secondary = true,
         )
-        if (!scannedRfid.isNullOrBlank()) {
+        if (!effectiveRfid.isNullOrBlank()) {
             val scannedRabbitItem = task.checklist.firstOrNull { item ->
                 item.targetType == TargetType.RABBIT &&
-                    item.targetId.equals(scannedRfid, ignoreCase = true)
+                    (item.targetId.equals(effectiveRfid, ignoreCase = true) ||
+                        item.rabbitId.equals(effectiveRfid, ignoreCase = true) ||
+                        item.scanIdentifier.equals(effectiveRfid, ignoreCase = true) ||
+                        item.label.contains(effectiveRfid, ignoreCase = true))
             }
-            SimpleScanStatus(scannedRfid, scannedRabbitItem != null)
+            SimpleScanStatus(effectiveRfid, scannedRabbitItem != null)
             scannedRabbitItem?.let { item ->
                 SimpleReadonly("Самка из задания", item.label)
             }
@@ -1582,12 +1682,16 @@ private fun SimpleScanPanel(
                 val missing = definition.fields.filter { it.required && !isRfidField(it) && values[it.id].isNullOrBlank() }
                 when {
                     hasProblem && problemReason.isBlank() -> error = "Выберите причину замечания"
-                    !hasProblem && scannedRfid.isNullOrBlank() -> error = "Сначала отсканируйте RFID"
+                    !hasProblem && effectiveRfid.isNullOrBlank() -> error = "Сначала отсканируйте RFID"
                     !hasProblem && missing.isNotEmpty() -> error = "Заполните обязательные поля"
                     else -> {
                         if (problemComment.isNotBlank()) onComment(problemComment)
+                        val submittedRfid = effectiveRfid.orEmpty()
+                        consumedRfid = submittedRfid
+                        keyboardRfid = null
+                        rfidInput = ""
                         onScan(
-                            scannedRfid.orEmpty(),
+                            submittedRfid,
                             values.toMap() + mapOf(
                                 PROBLEM_REASON_KEY to if (hasProblem) problemReason else "",
                                 PROBLEM_COMMENT_KEY to if (hasProblem) problemComment else "",
@@ -1707,8 +1811,8 @@ private fun SimpleItemForm(
                     else if (
                         !problem &&
                         definition.type == OperationType.NEST_SELECTION &&
-                        (values["movedCount"]?.toIntOrNull() ?: 0) <= 0
-                    ) error = "Укажите количество крольчат больше нуля"
+                        (values["movedCount"]?.toIntOrNull() ?: 0) < 0
+                    ) error = "Количество крольчат не может быть отрицательным"
                     else if (
                         !problem &&
                         definition.type == OperationType.SLAUGHTER_SHIPMENT &&
@@ -1716,7 +1820,7 @@ private fun SimpleItemForm(
                     ) error = "Укажите количество больше нуля"
                     else if (
                         !problem &&
-                        definition.type == OperationType.WEIGHING &&
+                        definition.type.isCageWeighing() &&
                         (values["weightGrams"]?.toIntOrNull() ?: 0) <= 0
                     ) error = "Укажите вес больше нуля"
                     else onSubmit(values.withAutoCompleteValues(definition), problem, reason, comment)
@@ -1739,27 +1843,67 @@ private fun SimpleStandaloneForm(
 ) {
     val values = remember(task.id) { mutableStateMapOf<String, String>().apply { definition.fields.forEach { put(it.id, task.result.values[it.id] ?: defaultValue(it)) } } }
     var comment by remember(task.id) { mutableStateOf(task.result.comment) }
+    var error by remember(task.id) { mutableStateOf("") }
     var showRejectDialog by remember(task.id) { mutableStateOf(false) }
     var rejectReason by remember(task.id) { mutableStateOf("") }
     var rejectError by remember(task.id) { mutableStateOf(false) }
 
     SimpleCard {
         Text("Выполнение задачи", color = SimpleText, fontSize = 20.sp, fontWeight = FontWeight.Black)
+        definition.fields
+            .filterNot { it.type == FieldType.PHOTO || it.type == FieldType.VIDEO || it.type == FieldType.FILE }
+            .forEach { field ->
+                SimpleField(
+                    field = field,
+                    value = values[field.id].orEmpty(),
+                    onValue = { value ->
+                        val normalizedValue = if (
+                            definition.type == OperationType.SLAUGHTER_SHIPMENT && field.id == "animalCount"
+                        ) {
+                            normalizeWholeNumberInput(value)
+                        } else {
+                            value
+                        }
+                        values[field.id] = normalizedValue
+                        onValue(field.id, normalizedValue)
+                        error = ""
+                    },
+                )
+            }
         OutlinedTextField(
             value = comment,
             onValueChange = {
                 comment = it
                 onComment(it)
             },
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier.fillMaxWidth().forceSoftwareKeyboardOnFocus(),
             label = { Text("Комментарий к задаче") },
             placeholder = { Text("Добавьте результат или пояснение") },
             minLines = 3,
             shape = RoundedCornerShape(16.dp),
         )
+        if (error.isNotBlank()) {
+            Text(error, color = SimpleRed, fontWeight = FontWeight.Bold)
+        }
         SimpleButton(
             "Завершить задачу",
-            { onGeneralComplete(comment.trim()) },
+            {
+                val missing = definition.fields.filter { field ->
+                    field.required &&
+                        field.type != FieldType.PHOTO &&
+                        field.type != FieldType.VIDEO &&
+                        field.type != FieldType.FILE &&
+                        values[field.id].isMissingRequiredValue()
+                }
+                when {
+                    missing.isNotEmpty() -> error = "Заполните обязательные поля"
+                    definition.type.isCageWeighing() &&
+                        (values["weightGrams"]?.toIntOrNull() ?: 0) <= 0 -> {
+                        error = "Укажите вес больше нуля"
+                    }
+                    else -> onGeneralComplete(comment.trim())
+                }
+            },
             Modifier.fillMaxWidth(),
         )
         OutlinedButton(
@@ -1785,7 +1929,7 @@ private fun SimpleStandaloneForm(
                             rejectReason = it
                             rejectError = false
                         },
-                        modifier = Modifier.fillMaxWidth(),
+                        modifier = Modifier.fillMaxWidth().forceSoftwareKeyboardOnFocus(),
                         label = { Text("Причина отклонения") },
                         supportingText = if (rejectError) {
                             { Text("Причина обязательна", color = SimpleRed) }
@@ -1911,7 +2055,7 @@ private fun SimpleProblemBlock(
             OutlinedTextField(
                 value = comment,
                 onValueChange = onComment,
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier.fillMaxWidth().forceSoftwareKeyboardOnFocus(),
                 label = { Text("Комментарий") },
                 placeholder = { Text("Опишите подробности, если необходимо") },
                 minLines = 3,
@@ -1985,8 +2129,10 @@ private fun String.shortAttachmentName(maxLength: Int = 18): String {
     return take(visibleNameLength.coerceAtLeast(8)) + "…" + extension
 }
 
+private fun String.readableTargetLabel(): String = replace('_', ' ')
+
 @Composable private fun SimpleChecklistCard(title: String, subtitle: String, action: String, enabled: Boolean, onClick: () -> Unit) { Card(Modifier.fillMaxWidth().clickable(enabled, onClick = onClick), RoundedCornerShape(18.dp), CardDefaults.cardColors(Color.White), elevation = CardDefaults.cardElevation(4.dp)) { Row(Modifier.padding(14.dp), Arrangement.SpaceBetween, Alignment.CenterVertically) { Column(Modifier.weight(1f)) { Text(title, color = SimpleText, fontWeight = FontWeight.Bold); Text(subtitle, color = SimpleMuted, fontSize = 13.sp) }; Text(action, color = SimpleGreen, fontWeight = FontWeight.ExtraBold) } } }
-@Composable private fun SimpleResultCard(item: ChecklistItem, definition: OperationDefinition) { val problem = item.status == ChecklistStatus.PROBLEM; Card(Modifier.fillMaxWidth(), RoundedCornerShape(18.dp), CardDefaults.cardColors(Color.White), elevation = CardDefaults.cardElevation(4.dp)) { Row { Box(Modifier.width(4.dp).heightIn(min = 100.dp).background(if (problem) SimpleRed else SimpleGreen)); Row(Modifier.weight(1f).padding(14.dp), Arrangement.SpaceBetween, Alignment.CenterVertically) { Column(Modifier.weight(1f)) { Text(item.displayTitle(), color = SimpleText, fontWeight = FontWeight.Bold); Text(item.label, color = SimpleMuted, fontSize = 12.sp); Text(if (problem) item.result.problemReason ?: "Есть замечание" else "Выполнено", color = SimpleMuted); val details = item.result.values.entries.joinToString(" · ") { (key, v) -> "${definition.fields.firstOrNull { it.id == key }?.title ?: key}: ${if (v == "true") "Да" else if (v == "false") "Нет" else v}" }; if (details.isNotBlank()) Text(details, color = SimpleMuted, fontSize = 12.sp) }; SimpleBadge(if (problem) "Проблема" else "OK", if (problem) SimpleRed else SimpleGreen) } } } }
+@Composable private fun SimpleResultCard(item: ChecklistItem, definition: OperationDefinition) { val problem = item.status == ChecklistStatus.PROBLEM; Card(Modifier.fillMaxWidth(), RoundedCornerShape(18.dp), CardDefaults.cardColors(Color.White), elevation = CardDefaults.cardElevation(4.dp)) { Row { Box(Modifier.width(4.dp).heightIn(min = 100.dp).background(if (problem) SimpleRed else SimpleGreen)); Row(Modifier.weight(1f).padding(14.dp), Arrangement.SpaceBetween, Alignment.CenterVertically) { Column(Modifier.weight(1f)) { Text(item.displayTitle(), color = SimpleText, fontWeight = FontWeight.Bold); Text(item.label, color = SimpleMuted, fontSize = 12.sp); Text(if (problem) item.result.problemReason.localizedMortalityRoundEventTitle() else "Выполнено", color = SimpleMuted); val details = item.result.values.entries.joinToString(" · ") { (key, v) -> "${definition.fields.firstOrNull { it.id == key }?.title ?: key}: ${if (v == "true") "Да" else if (v == "false") "Нет" else v}" }; if (details.isNotBlank()) Text(details, color = SimpleMuted, fontSize = 12.sp) }; SimpleBadge(if (problem) "Проблема" else "OK", if (problem) SimpleRed else SimpleGreen) } } } }
 private fun ChecklistItem.displayTitle(): String = when (targetType) {
     TargetType.CAGE -> "Клетка"
     TargetType.RABBIT -> "Кролик"
@@ -2043,6 +2189,9 @@ private fun Map<String, String>.withAutoCompleteValues(definition: OperationDefi
     if (definition.type == OperationType.NEST_PREPARATION) this + ("nestReady" to "true") else this
 
 private fun defaultValue(field: OperationField) = when (field.type) { FieldType.BOOLEAN -> "false"; FieldType.NUMBER, FieldType.TEMPERATURE, FieldType.HOURS -> ""; FieldType.SELECT, FieldType.FEED_TYPE -> field.options.firstOrNull().orEmpty(); else -> "" }
+private fun OperationType.isCageWeighing(): Boolean =
+    this == OperationType.WEIGHING || this == OperationType.WEIGHING_CAGE
+
 private fun String?.isMissingRequiredValue(): Boolean =
     isNullOrBlank() || startsWith("Выберите", ignoreCase = true)
 

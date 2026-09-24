@@ -16,6 +16,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -64,9 +66,28 @@ fun ShiftScreen(
             }
             item {
                 Surface(color = Color.White, shape = RoundedCornerShape(18.dp), shadowElevation = 4.dp, modifier = Modifier.fillMaxWidth().padding(horizontal = 18.dp)) {
-                    Row(Modifier.padding(14.dp, 12.dp), Arrangement.SpaceBetween, Alignment.CenterVertically) {
-                        Text(employee.fullName, fontWeight = FontWeight.Bold, color = Color(0xFF10231B))
-                        Text(employee.role.title, color = Color(0xFF60726A), fontSize = 13.sp)
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(14.dp, 12.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text(
+                            text = employee.fullName,
+                            modifier = Modifier.weight(1f),
+                            color = Color(0xFF10231B),
+                            fontWeight = FontWeight.Bold,
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis,
+                        )
+                        Spacer(Modifier.width(12.dp))
+                        Text(
+                            text = employee.role.title,
+                            modifier = Modifier.widthIn(max = 124.dp),
+                            color = Color(0xFF60726A),
+                            fontSize = 13.sp,
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis,
+                            textAlign = TextAlign.End,
+                        )
                     }
                 }
             }

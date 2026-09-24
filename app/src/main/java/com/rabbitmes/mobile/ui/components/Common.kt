@@ -70,12 +70,16 @@ fun SelectionDropdown(
     options: List<String>,
     label: String,
     modifier: Modifier = Modifier,
+    openImmediately: Boolean = false,
 ) {
     if (options.size > 100) {
-        SearchableSelectionDropdown(value, onValueChange, options, label, modifier)
+        SearchableSelectionDropdown(value, onValueChange, options, label, modifier, openImmediately)
         return
     }
-    var expanded by remember { mutableStateOf(false) }
+    var expanded by remember { mutableStateOf(openImmediately && options.isNotEmpty()) }
+    LaunchedEffect(openImmediately, options) {
+        if (openImmediately && options.isNotEmpty() && value.isBlank()) expanded = true
+    }
     ExposedDropdownMenuBox(
         expanded = expanded,
         onExpandedChange = { expanded = it },
@@ -115,12 +119,16 @@ private fun SearchableSelectionDropdown(
     options: List<String>,
     label: String,
     modifier: Modifier,
+    openImmediately: Boolean,
 ) {
-    var dialogOpen by remember { mutableStateOf(false) }
+    var dialogOpen by remember { mutableStateOf(openImmediately && options.isNotEmpty()) }
     var query by remember { mutableStateOf("") }
+    LaunchedEffect(openImmediately, options) {
+        if (openImmediately && options.isNotEmpty() && value.isBlank()) dialogOpen = true
+    }
     val filteredOptions = remember(options, query) {
         options.asSequence()
-            .filter { query.isBlank() || it.contains(query.trim(), ignoreCase = true) }
+            .filter { query.isBlank() || it.matchesCellSearch(query) }
             .take(100)
             .toList()
     }
@@ -147,26 +155,93 @@ private fun SearchableSelectionDropdown(
     if (dialogOpen) {
         AlertDialog(
             onDismissRequest = { dialogOpen = false },
-            title = { Text(label) },
+            icon = { Icon(Icons.Default.GridView, contentDescription = null, tint = mobileSuccessGreen) },
+            title = {
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text("Выберите клетку", fontWeight = FontWeight.ExtraBold)
+                    Text(
+                        label,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        fontSize = 13.sp,
+                        fontWeight = FontWeight.Normal,
+                    )
+                }
+            },
             text = {
-                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     OutlinedTextField(
                         value = query,
                         onValueChange = { query = it },
-                        label = { Text("Поиск") },
+                        placeholder = { Text("Номер ряда, клетки или ID") },
+                        leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
+                        trailingIcon = {
+                            if (query.isNotBlank()) {
+                                IconButton(onClick = { query = "" }) {
+                                    Icon(Icons.Default.Close, contentDescription = "Очистить поиск")
+                                }
+                            }
+                        },
                         singleLine = true,
+                        shape = RoundedCornerShape(12.dp),
                         modifier = Modifier.fillMaxWidth(),
                     )
-                    LazyColumn(modifier = Modifier.heightIn(max = 420.dp)) {
+                    LazyColumn(
+                        modifier = Modifier.heightIn(max = 460.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp),
+                    ) {
                         filteredOptions.forEach { option ->
                             item(key = option) {
-                                DropdownMenuItem(
-                                    text = { Text(option) },
-                                    onClick = {
+                                val cell = option.toCellSelectionOption()
+                                val selected = option == value
+                                Surface(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clickable {
                                         onValueChange(option)
                                         dialogOpen = false
                                     },
-                                )
+                                    shape = RoundedCornerShape(10.dp),
+                                    color = if (selected) {
+                                        mobileSuccessGreen.copy(alpha = 0.12f)
+                                    } else {
+                                        MaterialTheme.colorScheme.surface
+                                    },
+                                    border = BorderStroke(
+                                        1.dp,
+                                        if (selected) mobileSuccessGreen else MaterialTheme.colorScheme.outlineVariant,
+                                    ),
+                                ) {
+                                    Row(
+                                        Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
+                                        verticalAlignment = Alignment.CenterVertically,
+                                    ) {
+                                        Column(Modifier.weight(1f)) {
+                                            Text(cell.title, fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                                            if (cell.subtitle.isNotBlank()) {
+                                                Text(
+                                                    cell.subtitle,
+                                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                                    fontSize = 13.sp,
+                                                )
+                                            }
+                                        }
+                                        Text(
+                                            cell.id,
+                                            color = mobileSuccessGreen,
+                                            fontWeight = FontWeight.Bold,
+                                            fontSize = 13.sp,
+                                        )
+                                        if (selected) {
+                                            Spacer(Modifier.width(6.dp))
+                                            Icon(
+                                                Icons.Default.CheckCircle,
+                                                contentDescription = "Выбрано",
+                                                tint = mobileSuccessGreen,
+                                                modifier = Modifier.size(20.dp),
+                                            )
+                                        }
+                                    }
+                                }
                             }
                         }
                     }
@@ -178,7 +253,73 @@ private fun SearchableSelectionDropdown(
             confirmButton = {
                 TextButton(onClick = { dialogOpen = false }) { Text("Закрыть") }
             },
+            shape = RoundedCornerShape(20.dp),
+            containerColor = Color.White,
         )
+    }
+}
+
+private data class CellSelectionOption(
+    val title: String,
+    val subtitle: String,
+    val id: String,
+)
+
+private fun String.matchesCellSearch(rawQuery: String): Boolean {
+    val query = rawQuery.trim().lowercase().replace('ё', 'е')
+    if (query.isBlank()) return true
+
+    val parts = split('·').map { it.trim().lowercase().replace('ё', 'е') }
+    val id = parts.firstOrNull { it.startsWith("id ") }?.substringAfter("id ")?.trim()
+    val row = parts.firstOrNull { it.startsWith("ряд ") }?.substringAfter("ряд ")?.trim()
+    val cell = parts.firstOrNull { it.startsWith("клетка ") }?.substringAfter("клетка ")?.trim()
+
+    if (query.all(Char::isDigit)) return cell == query || id == query
+
+    val normalized = parts.joinToString(" ").replace('_', ' ')
+    val tokens = query.replace('_', ' ').split(Regex("\\s+")).filter(String::isNotBlank)
+    val numericTokens = tokens.filter { it.all(Char::isDigit) }
+    val textTokens = tokens.filterNot { it.all(Char::isDigit) }
+
+    val numbersMatch = when {
+        numericTokens.isEmpty() -> true
+        query.contains("id") -> numericTokens.all { it == id }
+        query.contains("ряд") && query.contains("клет") && numericTokens.size >= 2 ->
+            numericTokens[0] == row && numericTokens[1] == cell
+        query.contains("ряд") -> numericTokens.all { it == row }
+        query.contains("клет") -> numericTokens.all { it == cell }
+        numericTokens.size >= 2 -> numericTokens[0] == row && numericTokens[1] == cell
+        else -> numericTokens.all { it == cell || it == id }
+    }
+    return numbersMatch && textTokens.all { token ->
+        token in normalized ||
+            (token.startsWith("верх") && "верх" in normalized) ||
+            (token.startsWith("ниж") && "ниж" in normalized) ||
+            (token.startsWith("лев") && "лев" in normalized) ||
+            (token.startsWith("прав") && "прав" in normalized)
+    }
+}
+
+private fun String.toCellSelectionOption(): CellSelectionOption {
+    val parts = split('·').map(String::trim)
+    val id = parts.firstOrNull()?.takeIf { it.startsWith("ID ", ignoreCase = true) }.orEmpty()
+    val row = parts.firstOrNull { it.startsWith("ряд ", ignoreCase = true) }.orEmpty()
+    val cell = parts.firstOrNull { it.startsWith("клетка ", ignoreCase = true) }.orEmpty()
+    val position = parts.lastOrNull()
+        ?.takeUnless { it == cell || it == row || it == id }
+        ?.replace('_', ' ')
+        .orEmpty()
+        .lowercase()
+        .replaceFirstChar { it.uppercase() }
+    return if (row.isNotBlank() || cell.isNotBlank()) {
+        CellSelectionOption(
+            title = listOf(row, cell).filter(String::isNotBlank).joinToString(" · ")
+                .replaceFirstChar { it.uppercase() },
+            subtitle = position,
+            id = id,
+        )
+    } else {
+        CellSelectionOption(title = this, subtitle = "", id = "")
     }
 }
 

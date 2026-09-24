@@ -78,6 +78,13 @@ private const val RABBITS_PAGE_SIZE = 100
 private const val CELLS_PAGE_SIZE = 100
 private const val USE_GENERAL_TEMPLATE_FOR_ALL_OPERATIONS = false
 private const val START_TASK_STATUS_POLL_ATTEMPTS = 12
+
+internal fun parseWeighingRabbitWeights(rawWeights: String?): List<Int> =
+    rawWeights
+        .orEmpty()
+        .split(',')
+        .mapNotNull { it.trim().toIntOrNull() }
+        .filter { it > 0 }
 private const val START_TASK_STATUS_POLL_DELAY_MS = 500L
 
 private fun String.isProductionTaskId(): Boolean =
@@ -211,6 +218,12 @@ private fun WorkTaskDto.resolveOperationType(): OperationType {
         .map { it.orEmpty().trim() }
         .filter(String::isNotBlank)
     val candidateKeys = candidates.map { it.operationLookupKey() }
+    if (listOf(operationName, name).any { value ->
+            OPERATION_ALIASES[value.orEmpty().operationLookupKey()] == OperationType.ANIMAL_TRANSFER
+        }
+    ) {
+        return OperationType.ANIMAL_TRANSFER
+    }
     val resolved = OPERATION_ALIASES[operationId.orEmpty().operationLookupKey()]
         ?: candidateKeys.firstNotNullOfOrNull(OPERATION_ALIASES::get)
         ?: OperationType.entries.firstOrNull { type ->
@@ -254,6 +267,8 @@ private val OPERATION_ALIASES = mapOf(
     "перевод животных" to OperationType.ANIMAL_TRANSFER,
     "переселение" to OperationType.ANIMAL_TRANSFER,
     "переселение животных" to OperationType.ANIMAL_TRANSFER,
+    "забой" to OperationType.SLAUGHTER_SHIPMENT,
+    "забой отгрузка" to OperationType.SLAUGHTER_SHIPMENT,
     "kindling" to OperationType.OKROL,
     "nest equalization" to OperationType.NEST_SELECTION,
     "female arrival" to OperationType.FEMALE_DELIVERY,
@@ -367,17 +382,22 @@ private fun String.productionIdValue(): String {
 
 private fun MobileTask.productionResultJson(comment: String = result.comment): String = buildJsonObject {
     val fields = MockRepository.operation(operationType).fields.associateBy { it.id }
-    result.values.forEach { (key, value) ->
-        if (value.isBlank()) return@forEach
-        when (fields[key]?.type) {
-            FieldType.BOOLEAN -> put(key, value.toBooleanStrictOrNull() ?: false)
-            FieldType.NUMBER, FieldType.TEMPERATURE, FieldType.HOURS -> {
-                value.toLongOrNull()?.let { put(key, it) }
-                    ?: value.toDoubleOrNull()?.let { put(key, it) }
-                    ?: put(key, value)
+    if (operationType == OperationType.SLAUGHTER_SHIPMENT) {
+        val rawCount = result.values["animalCount"] ?: result.values["count"]
+        rawCount?.toDoubleOrNull()?.toInt()?.let { put("animalCount", it) }
+    } else {
+        result.values.forEach { (key, value) ->
+            if (value.isBlank()) return@forEach
+            when (fields[key]?.type) {
+                FieldType.BOOLEAN -> put(key, value.toBooleanStrictOrNull() ?: false)
+                FieldType.NUMBER, FieldType.TEMPERATURE, FieldType.HOURS -> {
+                    value.toLongOrNull()?.let { put(key, it) }
+                        ?: value.toDoubleOrNull()?.let { put(key, it) }
+                        ?: put(key, value)
+                }
+                FieldType.PHOTO, FieldType.VIDEO, FieldType.FILE -> Unit
+                else -> put(key, value)
             }
-            FieldType.PHOTO, FieldType.VIDEO, FieldType.FILE -> Unit
-            else -> put(key, value)
         }
     }
     if (comment.isNotBlank()) put("comment", comment)
@@ -386,7 +406,11 @@ private fun MobileTask.productionResultJson(comment: String = result.comment): S
 private fun ProductionTaskDetailsDto.toMobileTask(employeeId: String): MobileTask {
     val operationCandidates = listOfNotNull(task.operationCode, task.title, task.description)
     val operationKeys = operationCandidates.map { it.operationLookupKey() }
-    val operationType = operationKeys.firstNotNullOfOrNull(OPERATION_ALIASES::get)
+    val operationType = if (
+        OPERATION_ALIASES[task.title.orEmpty().operationLookupKey()] == OperationType.ANIMAL_TRANSFER
+    ) {
+        OperationType.ANIMAL_TRANSFER
+    } else operationKeys.firstNotNullOfOrNull(OPERATION_ALIASES::get)
         ?: operationKeys.firstNotNullOfOrNull { operationKey ->
             OperationType.entries.firstOrNull { type ->
                 type.name.operationLookupKey() == operationKey ||
@@ -512,7 +536,7 @@ private fun HttpException.toUserMessage(fallback: String): String {
     val serverMessage = peekErrorBody()
         .extractServerErrorMessage()
         ?.takeIf(String::isSuitableForUser)
-    if (serverMessage != null) return serverMessage
+    if (serverMessage != null) return serverMessage.localizeServerFieldNames()
 
     return when (code()) {
         400 -> "$fallback. Проверьте введённые данные"
@@ -526,6 +550,13 @@ private fun HttpException.toUserMessage(fallback: String): String {
         else -> fallback
     }
 }
+
+internal fun String.localizeServerFieldNames(): String = this
+    .replace("\"added\"", "«положили»", ignoreCase = true)
+    .replace("\"removed\"", "«забрали»", ignoreCase = true)
+    .replace(Regex("\\badded\\b", RegexOption.IGNORE_CASE), "«положили»")
+    .replace(Regex("\\bremoved\\b", RegexOption.IGNORE_CASE), "«забрали»")
+    .replace(Regex("\\banimalCount\\b", RegexOption.IGNORE_CASE), "«количество животных»")
 
 private fun HttpException.peekErrorBody(): String = runCatching {
     response()?.errorBody()?.source()?.let { source ->
@@ -772,6 +803,7 @@ class MobileMesViewModel @Inject constructor(
                     .onSuccess { remoteShift ->
                         shift = remoteShift.toShiftState(currentEmployee.id, shift)
                         lastMessage = "Смена открыта"
+                        isShiftActionInProgress = false
                         loadMyTasks()
                         startTasksAutoRefresh()
                     }
@@ -782,6 +814,7 @@ class MobileMesViewModel @Inject constructor(
                                     if (profile.shift?.isOpen == true) {
                                         shift = profile.shift.toShiftState(currentEmployee.id, shift)
                                         lastMessage = "Смена уже открыта"
+                                        isShiftActionInProgress = false
                                         loadMyTasks()
                                         startTasksAutoRefresh()
                                     } else {
@@ -1050,7 +1083,7 @@ class MobileMesViewModel @Inject constructor(
                             } else {
                                 remote
                             }
-                        }
+                        }.withSingleInProgressTask()
                     // A successful API refresh is stronger evidence than the emulator's
                     // network validation flag, which can be false on the farm network.
                     shift = shift.copy(isOnline = true)
@@ -1217,7 +1250,7 @@ class MobileMesViewModel @Inject constructor(
         }
         val cached = offlineRepository.restoreTasks(currentEmployee.id)
         if (cached.isNotEmpty()) {
-            tasks = cached
+            tasks = cached.withSingleInProgressTask()
             hasLoadedRemoteTasks = true
         }
         shift = shift.copy(pendingSyncEvents = offlineRepository.pendingCount(currentEmployee.id))
@@ -1310,6 +1343,14 @@ class MobileMesViewModel @Inject constructor(
                     } else throw error
                 }
             }
+            OfflineActionType.CANCEL_PRODUCTION_TASK -> productionCall { api ->
+                runCatching { api.cancelTask(currentEmployee.id, taskId) }.getOrElse { error ->
+                    if (error is HttpException && error.code() == 409) {
+                        val status = api.getTask(currentEmployee.id, taskId).toMobileTask(currentEmployee.id).status
+                        if (status != TaskStatus.SKIPPED) throw error
+                    } else throw error
+                }
+            }
             OfflineActionType.COMPLETE_WORK_TASK -> {
                 payload.generalSubtaskIds.forEach { workTaskApi.completeWorkSubtask(it, CompleteWorkSubtaskRequest()) }
                 runCatching { workTaskApi.completeWorkTask(taskId.toLong(), CompleteWorkTaskRequest(payload.reason, payload.comment)) }
@@ -1380,14 +1421,14 @@ class MobileMesViewModel @Inject constructor(
         activeRfidScanValues = emptyMap()
     }
     fun canReviewAcceptance() = tasks.any { it.acceptanceRole == currentEmployee.role }
-    fun tasksForCurrentEmployee() = if (hasLoadedRemoteTasks) {
+    fun tasksForCurrentEmployee() = (if (hasLoadedRemoteTasks) {
         tasks
     } else {
         tasks.filter { task ->
             task.assignedEmployeeId == currentEmployee.id &&
                 definition(task.operationType).allowedRoles.contains(currentEmployee.role)
         }
-    }
+    }).withSingleInProgressTask()
     fun tasksForAcceptance() = tasks.filter { it.requiresAcceptance && it.status == TaskStatus.DONE && it.acceptanceStatus == AcceptanceStatus.WAITING && it.acceptanceRole == currentEmployee.role }
     fun nextTask() = tasksForCurrentEmployee().orderedOpenTasks().firstOrNull()
     fun canWorkOnTask(taskId: String): Boolean = nextTask()?.id == taskId
@@ -1522,7 +1563,12 @@ class MobileMesViewModel @Inject constructor(
                             .getOrElse { task.copy(status = TaskStatus.IN_PROGRESS) }
                     }
                         .onSuccess { updated ->
-                            tasks = tasks.map { if (it.id == taskId) updated else it }
+                            val startedTask = if (updated.status == TaskStatus.NEW) {
+                                updated.copy(status = TaskStatus.IN_PROGRESS)
+                            } else {
+                                updated
+                            }
+                            tasks = tasks.map { if (it.id == taskId) startedTask else it }
                             lastMessage = "Задача начата"
                         }
                         .onFailure { error ->
@@ -1603,35 +1649,21 @@ class MobileMesViewModel @Inject constructor(
             lastMessage = "RFID не может быть пустым"
             return
         }
-        if (currentTask.checklist.any { item ->
-                item.status != ChecklistStatus.PENDING &&
-                    (
-                        item.targetId.equals(normalizedRfid, ignoreCase = true) ||
-                            item.rabbitId.equals(normalizedRfid, ignoreCase = true) ||
-                            item.scanIdentifier.equals(normalizedRfid, ignoreCase = true) ||
-                            item.result.scannedRfid.equals(normalizedRfid, ignoreCase = true) ||
-                            item.label.equals(normalizedRfid, ignoreCase = true)
-                        )
-            }
-        ) {
-            lastMessage = "RFID $normalizedRfid уже использован в этой задаче"
-            return
-        }
-        val pendingServerRabbits = currentTask.checklist.filter { item ->
-            item.targetType == TargetType.RABBIT && item.status == ChecklistStatus.PENDING
-        }
+        val serverRabbits = currentTask.checklist.filter { it.targetType == TargetType.RABBIT }
+        val pendingServerRabbits = serverRabbits.filter { it.status == ChecklistStatus.PENDING }
         val scannedRabbitId = rabbitIdForRfid(normalizedRfid)
-        val serverRabbitTarget = pendingServerRabbits.firstOrNull { item ->
-            item.targetType == TargetType.RABBIT &&
-                (
-                    item.targetId.equals(normalizedRfid, ignoreCase = true) ||
-                        item.rabbitId.equals(normalizedRfid, ignoreCase = true) ||
-                        item.scanIdentifier.equals(normalizedRfid, ignoreCase = true) ||
-                        scannedRabbitId?.let { item.targetId.equals(it, ignoreCase = true) } == true ||
-                        item.result.scannedRfid.equals(normalizedRfid, ignoreCase = true) ||
-                        item.label.contains(normalizedRfid, ignoreCase = true)
-                    )
-        } ?: pendingServerRabbits.singleOrNull()
+        fun ChecklistItem.matchesRabbitExactly(): Boolean =
+            targetId.equals(normalizedRfid, ignoreCase = true) ||
+                rabbitId.equals(normalizedRfid, ignoreCase = true) ||
+                scanIdentifier.equals(normalizedRfid, ignoreCase = true) ||
+                result.scannedRfid.equals(normalizedRfid, ignoreCase = true) ||
+                scannedRabbitId?.let { targetId.equals(it, ignoreCase = true) } == true
+
+        val serverRabbitTarget = pendingServerRabbits.firstOrNull { it.matchesRabbitExactly() }
+            ?: serverRabbits.firstOrNull { it.matchesRabbitExactly() }
+            ?: pendingServerRabbits.firstOrNull { it.label.contains(normalizedRfid, ignoreCase = true) }
+            ?: serverRabbits.firstOrNull { it.label.contains(normalizedRfid, ignoreCase = true) }
+            ?: pendingServerRabbits.singleOrNull()
         val productionSettlementTarget = if (currentTask.operationType.isFemaleArrival()) {
             currentTask.checklist.firstOrNull { item ->
                 item.serverType == "production-target" && item.status == ChecklistStatus.PENDING
@@ -1692,11 +1724,6 @@ class MobileMesViewModel @Inject constructor(
                 ).markOffline()
             }
             lastMessage = "RFID сохранен: $effectiveRfid"
-            return
-        }
-        if (matchingItem.status != ChecklistStatus.PENDING) {
-            Log.w("RFID_SETTLEMENT", "Target is not pending. itemId=${matchingItem.id} status=${matchingItem.status}")
-            lastMessage = "Пункт чек-листа уже обработан: ${matchingItem.label}"
             return
         }
         if (
@@ -1956,6 +1983,7 @@ class MobileMesViewModel @Inject constructor(
         comment: String = "",
         values: Map<String, String> = emptyMap(),
     ) {
+        clearScannedRfid(taskId)
         val task = taskOrNull(taskId) ?: return
         val item = task.checklist.firstOrNull { it.id == itemId }
         if (item?.serverType == "production-checklist") {
@@ -2026,17 +2054,19 @@ class MobileMesViewModel @Inject constructor(
                 if (task.operationType == OperationType.NEST_SELECTION) {
                     put("alive", values["alive"]?.toIntOrNull() ?: 0)
                     put("stillborn", values["stillborn"]?.toLongOrNull() ?: 0L)
-                    put("removed", values["removed"]?.toLongOrNull() ?: 0L)
-                    put("added", values["added"]?.toLongOrNull() ?: 0L)
+                    when {
+                        values.containsKey("removed") -> put("removed", values["removed"]?.toLongOrNull() ?: 0L)
+                        values.containsKey("added") -> put("added", values["added"]?.toLongOrNull() ?: 0L)
+                    }
                 } else if (task.operationType == OperationType.SLAUGHTER_SHIPMENT) {
-                    put("count", values["count"]?.toIntOrNull() ?: 0)
+                    put("animalCount", values["animalCount"]?.toIntOrNull() ?: values["count"]?.toIntOrNull() ?: 0)
                 } else if (task.operationType == OperationType.WEIGHING_RABBIT) {
-                    val rabbitOrdinal = item.rabbitId?.toIntOrNull()
-                        ?: item.targetId.substringAfterLast('-').toIntOrNull()
-                        ?: item.label.substringAfterLast(' ').toIntOrNull()
-                    put("rabbitId", requireNotNull(rabbitOrdinal))
-                    put("weightGrams", values["weightGrams"]?.toIntOrNull() ?: 0)
-                } else if (task.operationType == OperationType.WEIGHING) {
+                    val weights = parseWeighingRabbitWeights(values["weightsGrams"])
+                    put("weightsGrams", JsonArray(weights.map(::JsonPrimitive)))
+                } else if (
+                    task.operationType == OperationType.WEIGHING ||
+                    task.operationType == OperationType.WEIGHING_CAGE
+                ) {
                     put("weightGrams", values["weightGrams"]?.toIntOrNull() ?: 0)
                 } else if (task.operationType == OperationType.PALPATION) {
                     put(
@@ -2045,6 +2075,17 @@ class MobileMesViewModel @Inject constructor(
                     )
                 } else if (task.operationType == OperationType.INSEMINATION) {
                     put("inseminated", values["inseminated"]?.toBooleanStrictOrNull() ?: true)
+                } else if (task.operationType == OperationType.ANIMAL_TRANSFER) {
+                    val selectedCell = values["cellId"].orEmpty()
+                    val selectedCellId = serverCells
+                        .firstOrNull { cell ->
+                            cell.displayName.equals(selectedCell, ignoreCase = true) ||
+                                cell.id.toString() == selectedCell.productionIdValue()
+                        }
+                        ?.id
+                        ?: selectedCell.productionIdValue().toLongOrNull()
+                        ?: Regex("(?i)\\bID\\s*(\\d+)").find(selectedCell)?.groupValues?.getOrNull(1)?.toLongOrNull()
+                    selectedCellId?.let { put("cellId", it) }
                 } else {
                     values.filterKeys { it != "rfid" && it != PROBLEM_REASON_KEY && it != PROBLEM_COMMENT_KEY }
                         .forEach { (key, value) -> put(key, value) }
@@ -2097,7 +2138,7 @@ class MobileMesViewModel @Inject constructor(
                                 request = ProductionTargetCommentProblemRequest(comment = targetComment),
                             )
                         } else {
-                            Log.d(API_LOG_TAG, "Sending production target completion. taskId=$taskId targetId=$itemId operation=${task.operationType} noPayload=$completesWithoutPayload")
+                            Log.d(API_LOG_TAG, "Sending production target completion. taskId=$taskId targetId=$itemId operation=${task.operationType} values=$values result=$resultJson noPayload=$completesWithoutPayload")
                             api.completeTarget(
                                 employeeId = currentEmployee.id,
                                 taskId = taskId,
@@ -2332,6 +2373,7 @@ class MobileMesViewModel @Inject constructor(
                         .onSuccess {
                             updateTask(taskId) { current -> current.copy(status = TaskStatus.DONE, checklist = checklist, result = current.result.copy(completedAt = "now")) }
                             lastMessage = "Задача завершена"
+                            loadMyTasks(showLoading = false)
                         }
                         .onFailure { error ->
                             val syncedTask = runCatching {
@@ -2340,6 +2382,7 @@ class MobileMesViewModel @Inject constructor(
                             if (syncedTask?.status == TaskStatus.DONE) {
                                 updateTask(taskId) { syncedTask.copy(checklist = syncedTask.checklist.ifEmpty { checklist }) }
                                 lastMessage = "Задача завершена"
+                                loadMyTasks(showLoading = false)
                             } else {
                                 handleError(error, "Не удалось завершить задачу", "Complete production task failed. taskId=$taskId")
                             }
@@ -2390,6 +2433,7 @@ class MobileMesViewModel @Inject constructor(
                     )
                 }
                 lastMessage = "Задача завершена"
+                loadMyTasks(showLoading = false)
             }.onFailure { error ->
                 if (currentTask.isGeneral && error is HttpException && error.code() == 409) {
                     updateTask(taskId) { current ->
@@ -2409,6 +2453,7 @@ class MobileMesViewModel @Inject constructor(
                     } else {
                         "Задача уже завершена"
                     }
+                    loadMyTasks(showLoading = false)
                 } else {
                     handleError(error, "Не удалось завершить задачу", "Complete work task failed. taskId=$remoteTaskId")
                 }
@@ -2423,7 +2468,48 @@ class MobileMesViewModel @Inject constructor(
         val rejectionComment = commentOverride ?: currentTask.result.comment
         val remoteTaskId = taskId.toLongOrNull()
         if (remoteTaskId == null) {
-            skipTask(taskId, reason)
+            if (!taskId.isProductionTaskId()) {
+                skipTask(taskId, reason)
+                return
+            }
+            updateTask(taskId) { task ->
+                task.copy(result = task.result.copy(problemReason = reason, comment = rejectionComment)).markOffline()
+            }
+            if (!shift.isOnline) {
+                enqueueOffline(
+                    taskId,
+                    OfflineActionType.CANCEL_PRODUCTION_TASK,
+                    OfflineActionPayload(reason = reason, comment = rejectionComment.ifBlank { null }),
+                )
+                updateTask(taskId) { task ->
+                    task.copy(
+                        status = TaskStatus.SKIPPED,
+                        result = task.result.copy(completedAt = "now"),
+                    ).markOffline()
+                }
+                lastMessage = "Отклонение сохранено офлайн"
+                return
+            }
+            launchServerAction("Cancel production task failed", fallbackMessage = "Не удалось отклонить задачу") {
+                runCatching {
+                    productionCall { api -> api.cancelTask(currentEmployee.id, taskId) }
+                }.onSuccess { cancelledTask ->
+                    val syncedTask = cancelledTask.toMobileTask(currentEmployee.id)
+                    updateTask(taskId) { task ->
+                        syncedTask.copy(
+                            status = TaskStatus.SKIPPED,
+                            result = task.result.copy(
+                                problemReason = reason,
+                                comment = rejectionComment,
+                                completedAt = "now",
+                            ),
+                        )
+                    }
+                    lastMessage = "Задача отклонена"
+                }.onFailure { error ->
+                    handleError(error, "Не удалось отклонить задачу", "Cancel production task failed. taskId=$taskId")
+                }
+            }
             return
         }
 

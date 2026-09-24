@@ -32,11 +32,6 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 import java.util.concurrent.TimeUnit
-import java.security.SecureRandom
-import java.security.cert.X509Certificate
-import javax.net.ssl.HostnameVerifier
-import javax.net.ssl.SSLContext
-import javax.net.ssl.X509TrustManager
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -130,14 +125,6 @@ class NotificationRepository @Inject constructor(
 
         if (BuildConfig.NOTIFICATIONS_GRPC_TLS) {
             builder.useTransportSecurity()
-            if (BuildConfig.DEBUG) {
-                // Development endpoint uses a certificate that may not match the IP host.
-                val trustManager = DevelopmentTrustManager
-                val sslContext = SSLContext.getInstance("TLS")
-                sslContext.init(null, arrayOf(trustManager), SecureRandom())
-                builder.sslSocketFactory(sslContext.socketFactory)
-                builder.hostnameVerifier(DevelopmentHostnameVerifier)
-            }
         } else {
             builder.usePlaintext()
         }
@@ -220,15 +207,5 @@ class NotificationRepository @Inject constructor(
         const val MAX_INBOUND_MESSAGE_BYTES = 4 * 1024 * 1024
         const val INITIAL_RETRY_MS = 1_000L
         const val MAX_RETRY_MS = 30_000L
-    }
-
-    private object DevelopmentTrustManager : X509TrustManager {
-        override fun checkClientTrusted(chain: Array<out X509Certificate>?, authType: String?) = Unit
-        override fun checkServerTrusted(chain: Array<out X509Certificate>?, authType: String?) = Unit
-        override fun getAcceptedIssuers(): Array<X509Certificate> = emptyArray()
-    }
-
-    private object DevelopmentHostnameVerifier : HostnameVerifier {
-        override fun verify(hostname: String?, session: javax.net.ssl.SSLSession?): Boolean = true
     }
 }

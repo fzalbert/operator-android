@@ -14,6 +14,25 @@ import com.rabbitmes.mobile.ui.components.*
 
 private const val SHOW_BLUETOOTH_SCALE_BUTTON = false
 
+private fun MobileTask.findRabbitChecklistItem(
+    identifier: String,
+    resolvedRabbitId: String?,
+    pendingOnly: Boolean,
+): ChecklistItem? {
+    val candidates = checklist.filter { item ->
+        item.targetType == TargetType.RABBIT &&
+            (!pendingOnly || item.status == ChecklistStatus.PENDING)
+    }
+    return candidates.firstOrNull { item ->
+        item.targetId.equals(identifier, ignoreCase = true) ||
+            item.rabbitId.equals(identifier, ignoreCase = true) ||
+            item.scanIdentifier.equals(identifier, ignoreCase = true) ||
+            resolvedRabbitId?.let { id -> item.targetId.equals(id, ignoreCase = true) } == true
+    } ?: candidates.firstOrNull { item ->
+        item.label.contains(identifier, ignoreCase = true)
+    }
+}
+
 @Composable
 fun InseminationScreen(
     task: MobileTask,
@@ -55,16 +74,8 @@ fun InseminationScreen(
                 return@LaunchedEffect
             }
             val rabbitId = resolveRabbitId(scannedRfid)
-            val isPending = task.checklist.any {
-                it.targetType == TargetType.RABBIT &&
-                    (it.targetId.equals(scannedRfid, ignoreCase = true) ||
-                        it.rabbitId.equals(scannedRfid, ignoreCase = true) ||
-                        it.scanIdentifier.equals(scannedRfid, ignoreCase = true) ||
-                        rabbitId?.let { id -> it.targetId.equals(id, ignoreCase = true) } == true ||
-                        it.label.contains(scannedRfid, ignoreCase = true)) &&
-                    it.status == ChecklistStatus.PENDING
-            }
-            if (isPending) {
+            val isKnown = task.findRabbitChecklistItem(scannedRfid, rabbitId, pendingOnly = false) != null
+            if (isKnown) {
                 rfidInput = scannedRfid
                 selectedRfid = scannedRfid
             } else if (selectedRfid == scannedRfid) {
@@ -74,16 +85,17 @@ fun InseminationScreen(
         }
     }
 
+    LaunchedEffect(task.checklist, submittedRfid) {
+        if (submittedRfid != null) {
+            rfidInput = ""
+            selectedRfid = null
+        }
+    }
+
     val checklistItem = selectedRfid?.let { selected ->
         val rabbitId = resolveRabbitId(selected)
-        task.checklist.firstOrNull {
-            it.targetType == TargetType.RABBIT &&
-                (it.targetId.equals(selected, ignoreCase = true) ||
-                    it.rabbitId.equals(selected, ignoreCase = true) ||
-                    it.scanIdentifier.equals(selected, ignoreCase = true) ||
-                    rabbitId?.let { id -> it.targetId.equals(id, ignoreCase = true) } == true ||
-                    it.label.contains(selected, ignoreCase = true))
-        }
+        task.findRabbitChecklistItem(selected, rabbitId, pendingOnly = true)
+            ?: task.findRabbitChecklistItem(selected, rabbitId, pendingOnly = false)
     }
     val scannerValues = buildMap {
         if (hasProblem) {
@@ -135,6 +147,13 @@ fun InseminationScreen(
                 Column(verticalArrangement = Arrangement.spacedBy(MesSpacing.contentGap)) {
                     Text("RFID найден: $selected", color = MaterialTheme.colorScheme.primary)
 
+                    if (task.status == TaskStatus.NEW) {
+                        Text(
+                            "Сначала нажмите «Приступить»",
+                            color = MaterialTheme.colorScheme.error,
+                        )
+                    }
+
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.SpaceBetween,
@@ -148,7 +167,7 @@ fun InseminationScreen(
                         OutlinedTextField(
                             value = problemComment,
                             onValueChange = { problemComment = it },
-                            modifier = Modifier.fillMaxWidth(),
+                            modifier = Modifier.fillMaxWidth().forceSoftwareKeyboardOnFocus(),
                             label = { Text("Опишите проблему") },
                             minLines = 3,
                         )
@@ -172,14 +191,15 @@ fun InseminationScreen(
                                 }
                             }
                             submittedRfid = rfid
-                            onScan(rfid, values)
                             rfidInput = ""
                             selectedRfid = null
                             hasProblem = false
                             problemComment = ""
+                            onScan(rfid, values)
                         },
-                        enabled = task.status != TaskStatus.NEW &&
-                            checklistItem?.status == ChecklistStatus.PENDING &&
+                        enabled = canEdit &&
+                            task.status != TaskStatus.NEW &&
+                            checklistItem != null &&
                             (!hasProblem || problemComment.isNotBlank()),
                         modifier = Modifier.fillMaxWidth(),
                     ) {
@@ -223,16 +243,17 @@ fun PalpationScreen(
         }
     }
 
+    LaunchedEffect(task.checklist, submittedRfid) {
+        if (submittedRfid != null) {
+            rfidInput = ""
+            selectedRfid = null
+        }
+    }
+
     val checklistItem = selectedRfid?.let { selected ->
         val rabbitId = resolveRabbitId(selected)
-        task.checklist.firstOrNull {
-            it.targetType == TargetType.RABBIT &&
-                (it.targetId.equals(selected, ignoreCase = true) ||
-                    it.rabbitId.equals(selected, ignoreCase = true) ||
-                    it.scanIdentifier.equals(selected, ignoreCase = true) ||
-                    rabbitId?.let { id -> it.targetId.equals(id, ignoreCase = true) } == true ||
-                    it.label.contains(selected, ignoreCase = true))
-        }
+        task.findRabbitChecklistItem(selected, rabbitId, pendingOnly = true)
+            ?: task.findRabbitChecklistItem(selected, rabbitId, pendingOnly = false)
     }
 
     TaskExecutionScaffold(
@@ -283,21 +304,21 @@ fun PalpationScreen(
                     Button(
                         onClick = {
                             submittedRfid = rfid
-                            onScan(rfid, mapOf("pregnant" to "true", "palpationResult" to "Сукрольная"))
                             rfidInput = ""
                             selectedRfid = null
+                            onScan(rfid, mapOf("pregnant" to "true", "palpationResult" to "Сукрольная"))
                         },
-                        enabled = task.status != TaskStatus.NEW && checklistItem?.status == ChecklistStatus.PENDING,
+                        enabled = canEdit && task.status != TaskStatus.NEW && checklistItem != null,
                         modifier = Modifier.weight(1f),
                     ) { Text("Беременна") }
                     OutlinedButton(
                         onClick = {
                             submittedRfid = rfid
-                            onScan(rfid, mapOf("pregnant" to "false", "palpationResult" to "Не беременна"))
                             rfidInput = ""
                             selectedRfid = null
+                            onScan(rfid, mapOf("pregnant" to "false", "palpationResult" to "Не беременна"))
                         },
-                        enabled = task.status != TaskStatus.NEW && checklistItem?.status == ChecklistStatus.PENDING,
+                        enabled = canEdit && task.status != TaskStatus.NEW && checklistItem != null,
                         modifier = Modifier.weight(1f),
                     ) { Text("Не беременна") }
                 }
@@ -390,7 +411,7 @@ fun WeighingScreen(
                         if (isOpened) {
                             OutlinedTextField(
                                 value = weightGrams,
-                                onValueChange = { weightGrams = it.filter(Char::isDigit) },
+                                onValueChange = { weightGrams = normalizeWholeNumberInput(it) },
                                 modifier = Modifier
                                     .fillMaxWidth()
                                     .padding(top = MesSpacing.smallGap),
@@ -449,7 +470,7 @@ fun CageOperationScreen(title: String, task: MobileTask, scannedRfid: String?, f
     }
     TaskExecutionScaffold(task, onBack, onBegin, onComplete, onSkip, onChecklistDone, onChecklistProblem, onChecklistSkip, allowRootComplete = false, canEdit = canEdit) {
         if (task.operationType != OperationType.ANIMAL_SETTLEMENT) {
-            MesCard { Text(fieldsTitle, fontWeight = FontWeight.Bold); Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) { Text("Готово / норма"); Switch(ok, { ok = it; onValue("ok", it.toString()) }) }; OutlinedTextField(number, { number = it; onValue("count", it) }, Modifier.fillMaxWidth(), label = { Text("Количество / показатель") }) }
+            MesCard { Text(fieldsTitle, fontWeight = FontWeight.Bold); Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) { Text("Готово / норма"); Switch(ok, { ok = it; onValue("ok", it.toString()) }) }; OutlinedTextField(number, { number = normalizeWholeNumberInput(it); onValue("count", number) }, Modifier.fillMaxWidth(), label = { Text("Количество / показатель") }) }
         }
         if (task.operationType == OperationType.ANIMAL_SETTLEMENT) {
             MesCard {

@@ -11,6 +11,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.rabbitmes.mobile.domain.*
 import com.rabbitmes.mobile.ui.components.*
+import com.rabbitmes.mobile.ui.operations.forceSoftwareKeyboardOnFocus
 import ru.profikrol.operator.uikit.theme.mobileSuccessGreen
 
 private val acceptanceProblemReasons = listOf(
@@ -76,7 +77,7 @@ fun AcceptanceScreen(
         item {
             MesCard {
                 Text("Итог приемки", fontWeight = FontWeight.Bold)
-                OutlinedTextField(finalComment, { finalComment = it }, Modifier.fillMaxWidth(), label = { Text("Комментарий проверяющего") })
+                OutlinedTextField(finalComment, { finalComment = it }, Modifier.fillMaxWidth().forceSoftwareKeyboardOnFocus(), label = { Text("Комментарий проверяющего") })
                 Spacer(Modifier.height(MesSpacing.smallGap))
                 if (!hasProblems) {
                     Button(onClick = { onAccept(finalComment) }, Modifier.fillMaxWidth()) { Text("Готово") }
@@ -141,7 +142,7 @@ private fun AcceptanceItemCard(
                         label = "Причина",
                         modifier = Modifier.fillMaxWidth(),
                     )
-                    OutlinedTextField(comment, { comment = it }, Modifier.fillMaxWidth(), label = { Text("Комментарий") })
+                    OutlinedTextField(comment, { comment = it }, Modifier.fillMaxWidth().forceSoftwareKeyboardOnFocus(), label = { Text("Комментарий") })
                     ReviewAttachmentButtons(attachments, onAttachments = { attachments = it })
                     OutlinedButton(onClick = { onRemark(reason, comment, attachments) }, Modifier.fillMaxWidth()) { Text("Сохранить проблему") }
                 }

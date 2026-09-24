@@ -16,6 +16,10 @@
 /.idea/vcs.xml
 /.idea/navEditor.xml
 /.idea/assetWizardSettings.xml
+/.idea/.name
+
+# Locally generated signed APK output
+/app/release/
 
 .DS_Store
 /build
