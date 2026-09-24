@@ -19,20 +19,29 @@ android {
         versionCode = 1
         versionName = "1.0"
 
-        buildConfigField("String", "API_BASE_URL", "\"https://profikrol.org/\"")
-        buildConfigField("String", "PRODUCTION_API_BASE_URL", "\"https://profikrol.org/\"")
-        buildConfigField("String", "API_FALLBACK_HOST", "\"profikrol.org\"")
-        buildConfigField("String", "API_FALLBACK_IP", "\"89.108.94.132\"")
-        buildConfigField("String", "NOTIFICATIONS_GRPC_HOST", "\"profikrol.org\"")
-        buildConfigField("int", "NOTIFICATIONS_GRPC_PORT", "7069")
-        buildConfigField("boolean", "NOTIFICATIONS_GRPC_TLS", "true")
         buildConfigField("boolean", "SHOW_RABBIT_INFO_CARDS", "true")
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
     buildTypes {
+        debug {
+            buildConfigField("String", "API_BASE_URL", "\"http://195.58.153.25:5216/\"")
+            buildConfigField("String", "PRODUCTION_API_BASE_URL", "\"http://195.58.153.25:55915/\"")
+            buildConfigField("String", "API_FALLBACK_HOST", "\"\"")
+            buildConfigField("String", "API_FALLBACK_IP", "\"\"")
+            buildConfigField("String", "NOTIFICATIONS_GRPC_HOST", "\"195.58.153.25\"")
+            buildConfigField("int", "NOTIFICATIONS_GRPC_PORT", "5216")
+            buildConfigField("boolean", "NOTIFICATIONS_GRPC_TLS", "true")
+        }
         release {
+            buildConfigField("String", "API_BASE_URL", "\"https://profikrol.org/\"")
+            buildConfigField("String", "PRODUCTION_API_BASE_URL", "\"https://profikrol.org/\"")
+            buildConfigField("String", "API_FALLBACK_HOST", "\"profikrol.org\"")
+            buildConfigField("String", "API_FALLBACK_IP", "\"89.108.94.132\"")
+            buildConfigField("String", "NOTIFICATIONS_GRPC_HOST", "\"profikrol.org\"")
+            buildConfigField("int", "NOTIFICATIONS_GRPC_PORT", "7069")
+            buildConfigField("boolean", "NOTIFICATIONS_GRPC_TLS", "true")
             isMinifyEnabled = false
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
