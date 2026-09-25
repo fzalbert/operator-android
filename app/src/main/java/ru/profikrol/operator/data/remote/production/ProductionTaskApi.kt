@@ -42,8 +42,6 @@ interface ProductionTaskApi {
     @POST("api/v1/production/tasks/{id}/complete")
     suspend fun completeTask(@Header("X-Employee-Id") employeeId: String, @Path("id") taskId: String)
 
-    @POST("api/v1/production/tasks/{id}/cancel")
-    suspend fun cancelTask(@Header("X-Employee-Id") employeeId: String, @Path("id") taskId: String): ProductionTaskDetailsDto
 }
 
 @Serializable

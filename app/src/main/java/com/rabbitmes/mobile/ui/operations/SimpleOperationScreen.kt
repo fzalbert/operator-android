@@ -1816,7 +1816,7 @@ private fun SimpleItemForm(
                     else if (
                         !problem &&
                         definition.type == OperationType.SLAUGHTER_SHIPMENT &&
-                        (values["count"]?.toIntOrNull() ?: 0) <= 0
+                        ((values["animalCount"] ?: values["count"])?.toIntOrNull() ?: 0) <= 0
                     ) error = "Укажите количество больше нуля"
                     else if (
                         !problem &&
@@ -1994,7 +1994,20 @@ private fun SimpleField(
         FieldType.PHOTO, FieldType.VIDEO, FieldType.FILE -> SimpleButton(if (value.isBlank()) field.title else "Добавлено: $value", { onValue("Добавлено") }, Modifier.fillMaxWidth(), secondary = true)
         else -> Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
             Text(field.title + (field.unit?.let { ", $it" } ?: ""), color = SimpleMuted, fontWeight = FontWeight.Bold, fontSize = 13.sp)
-            OutlinedTextField(value, onValue, Modifier.fillMaxWidth(), placeholder = { Text(field.placeholder) }, shape = RoundedCornerShape(16.dp), keyboardOptions = KeyboardOptions(keyboardType = if (field.type == FieldType.NUMBER || field.type == FieldType.TEMPERATURE || field.type == FieldType.HOURS) KeyboardType.Decimal else KeyboardType.Text))
+            OutlinedTextField(
+                value = value,
+                onValueChange = onValue,
+                modifier = Modifier.fillMaxWidth().forceSoftwareKeyboardOnFocus(),
+                placeholder = { Text(field.placeholder) },
+                shape = RoundedCornerShape(16.dp),
+                keyboardOptions = KeyboardOptions(
+                    keyboardType = if (
+                        field.type == FieldType.NUMBER ||
+                        field.type == FieldType.TEMPERATURE ||
+                        field.type == FieldType.HOURS
+                    ) KeyboardType.Decimal else KeyboardType.Text,
+                ),
+            )
         }
     }
 }

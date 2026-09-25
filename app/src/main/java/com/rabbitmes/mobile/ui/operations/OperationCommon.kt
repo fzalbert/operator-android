@@ -65,12 +65,16 @@ internal fun Modifier.forceSoftwareKeyboardOnFocus(): Modifier {
 
     fun showKeyboard() {
         scope.launch {
-            listOf(50L, 150L, 300L).forEach { delayMs ->
+            listOf(50L, 150L, 300L, 600L).forEach { delayMs ->
                 delay(delayMs)
                 keyboardController?.show()
                 val inputMethodManager = view.context
                     .getSystemService(Context.INPUT_METHOD_SERVICE) as InputMethodManager
-                inputMethodManager.showSoftInput(view, InputMethodManager.SHOW_FORCED)
+                val focusedView = view.findFocus() ?: view
+                focusedView.post {
+                    inputMethodManager.restartInput(focusedView)
+                    inputMethodManager.showSoftInput(focusedView, InputMethodManager.SHOW_FORCED)
+                }
             }
         }
     }

@@ -25,7 +25,6 @@ import ru.profikrol.operator.data.remote.rabbit.RabbitDto
 import ru.profikrol.operator.data.remote.cell.CellApi
 import ru.profikrol.operator.data.remote.cell.CellDto
 import ru.profikrol.operator.data.remote.cell.RowDto
-import ru.profikrol.operator.data.remote.cell.localizeCellPositions
 import ru.profikrol.operator.data.remote.worktask.WorkTaskApi
 import ru.profikrol.operator.data.remote.worktask.WorkTaskDto
 import ru.profikrol.operator.data.remote.worktask.CompleteWorkSubtaskRequest
@@ -35,7 +34,6 @@ import ru.profikrol.operator.data.remote.production.CompleteTargetRequest
 import ru.profikrol.operator.data.remote.production.MortalityCountResult
 import ru.profikrol.operator.data.remote.production.ProductionMortalityCountProblemRequest
 import ru.profikrol.operator.data.remote.production.ProductionTargetCommentProblemRequest
-import ru.profikrol.operator.data.remote.production.ProductionTargetDto
 import ru.profikrol.operator.data.remote.production.ProductionTaskApi
 import ru.profikrol.operator.data.remote.production.ProductionTaskDetailsDto
 import ru.profikrol.operator.data.remote.production.SubmitProductionTaskResultRequest
@@ -57,16 +55,13 @@ import kotlinx.coroutines.supervisorScope
 import com.rabbitmes.mobile.domain.*
 import com.rabbitmes.mobile.ui.operations.PROBLEM_COMMENT_KEY
 import com.rabbitmes.mobile.ui.operations.PROBLEM_REASON_KEY
-import java.io.IOException
 import retrofit2.HttpException
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
-import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
-import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonObject
 
 private const val API_LOG_TAG = "RabbitApi"
@@ -78,13 +73,6 @@ private const val RABBITS_PAGE_SIZE = 100
 private const val CELLS_PAGE_SIZE = 100
 private const val USE_GENERAL_TEMPLATE_FOR_ALL_OPERATIONS = false
 private const val START_TASK_STATUS_POLL_ATTEMPTS = 12
-
-internal fun parseWeighingRabbitWeights(rawWeights: String?): List<Int> =
-    rawWeights
-        .orEmpty()
-        .split(',')
-        .mapNotNull { it.trim().toIntOrNull() }
-        .filter { it > 0 }
 private const val START_TASK_STATUS_POLL_DELAY_MS = 500L
 
 private fun String.isProductionTaskId(): Boolean =
@@ -259,7 +247,7 @@ private val GENERAL_FORM_OPERATION_TYPES = setOf(
     OperationType.MANUAL_FEEDING,
 )
 
-private val OPERATION_ALIASES = mapOf(
+internal val OPERATION_ALIASES = mapOf(
     "animal placement" to OperationType.ANIMAL_SETTLEMENT,
     "animal settlement" to OperationType.ANIMAL_SETTLEMENT,
     "animal transfer" to OperationType.ANIMAL_TRANSFER,
@@ -307,7 +295,7 @@ private val OPERATION_ALIASES = mapOf(
     "первое взвешивание" to OperationType.FIRST_WEIGHING,
 )
 
-private fun String.operationLookupKey(): String = trim()
+internal fun String.operationLookupKey(): String = trim()
     .lowercase()
     .replace('ё', 'е')
     .replace(Regex("[^a-zа-я0-9]+"), " ")
@@ -329,7 +317,7 @@ private fun mortalityRoundTargetLabel(
     else -> targetKind
 }
 
-private fun mortalityRoundKindTitle(targetKind: String): String = when (targetKind) {
+internal fun mortalityRoundKindTitle(targetKind: String): String = when (targetKind) {
     "light_check" -> "Свет"
     "feed_check" -> "Корм"
     "water_check" -> "Вода"
@@ -339,131 +327,12 @@ private fun mortalityRoundKindTitle(targetKind: String): String = when (targetKi
     else -> targetKind
 }
 
-private data class ProductionExecutionItem(
-    val value: ProductionTargetDto,
-    val serverType: String,
-)
-
-private fun ProductionTaskDetailsDto.allExecutionItems(): List<ProductionExecutionItem> =
-    (targets + task.targets).map { ProductionExecutionItem(it, "production-target") }
-        .plus((checklist + task.checkList).map { ProductionExecutionItem(it, "production-checklist") })
-        .distinctBy { it.value.id }
-
-private fun ProductionTaskDetailsDto.allTargets(): List<ProductionTargetDto> =
-    allExecutionItems().map { it.value }
-
-private fun ProductionTargetDto.toDisplayLabel(targetType: TargetType): String {
-    title?.trim()?.takeIf { it.isNotBlank() }?.let { return it }
-    val code = displayCode?.trim().orEmpty().localizeCellPositions()
-    if (targetType == TargetType.CAGE) {
-        val cage = cageId?.toString() ?: targetId?.trim().orEmpty()
-        return when {
-            code.isNotBlank() && !code.all(Char::isDigit) -> code
-            cage.isNotBlank() -> "Клетка $cage"
-            code.isNotBlank() -> "Клетка $code"
-            else -> "Клетка ${id.take(8)}"
-        }
-    }
-    return code.ifBlank {
-        targetKind?.let(::mortalityRoundKindTitle)
-            ?: targetId
-            ?: cageId?.let { "Клетка $it" }
-            ?: "Позиция ${id.take(8)}"
-    }
-}
-
 private fun String.productionIdValue(): String {
     val trimmed = trim()
     if (trimmed.startsWith("ID ", ignoreCase = true)) {
         return trimmed.removePrefix("ID ").substringBefore(" ").trim()
     }
     return trimmed
-}
-
-private fun MobileTask.productionResultJson(comment: String = result.comment): String = buildJsonObject {
-    val fields = MockRepository.operation(operationType).fields.associateBy { it.id }
-    if (operationType == OperationType.SLAUGHTER_SHIPMENT) {
-        val rawCount = result.values["animalCount"] ?: result.values["count"]
-        rawCount?.toDoubleOrNull()?.toInt()?.let { put("animalCount", it) }
-    } else {
-        result.values.forEach { (key, value) ->
-            if (value.isBlank()) return@forEach
-            when (fields[key]?.type) {
-                FieldType.BOOLEAN -> put(key, value.toBooleanStrictOrNull() ?: false)
-                FieldType.NUMBER, FieldType.TEMPERATURE, FieldType.HOURS -> {
-                    value.toLongOrNull()?.let { put(key, it) }
-                        ?: value.toDoubleOrNull()?.let { put(key, it) }
-                        ?: put(key, value)
-                }
-                FieldType.PHOTO, FieldType.VIDEO, FieldType.FILE -> Unit
-                else -> put(key, value)
-            }
-        }
-    }
-    if (comment.isNotBlank()) put("comment", comment)
-}.toString()
-
-private fun ProductionTaskDetailsDto.toMobileTask(employeeId: String): MobileTask {
-    val operationCandidates = listOfNotNull(task.operationCode, task.title, task.description)
-    val operationKeys = operationCandidates.map { it.operationLookupKey() }
-    val operationType = if (
-        OPERATION_ALIASES[task.title.orEmpty().operationLookupKey()] == OperationType.ANIMAL_TRANSFER
-    ) {
-        OperationType.ANIMAL_TRANSFER
-    } else operationKeys.firstNotNullOfOrNull(OPERATION_ALIASES::get)
-        ?: operationKeys.firstNotNullOfOrNull { operationKey ->
-            OperationType.entries.firstOrNull { type ->
-                type.name.operationLookupKey() == operationKey ||
-                    type.title.operationLookupKey() == operationKey
-            }
-        }
-        ?: OperationType.CUSTOM_TASK
-    return MobileTask(
-        id = task.id,
-        title = task.title.orEmpty().ifBlank { operationType.title },
-        operationType = operationType,
-        workshopId = task.workshopId.toString(),
-        hangarId = task.hangarId?.toString().orEmpty(),
-        assignedEmployeeId = task.assignedEmployeeId.orEmpty(),
-        dueDate = task.scheduledDate,
-        plannedStart = "—",
-        plannedDurationMinutes = task.durationMinutes ?: 0,
-        priority = Priority.NORMAL,
-        status = task.executionStatus.orEmpty().toTaskStatus(),
-        checklist = allExecutionItems().sortedBy { it.value.sortOrder }.map { executionItem ->
-            val target = executionItem.value
-            val targetType = when (target.targetType?.lowercase()) {
-                "cage" -> TargetType.CAGE
-                "hangar" -> TargetType.HANGAR
-                "row" -> TargetType.ROW
-                "rabbit" -> TargetType.RABBIT
-                else -> MockRepository.operation(operationType).targetType
-            }
-            ChecklistItem(
-                id = target.id,
-                label = target.toDisplayLabel(targetType),
-                targetType = targetType,
-                targetId = when (targetType) {
-                    TargetType.RABBIT -> target.targetId ?: target.rabbitId ?: target.scanIdentifier ?: target.id
-                    TargetType.CAGE -> target.targetId ?: target.cageId?.toString() ?: target.id
-                    TargetType.HANGAR -> target.targetId ?: target.hangarId?.toString() ?: target.id
-                    TargetType.ROW -> target.targetId ?: target.id
-                },
-                rabbitId = target.rabbitId,
-                cageId = target.cageId?.toString(),
-                scanIdentifier = target.scanIdentifier?.trim()?.takeIf { it.isNotBlank() }
-                    ?: target.displayCode?.trim()?.takeIf { targetType == TargetType.RABBIT && it.isNotBlank() },
-                serverType = executionItem.serverType,
-                status = if (target.isCompleted == true) ChecklistStatus.DONE else target.status.orEmpty().toChecklistStatus(),
-                result = ExecutionResult(scannedRfid = target.scanIdentifier, completedAt = target.completedAt),
-            )
-        },
-        requiresAcceptance = task.requiresAcceptance,
-        description = task.description.orEmpty(),
-        operationTypeTitle = task.title.orEmpty().ifBlank { operationType.title },
-        isGeneral = false,
-        sortOrder = task.sortOrder,
-    )
 }
 
 private fun List<RabbitDto>.toRabbitChecklist(taskId: Long): List<ChecklistItem> =
@@ -498,7 +367,7 @@ private fun List<CellDto>.toCageChecklist(
         )
     }
 
-private fun String.toTaskStatus(): TaskStatus = when (normalizedStatus()) {
+internal fun String.toTaskStatus(): TaskStatus = when (normalizedStatus()) {
     "NEW", "CREATED", "PLANNED", "PENDING" -> TaskStatus.NEW
     "IN_PROGRESS", "STARTED", "OPEN", "OPENED" -> TaskStatus.IN_PROGRESS
     "BLOCKED", "PROBLEM", "FAILED", "ABORTED" -> TaskStatus.BLOCKED
@@ -508,7 +377,7 @@ private fun String.toTaskStatus(): TaskStatus = when (normalizedStatus()) {
     else -> TaskStatus.NEW
 }
 
-private fun String.toChecklistStatus(): ChecklistStatus = when (normalizedStatus()) {
+internal fun String.toChecklistStatus(): ChecklistStatus = when (normalizedStatus()) {
     "DONE", "COMPLETED", "FINISHED", "ACCEPTED", "APPROVED" -> ChecklistStatus.DONE
     "PROBLEM", "FAILED", "BLOCKED", "ABORTED", "REJECTED" -> ChecklistStatus.PROBLEM
     "SKIPPED", "CANCELLED", "CANCELED" -> ChecklistStatus.SKIPPED
@@ -525,82 +394,6 @@ private fun String?.toDisplayTime(): String = this
     ?.take(5)
     ?.takeIf(String::isNotBlank)
     ?: "—"
-
-internal fun Throwable.toUserMessage(fallback: String): String = when (this) {
-    is HttpException -> toUserMessage(fallback)
-    is IOException -> "$fallback: нет соединения с сервером"
-    else -> fallback
-}
-
-private fun HttpException.toUserMessage(fallback: String): String {
-    val serverMessage = peekErrorBody()
-        .extractServerErrorMessage()
-        ?.takeIf(String::isSuitableForUser)
-    if (serverMessage != null) return serverMessage.localizeServerFieldNames()
-
-    return when (code()) {
-        400 -> "$fallback. Проверьте введённые данные"
-        401 -> "Сессия истекла. Войдите в приложение снова"
-        403 -> "У вас нет доступа к этому действию"
-        404 -> "$fallback. Данные не найдены или уже недоступны"
-        409 -> "$fallback. Действие уже выполнено или задача находится в другом состоянии"
-        422 -> "$fallback. Проверьте обязательные поля"
-        429 -> "Слишком много запросов. Попробуйте немного позже"
-        in 500..599 -> "Сервис временно недоступен. Попробуйте позже"
-        else -> fallback
-    }
-}
-
-internal fun String.localizeServerFieldNames(): String = this
-    .replace("\"added\"", "«положили»", ignoreCase = true)
-    .replace("\"removed\"", "«забрали»", ignoreCase = true)
-    .replace(Regex("\\badded\\b", RegexOption.IGNORE_CASE), "«положили»")
-    .replace(Regex("\\bremoved\\b", RegexOption.IGNORE_CASE), "«забрали»")
-    .replace(Regex("\\banimalCount\\b", RegexOption.IGNORE_CASE), "«количество животных»")
-
-private fun HttpException.peekErrorBody(): String = runCatching {
-    response()?.errorBody()?.source()?.let { source ->
-        source.request(Long.MAX_VALUE)
-        source.buffer.clone().readUtf8()
-    }
-}.getOrNull().orEmpty()
-
-internal fun String.extractServerErrorMessage(): String? {
-    val body = trim()
-    if (body.isBlank()) return null
-    val parsed = runCatching { Json.parseToJsonElement(body) }.getOrNull()
-        ?: return body
-    val objectBody = parsed as? JsonObject ?: return parsed.errorText()
-    return listOf("detail", "message", "error", "errors", "title")
-        .firstNotNullOfOrNull { key -> objectBody[key]?.errorText() }
-}
-
-private fun JsonElement.errorText(): String? = when (this) {
-    is JsonPrimitive -> contentOrNull?.trim()?.takeIf(String::isNotBlank)
-    is JsonArray -> mapNotNull(JsonElement::errorText).distinct().joinToString(". ").takeIf(String::isNotBlank)
-    is JsonObject -> values.mapNotNull(JsonElement::errorText).distinct().joinToString(". ").takeIf(String::isNotBlank)
-}
-
-private fun String.isSuitableForUser(): Boolean {
-    if (length !in 3..300) return false
-    val technicalMarkers = listOf(
-        "exception",
-        "stack trace",
-        "unable to resolve service",
-        "sqlstate",
-        "system.",
-        "npgsql",
-    )
-    return technicalMarkers.none { contains(it, ignoreCase = true) }
-}
-
-private fun Throwable.toHttpDebugMessage(): String = when (this) {
-    is HttpException -> {
-        val body = peekErrorBody()
-        "HTTP ${code()} ${message()}${body.takeIf(String::isNotBlank)?.let { ", body=$it" }.orEmpty()}"
-    }
-    else -> "${this::class.java.simpleName}: ${message.orEmpty()}"
-}
 
 @HiltViewModel
 class MobileMesViewModel @Inject constructor(
@@ -1276,6 +1069,36 @@ class MobileMesViewModel @Inject constructor(
         }
     }
 
+    private suspend fun reportProductionTaskProblem(taskId: String, reason: String?, comment: String?) {
+        productionCall { api ->
+            val details = api.getTask(currentEmployee.id, taskId)
+            val pendingTargets = (details.targets + details.task.targets)
+                .distinctBy { it.id }
+                .filter { target ->
+                    target.isCompleted != true &&
+                        target.status.orEmpty().toChecklistStatus() == ChecklistStatus.PENDING
+                }
+            require(pendingTargets.isNotEmpty()) {
+                "В задаче нет незакрытых целей для отметки проблемы"
+            }
+            val problemComment = listOfNotNull(reason, comment)
+                .map(String::trim)
+                .filter(String::isNotBlank)
+                .distinct()
+                .joinToString(". ")
+                .ifBlank { "Невозможно выполнить задачу" }
+            pendingTargets.forEach { target ->
+                api.reportTargetCommentProblem(
+                    currentEmployee.id,
+                    taskId,
+                    target.id,
+                    ProductionTargetCommentProblemRequest(problemComment),
+                )
+            }
+            api.completeTask(currentEmployee.id, taskId)
+        }
+    }
+
     private suspend fun executeOfflineAction(taskId: String, type: OfflineActionType, payload: OfflineActionPayload) {
         when (type) {
             OfflineActionType.START_PRODUCTION_TASK -> {
@@ -1343,14 +1166,8 @@ class MobileMesViewModel @Inject constructor(
                     } else throw error
                 }
             }
-            OfflineActionType.CANCEL_PRODUCTION_TASK -> productionCall { api ->
-                runCatching { api.cancelTask(currentEmployee.id, taskId) }.getOrElse { error ->
-                    if (error is HttpException && error.code() == 409) {
-                        val status = api.getTask(currentEmployee.id, taskId).toMobileTask(currentEmployee.id).status
-                        if (status != TaskStatus.SKIPPED) throw error
-                    } else throw error
-                }
-            }
+            OfflineActionType.CANCEL_PRODUCTION_TASK ->
+                reportProductionTaskProblem(taskId, payload.reason, payload.comment)
             OfflineActionType.COMPLETE_WORK_TASK -> {
                 payload.generalSubtaskIds.forEach { workTaskApi.completeWorkSubtask(it, CompleteWorkSubtaskRequest()) }
                 runCatching { workTaskApi.completeWorkTask(taskId.toLong(), CompleteWorkTaskRequest(payload.reason, payload.comment)) }
@@ -1421,6 +1238,7 @@ class MobileMesViewModel @Inject constructor(
         activeRfidScanValues = emptyMap()
     }
     fun canReviewAcceptance() = tasks.any { it.acceptanceRole == currentEmployee.role }
+    fun profileOperationTitles(): List<String> = PROFILE_OPERATION_TITLES
     fun tasksForCurrentEmployee() = (if (hasLoadedRemoteTasks) {
         tasks
     } else {
@@ -2483,21 +2301,20 @@ class MobileMesViewModel @Inject constructor(
                 )
                 updateTask(taskId) { task ->
                     task.copy(
-                        status = TaskStatus.SKIPPED,
+                        status = TaskStatus.DONE,
                         result = task.result.copy(completedAt = "now"),
                     ).markOffline()
                 }
-                lastMessage = "Отклонение сохранено офлайн"
+                lastMessage = "Проблема сохранена офлайн"
                 return
             }
-            launchServerAction("Cancel production task failed", fallbackMessage = "Не удалось отклонить задачу") {
+            launchServerAction("Report production task problem failed", fallbackMessage = "Не удалось отметить проблему") {
                 runCatching {
-                    productionCall { api -> api.cancelTask(currentEmployee.id, taskId) }
-                }.onSuccess { cancelledTask ->
-                    val syncedTask = cancelledTask.toMobileTask(currentEmployee.id)
+                    reportProductionTaskProblem(taskId, reason, rejectionComment)
+                }.onSuccess {
                     updateTask(taskId) { task ->
-                        syncedTask.copy(
-                            status = TaskStatus.SKIPPED,
+                        task.copy(
+                            status = TaskStatus.DONE,
                             result = task.result.copy(
                                 problemReason = reason,
                                 comment = rejectionComment,
@@ -2505,9 +2322,10 @@ class MobileMesViewModel @Inject constructor(
                             ),
                         )
                     }
-                    lastMessage = "Задача отклонена"
+                    lastMessage = "Задача завершена с проблемой"
+                    loadMyTasks(showLoading = false)
                 }.onFailure { error ->
-                    handleError(error, "Не удалось отклонить задачу", "Cancel production task failed. taskId=$taskId")
+                    handleError(error, "Не удалось отметить проблему", "Report production task problem failed. taskId=$taskId")
                 }
             }
             return

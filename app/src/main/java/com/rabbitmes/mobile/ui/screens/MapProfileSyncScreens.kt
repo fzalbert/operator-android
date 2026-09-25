@@ -8,15 +8,9 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.ExpandLess
-import androidx.compose.material.icons.filled.ExpandMore
 import androidx.compose.material.icons.filled.Sync
 import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
@@ -132,12 +126,7 @@ fun SyncQueueScreen(shift: ShiftState, tasks: List<MobileTask>, onSync: () -> Un
 }
 
 @Composable
-fun ProfileScreen(employee: Employee, tasks: List<MobileTask>, operations: List<OperationDefinition>, onLogout: () -> Unit, bottomBar: @Composable () -> Unit) {
-    val allowedOperations = operations
-        .filter { employee.role in it.allowedRoles }
-        .distinctBy { it.type }
-        .sortedBy { it.type.title }
-
+fun ProfileScreen(employee: Employee, tasks: List<MobileTask>, operations: List<String>, onLogout: () -> Unit, bottomBar: @Composable () -> Unit) {
     Scaffold(
         bottomBar = bottomBar,
         containerColor = Color.Transparent,
@@ -153,7 +142,7 @@ fun ProfileScreen(employee: Employee, tasks: List<MobileTask>, operations: List<
                         fontWeight = FontWeight.Bold,
                     )
                     Spacer(Modifier.height(MesSpacing.contentGap))
-                    AllowedOperationsDropdown(allowedOperations.map { it.type.title })
+                    AllowedOperationsList(operations)
                 }
             }
         }
@@ -161,12 +150,9 @@ fun ProfileScreen(employee: Employee, tasks: List<MobileTask>, operations: List<
 }
 
 @Composable
-private fun AllowedOperationsDropdown(operations: List<String>) {
-    var expanded by remember { mutableStateOf(false) }
+private fun AllowedOperationsList(operations: List<String>) {
     Surface(
-        modifier = Modifier
-            .fillMaxWidth()
-            .clickable(enabled = operations.isNotEmpty()) { expanded = !expanded },
+        modifier = Modifier.fillMaxWidth(),
         color = MaterialTheme.colorScheme.surface,
         contentColor = MaterialTheme.colorScheme.onSurface,
         shape = RoundedCornerShape(18.dp),
@@ -197,24 +183,23 @@ private fun AllowedOperationsDropdown(operations: List<String>) {
                         )
                     }
                 }
-                if (operations.isNotEmpty()) {
-                    Icon(
-                        imageVector = if (expanded) Icons.Default.ExpandLess else Icons.Default.ExpandMore,
-                        contentDescription = null,
-                        tint = MaterialTheme.colorScheme.primary,
-                    )
-                }
             }
-            if (expanded) {
+            if (operations.isNotEmpty()) {
                 Spacer(Modifier.height(MesSpacing.smallGap))
-                operations.forEach { title ->
-                    Text(
-                        text = title,
-                        style = MaterialTheme.typography.bodyMedium,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis,
-                        modifier = Modifier.padding(vertical = 5.dp),
-                    )
+                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                LazyColumn(
+                    modifier = Modifier.fillMaxWidth().heightIn(max = 320.dp),
+                ) {
+                    items(operations, key = { it }) { title ->
+                        Text(
+                            text = title,
+                            style = MaterialTheme.typography.bodyMedium,
+                            maxLines = 2,
+                            overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.fillMaxWidth().padding(vertical = 11.dp),
+                        )
+                        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.65f))
+                    }
                 }
             }
         }

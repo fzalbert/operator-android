@@ -94,7 +94,7 @@ fun RabbitMesApp(vm: MobileMesViewModel) {
             AppScreen.Tasks -> TaskListScreen(vm.tasksForCurrentEmployee(), vm.nextTask(), vm.lastMessage, vm.shift.startedAt != null || vm.tasksForCurrentEmployee().any { it.id.startsWith("mock-") }, { vm.navigate(AppScreen.TaskExecution(it)) }, { vm.navigate(AppScreen.Shift) }, bottom("tasks"))
             AppScreen.Map -> HangarMapScreen(vm.workshop, vm.tasksForCurrentEmployee(), { vm.navigate(AppScreen.TaskExecution(it)) }, { vm.navigate(AppScreen.Tasks) }, bottom("map"))
             AppScreen.Sync -> SyncQueueScreen(vm.shift, vm.tasks, vm::syncNow, { vm.navigate(AppScreen.Tasks) }, bottom("sync"))
-            AppScreen.Profile -> ProfileScreen(vm.currentEmployee, vm.tasksForCurrentEmployee(), vm.operations, vm::logout, bottom("profile"))
+            AppScreen.Profile -> ProfileScreen(vm.currentEmployee, vm.tasksForCurrentEmployee(), vm.profileOperationTitles(), vm::logout, bottom("profile"))
             AppScreen.Notifications -> NotificationsScreen(vm.notifications, { vm.navigate(AppScreen.Shift) }, vm::markNotificationAsRead, vm::markAllNotificationsAsRead)
             AppScreen.AcceptanceQueue -> AcceptanceQueueScreen(vm.tasksForAcceptance(), { vm.navigate(AppScreen.Acceptance(it)) }, { vm.navigate(AppScreen.Tasks) }, bottom("accept"))
             is AppScreen.TaskExecution -> {
