@@ -1,5 +1,6 @@
 package com.rabbitmes.mobile
 
+import com.rabbitmes.mobile.core.toUserMessage
 import java.io.IOException
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.ResponseBody.Companion.toResponseBody
