@@ -35,6 +35,8 @@ object NetworkModule {
     // Gateway: сам раскидывает запросы по Auth, основному API и ProductionProgram.
     private val BASE_URL = BuildConfig.API_BASE_URL
     private const val AUTH_LOG_TAG = "RabbitAuth"
+    private const val HTTP_LOG_TAG = "RabbitHttp"
+    private const val LOG_CHUNK_SIZE = 3_000
     private val ALLOW_UNSAFE_CERTIFICATES = BuildConfig.DEBUG
 
     @OptIn(ExperimentalSerializationApi::class)
@@ -49,8 +51,15 @@ object NetworkModule {
     @Provides
     @Singleton
     fun provideLoggingInterceptor(): HttpLoggingInterceptor =
-        HttpLoggingInterceptor { Log.d(AUTH_LOG_TAG, it) }.apply {
-            level = HttpLoggingInterceptor.Level.BASIC
+        HttpLoggingInterceptor { message ->
+            // Logcat обрезает строки длиннее ~4 КБ, поэтому длинные тела режем на куски.
+            message.chunked(LOG_CHUNK_SIZE).forEach { Log.d(HTTP_LOG_TAG, it) }
+        }.apply {
+            // В debug видно запросы и ответы целиком, в release ничего не логируется.
+            level = if (BuildConfig.DEBUG) HttpLoggingInterceptor.Level.BODY else HttpLoggingInterceptor.Level.NONE
+            redactHeader("Authorization")
+            redactHeader("Cookie")
+            redactHeader("Set-Cookie")
         }
 
     @Provides
@@ -122,7 +131,8 @@ object NetworkModule {
 
     private fun baseClient(logging: HttpLoggingInterceptor): OkHttpClient.Builder =
         OkHttpClient.Builder()
-            .addInterceptor(logging)
+            // Сетевой интерцептор: в лог попадает запрос уже с токеном и повторы после refresh.
+            .addNetworkInterceptor(logging)
             .connectTimeout(30, TimeUnit.SECONDS)
             .readTimeout(60, TimeUnit.SECONDS)
             .writeTimeout(30, TimeUnit.SECONDS)
