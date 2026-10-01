@@ -1,3 +1,11 @@
+import java.util.Properties
+
+// Локальные переопределения адресов (local.properties не попадает в git), например
+// api.baseUrl=http://10.0.2.2:5216/ для эмулятора с локальным бэком.
+val localProperties = Properties().apply {
+    rootProject.file("local.properties").takeIf { it.exists() }?.inputStream()?.use(::load)
+}
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
@@ -19,6 +27,9 @@ android {
         versionCode = 1
         versionName = "1.0"
 
+        // Все REST-запросы идут через Gateway.
+        val apiBaseUrl = localProperties.getProperty("api.baseUrl") ?: "http://195.58.153.25:5216/"
+        buildConfigField("String", "API_BASE_URL", "\"$apiBaseUrl\"")
         buildConfigField("String", "NOTIFICATIONS_GRPC_HOST", "\"195.58.153.25\"")
         buildConfigField("int", "NOTIFICATIONS_GRPC_PORT", "5216")
         buildConfigField("boolean", "NOTIFICATIONS_GRPC_TLS", "true")

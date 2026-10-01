@@ -32,9 +32,8 @@ import javax.net.ssl.X509TrustManager
 @Module
 @InstallIn(SingletonComponent::class)
 object NetworkModule {
-    private const val BASE_URL = "http://195.58.153.25:5216/"
-    private const val PRODUCTION_BASE_URL = "http://195.58.153.25:55915/"
-    private const val PRODUCTION_FALLBACK_BASE_URL = BASE_URL
+    // Gateway: сам раскидывает запросы по Auth, основному API и ProductionProgram.
+    private val BASE_URL = BuildConfig.API_BASE_URL
     private const val AUTH_LOG_TAG = "RabbitAuth"
     private val ALLOW_UNSAFE_CERTIFICATES = BuildConfig.DEBUG
 
@@ -98,24 +97,9 @@ object NetworkModule {
 
     @Provides
     @Singleton
-    fun provideProductionTaskApi(client: OkHttpClient, json: Json): ProductionTaskApi =
-        Retrofit.Builder()
-            .baseUrl(PRODUCTION_BASE_URL)
-            .client(client)
-            .addConverterFactory(json.asConverterFactory("application/json".toMediaType()))
-            .build()
-            .create(ProductionTaskApi::class.java)
-
-    @Provides
-    @Singleton
-    @Named("productionFallback")
-    fun provideProductionFallbackTaskApi(client: OkHttpClient, json: Json): ProductionTaskApi =
-        Retrofit.Builder()
-            .baseUrl(PRODUCTION_FALLBACK_BASE_URL)
-            .client(client)
-            .addConverterFactory(json.asConverterFactory("application/json".toMediaType()))
-            .build()
-            .create(ProductionTaskApi::class.java)
+    fun provideProductionTaskApi(
+        retrofit: Retrofit,
+    ): ProductionTaskApi = retrofit.create(ProductionTaskApi::class.java)
 
     @Provides
     @Singleton

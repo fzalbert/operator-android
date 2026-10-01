@@ -2,7 +2,6 @@ package com.rabbitmes.mobile.data.task
 
 import android.content.Context
 import android.provider.Settings
-import android.util.Log
 import com.rabbitmes.mobile.core.runCatchingCancellable
 import com.rabbitmes.mobile.data.mapper.toMobileTask
 import com.rabbitmes.mobile.domain.MobileTask
@@ -20,18 +19,13 @@ import ru.profikrol.operator.data.remote.production.ProductionTaskDetailsDto
 import ru.profikrol.operator.data.remote.production.ProductionTaskDto
 import ru.profikrol.operator.data.remote.production.SubmitProductionTaskResultRequest
 import javax.inject.Inject
-import javax.inject.Named
 import javax.inject.Singleton
 
-/**
- * Production API от лица текущего сотрудника. Если production-сервис отвечает 404,
- * запрос повторяется через gateway.
- */
+/** Production API (через Gateway) от лица текущего сотрудника. */
 @Singleton
 class ProductionTaskRemote @Inject constructor(
     @ApplicationContext private val context: Context,
     private val api: ProductionTaskApi,
-    @Named("productionFallback") private val fallbackApi: ProductionTaskApi,
     private val employeeSession: EmployeeSession,
 ) {
     private val employeeId: String get() = employeeSession.id
@@ -90,16 +84,5 @@ class ProductionTaskRemote @Inject constructor(
 
     suspend fun complete(taskId: String) = call { it.completeTask(employeeId, taskId) }
 
-    private suspend fun <T> call(action: suspend (ProductionTaskApi) -> T): T =
-        try {
-            action(api)
-        } catch (error: HttpException) {
-            if (error.code() != 404) throw error
-            Log.w(TAG, "Production service returned 404, retrying gateway fallback")
-            action(fallbackApi)
-        }
-
-    private companion object {
-        const val TAG = "RabbitApi"
-    }
+    private suspend fun <T> call(action: suspend (ProductionTaskApi) -> T): T = action(api)
 }
