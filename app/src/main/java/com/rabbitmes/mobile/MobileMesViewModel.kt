@@ -71,12 +71,24 @@ import kotlinx.serialization.json.jsonObject
 
 private const val API_LOG_TAG = "RabbitApi"
 
+/**
+ * Как [runCatching], но не перехватывает [CancellationException]:
+ * иначе отменённая корутина продолжит работу и будет писать в стейт.
+ */
+private inline fun <T> runCatchingCancellable(block: () -> T): Result<T> =
+    try {
+        Result.success(block())
+    } catch (cancelled: CancellationException) {
+        throw cancelled
+    } catch (error: Throwable) {
+        Result.failure(error)
+    }
+
 private fun OperationType.isFemaleArrival(): Boolean =
     this == OperationType.FEMALE_DELIVERY
 private const val TASKS_REFRESH_INTERVAL_MS = 30_000L
 private const val RABBITS_PAGE_SIZE = 100
 private const val CELLS_PAGE_SIZE = 100
-private const val USE_GENERAL_TEMPLATE_FOR_ALL_OPERATIONS = false
 private const val START_TASK_STATUS_POLL_ATTEMPTS = 12
 private const val START_TASK_STATUS_POLL_DELAY_MS = 500L
 
@@ -94,14 +106,12 @@ sealed class AppScreen {
     data object Login : AppScreen()
     data object Shift : AppScreen()
     data object Tasks : AppScreen()
-    data object Map : AppScreen()
     data object Sync : AppScreen()
     data object Profile : AppScreen()
     data object Notifications : AppScreen()
     data object AcceptanceQueue : AppScreen()
     data class TaskExecution(val taskId: String) : AppScreen()
     data class Acceptance(val taskId: String) : AppScreen()
-    data class AnimalHistory(val rabbitId: String) : AppScreen()
     data class RabbitProfile(val rfidCode: String, val taskId: String) : AppScreen()
 }
 
@@ -527,7 +537,7 @@ private fun HttpException.toUserMessage(fallback: String): String {
     }
 }
 
-private fun HttpException.peekErrorBody(): String = runCatching {
+private fun HttpException.peekErrorBody(): String = runCatchingCancellable {
     response()?.errorBody()?.source()?.let { source ->
         source.request(Long.MAX_VALUE)
         source.buffer.clone().readUtf8()
@@ -537,7 +547,7 @@ private fun HttpException.peekErrorBody(): String = runCatching {
 internal fun String.extractServerErrorMessage(): String? {
     val body = trim()
     if (body.isBlank()) return null
-    val parsed = runCatching { Json.parseToJsonElement(body) }.getOrNull()
+    val parsed = runCatchingCancellable { Json.parseToJsonElement(body) }.getOrNull()
         ?: return body
     val objectBody = parsed as? JsonObject ?: return parsed.errorText()
     return listOf("detail", "message", "error", "errors", "title")
@@ -627,9 +637,6 @@ class MobileMesViewModel @Inject constructor(
     val notifications = mutableStateListOf<NotificationUi>()
 
     val employees = MockRepository.employees
-    val workshop = MockRepository.workshop
-    val rabbits = MockRepository.rabbits
-    val allCages = MockRepository.allCages
     val operations = MockRepository.operationDefinitions
     private var serverRabbits by mutableStateOf<List<RabbitDto>>(emptyList())
     private var serverCells by mutableStateOf<List<CellDto>>(emptyList())
@@ -722,6 +729,7 @@ class MobileMesViewModel @Inject constructor(
         screen = target
         lastMessage = null
     }
+
     fun onLoggedInFromSession() {
         val sessionUser = sessionStore.currentUser
         val role = sessionUser?.role
@@ -750,7 +758,7 @@ class MobileMesViewModel @Inject constructor(
         screen = defaultScreenForRole()
         lastMessage = null
         viewModelScope.launch {
-            runCatching { restoreOfflineState() }
+            runCatchingCancellable { restoreOfflineState() }
                 .onFailure { Log.e(API_LOG_TAG, "Offline cache restore failed", it) }
             refreshProfile()
         }
@@ -768,7 +776,7 @@ class MobileMesViewModel @Inject constructor(
         isShiftActionInProgress = true
         safeLaunch("Open shift action failed", fallbackMessage = "Не удалось открыть смену") {
             try {
-                runCatching { profileApi.openShift() }
+                runCatchingCancellable { profileApi.openShift() }
                     .onSuccess { remoteShift ->
                         shift = remoteShift.toShiftState(currentEmployee.id, shift)
                         lastMessage = "Смена открыта"
@@ -777,7 +785,7 @@ class MobileMesViewModel @Inject constructor(
                     }
                     .onFailure { error ->
                         if (error is HttpException && error.code() == 400) {
-                            runCatching { profileApi.getMyProfile() }
+                            runCatchingCancellable { profileApi.getMyProfile() }
                                 .onSuccess { profile ->
                                     if (profile.shift?.isOpen == true) {
                                         shift = profile.shift.toShiftState(currentEmployee.id, shift)
@@ -805,7 +813,7 @@ class MobileMesViewModel @Inject constructor(
         isShiftActionInProgress = true
         safeLaunch("Close shift action failed", fallbackMessage = "Не удалось закрыть смену") {
             try {
-                runCatching { profileApi.closeShift() }
+                runCatchingCancellable { profileApi.closeShift() }
                     .onSuccess { remoteShift ->
                         shift = remoteShift.toShiftState(currentEmployee.id, shift)
                         stopTasksAutoRefresh()
@@ -813,7 +821,7 @@ class MobileMesViewModel @Inject constructor(
                     }
                     .onFailure { error ->
                         if (error is HttpException && error.code() == 400) {
-                            runCatching { profileApi.getMyProfile() }
+                            runCatchingCancellable { profileApi.getMyProfile() }
                                 .onSuccess { profile ->
                                     currentEmployee = currentEmployee.copy(id = profile.employeeId)
                                     val serverShift = profile.shift.toShiftState(currentEmployee.id, shift)
@@ -846,7 +854,7 @@ class MobileMesViewModel @Inject constructor(
 
     private fun refreshProfile() {
         safeLaunch("Profile refresh failed") {
-            runCatching { profileApi.getMyProfile() }
+            runCatchingCancellable { profileApi.getMyProfile() }
                 .onSuccess { profile ->
                     currentEmployee = currentEmployee.copy(id = profile.employeeId)
                     shift = profile.shift.toShiftState(currentEmployee.id, shift)
@@ -874,7 +882,7 @@ class MobileMesViewModel @Inject constructor(
                 API_LOG_TAG,
                 "Loading tasks. employeeId=${currentEmployee.id} role=${currentEmployee.role} showLoading=$showLoading",
             )
-            val productionTasks = runCatching {
+            val productionTasks = runCatchingCancellable {
                 val productionList = productionCall { api -> api.getEmployeeTasks(currentEmployee.id, currentEmployee.id) }
                 Log.d(
                     API_LOG_TAG,
@@ -893,7 +901,7 @@ class MobileMesViewModel @Inject constructor(
                         .map { productionTask ->
                             async {
                                 Log.d(API_LOG_TAG, "Loading production task details. taskId=${productionTask.id}")
-                                runCatching {
+                                runCatchingCancellable {
                                     productionCall { api -> api.getTask(currentEmployee.id, productionTask.id) }
                                         .toMobileTask(currentEmployee.id)
                                 }.onFailure { error ->
@@ -909,7 +917,7 @@ class MobileMesViewModel @Inject constructor(
             }.onFailure { error ->
                 Log.e(API_LOG_TAG, "Production tasks request failed: ${error.toHttpDebugMessage()}", error)
             }.getOrDefault(emptyList())
-            runCatching {
+            runCatchingCancellable {
                 if (currentEmployee.role == RoleId.CHIEF_TECHNOLOGIST) {
                     val ownTasks = workTaskApi.getMyWorkTasks()
                     val acceptanceTasks = workTaskApi.getWorkTasksForAcceptance()
@@ -952,7 +960,7 @@ class MobileMesViewModel @Inject constructor(
                             task.checklist.any { it.targetType == TargetType.RABBIT }
                     }
                     val rabbits = if (needsRabbitChecklist) {
-                        runCatching { loadAllRabbits() }
+                        runCatchingCancellable { loadAllRabbits() }
                             .onSuccess { serverRabbits = it }
                             .onFailure { error ->
                                 handleError(
@@ -983,7 +991,7 @@ class MobileMesViewModel @Inject constructor(
                     val cells = if (needsCells) {
                         if (serverCells.isNotEmpty() && serverCellHangarIds == requiredCellHangarIds) {
                             serverCells
-                        } else runCatching { loadCells(requiredCellHangarIds) }
+                        } else runCatchingCancellable { loadCells(requiredCellHangarIds) }
                             .onSuccess {
                                 serverCells = it
                                 serverCellHangarIds = requiredCellHangarIds
@@ -1001,7 +1009,7 @@ class MobileMesViewModel @Inject constructor(
                         emptyList()
                     }
                     if (needsCells && requiredCellHangarIds.isNotEmpty()) {
-                        runCatching { loadRows(requiredCellHangarIds) }
+                        runCatchingCancellable { loadRows(requiredCellHangarIds) }
                             .onSuccess { serverRows = it }
                             .onFailure { error ->
                                 Log.w(API_LOG_TAG, "Rows request failed: ${error.toHttpDebugMessage()}", error)
@@ -1134,7 +1142,7 @@ class MobileMesViewModel @Inject constructor(
         if (hangarIds.isEmpty()) return loadAllCells()
         return hangarIds
             .flatMap { hangarId ->
-                runCatching { cellApi.getCellsInfoByHangar(hangarId) }
+                runCatchingCancellable { cellApi.getCellsInfoByHangar(hangarId) }
                     .getOrElse { cellApi.getCellsByHangar(hangarId) }
             }
             .distinctBy(CellDto::id)
@@ -1193,6 +1201,8 @@ class MobileMesViewModel @Inject constructor(
                     executeOfflineAction(action.taskId, OfflineActionType.valueOf(action.type), offlineRepository.payload(action))
                     offlineRepository.remove(action.id)
                     sent++
+                } catch (cancelled: CancellationException) {
+                    throw cancelled
                 } catch (error: Throwable) {
                     offlineRepository.failed(action.id, error)
                     break
@@ -1249,10 +1259,10 @@ class MobileMesViewModel @Inject constructor(
                 val response = productionCall { it.startTask(currentEmployee.id, taskId) }
                 if (!response.isSuccessful && response.code() != 409) throw HttpException(response)
             }
-            OfflineActionType.START_WORK_TASK -> runCatching { workTaskApi.startWorkTask(taskId.toLong()) }
+            OfflineActionType.START_WORK_TASK -> runCatchingCancellable { workTaskApi.startWorkTask(taskId.toLong()) }
                 .getOrElse { if (it !is HttpException || it.code() != 409) throw it }
             OfflineActionType.COMPLETE_PRODUCTION_CHECKLIST_ITEM -> productionCall { api ->
-                runCatching {
+                runCatchingCancellable {
                     api.completeChecklistItem(currentEmployee.id, taskId, requireNotNull(payload.itemId))
                 }.getOrElse { error ->
                     if (error is HttpException && error.code() == 409) {
@@ -1263,11 +1273,8 @@ class MobileMesViewModel @Inject constructor(
                 }
             }
             OfflineActionType.COMPLETE_PRODUCTION_TARGET -> productionCall { api ->
-                val noPayload = payload.values["_noPayload"].toBoolean()
-                val result = if (noPayload) null else {
-                    Json.parseToJsonElement(payload.values.getValue("_resultJson")).jsonObject
-                }
-                runCatching {
+                val result = Json.parseToJsonElement(payload.values.getValue("_resultJson")).jsonObject
+                runCatchingCancellable {
                     api.completeTarget(
                         currentEmployee.id,
                         taskId,
@@ -1296,14 +1303,14 @@ class MobileMesViewModel @Inject constructor(
                     SubmitProductionTaskResultRequest(payload.values.getValue("_resultJson")),
                 )
             }
-            OfflineActionType.COMPLETE_WORK_SUBTASK -> runCatching {
+            OfflineActionType.COMPLETE_WORK_SUBTASK -> runCatchingCancellable {
                 workTaskApi.completeWorkSubtask(
                     requireNotNull(payload.itemId).toLong(),
                     CompleteWorkSubtaskRequest(payload.reason, payload.comment, null),
                 )
             }.getOrElse { if (it !is HttpException || it.code() != 409) throw it }
             OfflineActionType.COMPLETE_PRODUCTION_TASK -> productionCall { api ->
-                runCatching { api.completeTask(currentEmployee.id, taskId) }.getOrElse { error ->
+                runCatchingCancellable { api.completeTask(currentEmployee.id, taskId) }.getOrElse { error ->
                     if (error is HttpException && error.code() == 409) {
                         val status = api.getTask(currentEmployee.id, taskId).toMobileTask(currentEmployee.id).status
                         if (status != TaskStatus.DONE) throw error
@@ -1312,10 +1319,10 @@ class MobileMesViewModel @Inject constructor(
             }
             OfflineActionType.COMPLETE_WORK_TASK -> {
                 payload.generalSubtaskIds.forEach { workTaskApi.completeWorkSubtask(it, CompleteWorkSubtaskRequest()) }
-                runCatching { workTaskApi.completeWorkTask(taskId.toLong(), CompleteWorkTaskRequest(payload.reason, payload.comment)) }
+                runCatchingCancellable { workTaskApi.completeWorkTask(taskId.toLong(), CompleteWorkTaskRequest(payload.reason, payload.comment)) }
                     .getOrElse { if (it !is HttpException || it.code() != 409) throw it }
             }
-            OfflineActionType.ACCEPT_WORK_REPORT -> runCatching {
+            OfflineActionType.ACCEPT_WORK_REPORT -> runCatchingCancellable {
                 workTaskApi.acceptWorkReport(requireNotNull(payload.itemId).toLong())
             }.getOrElse { if (it !is HttpException || it.code() != 409) throw it }
         }
@@ -1327,7 +1334,6 @@ class MobileMesViewModel @Inject constructor(
         notificationRepository.markAllAsRead()
     }
 
-    fun task(id: String) = tasks.first { it.id == id }
     fun taskOrNull(id: String) = tasks.firstOrNull { it.id == id }
     // The RFID shown in an execution form is transient input. A value stored in the
     // task result belongs to an already processed target and must not be restored
@@ -1339,7 +1345,6 @@ class MobileMesViewModel @Inject constructor(
         return serverRabbits.firstOrNull { it.rfid?.trim().equals(value, ignoreCase = true) }
             ?.id
             ?.toString()
-            ?: MockRepository.rabbitByRfid(value)?.id
     }
     fun rememberScannedRfid(taskId: String, rfid: String, values: Map<String, String> = emptyMap()) {
         lastScannedRfid = rfid
@@ -1515,10 +1520,10 @@ class MobileMesViewModel @Inject constructor(
             val task = taskOrNull(taskId)
             if (task != null) {
                 launchServerAction("Start production task action failed", fallbackMessage = "Не удалось начать задачу") {
-                    runCatching {
+                    runCatchingCancellable {
                         val response = productionCall { api -> api.startTask(currentEmployee.id, taskId) }
                         if (!response.isSuccessful) throw HttpException(response)
-                        runCatching { productionCall { api -> api.getTask(currentEmployee.id, taskId) }.toMobileTask(currentEmployee.id) }
+                        runCatchingCancellable { productionCall { api -> api.getTask(currentEmployee.id, taskId) }.toMobileTask(currentEmployee.id) }
                             .getOrElse { task.copy(status = TaskStatus.IN_PROGRESS) }
                     }
                         .onSuccess { updated ->
@@ -1527,7 +1532,7 @@ class MobileMesViewModel @Inject constructor(
                         }
                         .onFailure { error ->
                             if (error is HttpException && error.code() == 409) {
-                                val syncedTask = runCatching {
+                                val syncedTask = runCatchingCancellable {
                                     productionCall { api -> api.getTask(currentEmployee.id, taskId) }.toMobileTask(currentEmployee.id)
                                 }.getOrNull()
                                 if (syncedTask?.status == TaskStatus.IN_PROGRESS || syncedTask?.status == TaskStatus.DONE) {
@@ -1547,7 +1552,7 @@ class MobileMesViewModel @Inject constructor(
             return
         }
         launchServerAction("Start work task action failed", fallbackMessage = "Не удалось начать задачу") {
-            runCatching { workTaskApi.startWorkTask(requireNotNull(remoteTaskId)) }
+            runCatchingCancellable { workTaskApi.startWorkTask(requireNotNull(remoteTaskId)) }
                 .onSuccess { remoteTask ->
                     updateTask(taskId) { task ->
                         task.copy(
@@ -1591,9 +1596,7 @@ class MobileMesViewModel @Inject constructor(
     fun addComment(taskId: String, comment: String) = updateTask(taskId) { it.copy(result = it.result.copy(comment = comment)).markOffline() }
 
     fun scanRfidAndCompleteItem(taskId: String, rfid: String, values: Map<String, String> = emptyMap()) {
-        Log.d("RFID_TEST", "MobileMesViewModel получил: $rfid")
-
-        val currentTask = tasks.first { it.id == taskId }
+        val currentTask = taskOrNull(taskId) ?: return
         Log.d(
             "RFID_SETTLEMENT",
             "VM received click. taskId=$taskId operation=${currentTask.operationType} checklist=${currentTask.checklist.size} productionTargets=${currentTask.checklist.count { it.serverType == "production-target" }} rfid=$rfid",
@@ -1604,34 +1607,18 @@ class MobileMesViewModel @Inject constructor(
             return
         }
         if (currentTask.checklist.any { item ->
-                item.status != ChecklistStatus.PENDING &&
-                    (
-                        item.targetId.equals(normalizedRfid, ignoreCase = true) ||
-                            item.rabbitId.equals(normalizedRfid, ignoreCase = true) ||
-                            item.scanIdentifier.equals(normalizedRfid, ignoreCase = true) ||
-                            item.result.scannedRfid.equals(normalizedRfid, ignoreCase = true) ||
-                            item.label.equals(normalizedRfid, ignoreCase = true)
-                        )
+                item.status != ChecklistStatus.PENDING && item.matchesRfid(normalizedRfid)
             }
         ) {
             lastMessage = "RFID $normalizedRfid уже использован в этой задаче"
             return
         }
-        val pendingServerRabbits = currentTask.checklist.filter { item ->
-            item.targetType == TargetType.RABBIT && item.status == ChecklistStatus.PENDING
-        }
         val scannedRabbitId = rabbitIdForRfid(normalizedRfid)
-        val serverRabbitTarget = pendingServerRabbits.firstOrNull { item ->
+        val serverRabbitTarget = currentTask.checklist.firstOrNull { item ->
             item.targetType == TargetType.RABBIT &&
-                (
-                    item.targetId.equals(normalizedRfid, ignoreCase = true) ||
-                        item.rabbitId.equals(normalizedRfid, ignoreCase = true) ||
-                        item.scanIdentifier.equals(normalizedRfid, ignoreCase = true) ||
-                        scannedRabbitId?.let { item.targetId.equals(it, ignoreCase = true) } == true ||
-                        item.result.scannedRfid.equals(normalizedRfid, ignoreCase = true) ||
-                        item.label.contains(normalizedRfid, ignoreCase = true)
-                    )
-        } ?: pendingServerRabbits.singleOrNull()
+                item.status == ChecklistStatus.PENDING &&
+                item.matchesRfid(normalizedRfid, scannedRabbitId)
+        }
         val productionSettlementTarget = if (currentTask.operationType.isFemaleArrival()) {
             currentTask.checklist.firstOrNull { item ->
                 item.serverType == "production-target" && item.status == ChecklistStatus.PENDING
@@ -1643,13 +1630,9 @@ class MobileMesViewModel @Inject constructor(
         val effectiveRfid = normalizedRfid
         rememberScannedRfid(taskId, effectiveRfid)
 
-        val rabbit = MockRepository.rabbitByRfid(effectiveRfid)
-        val cage = MockRepository.cageByRfid(effectiveRfid)
         val targetId = productionSettlementTarget?.targetId
             ?: settlementFallbackTarget?.targetId
             ?: serverRabbitTarget?.targetId
-            ?: rabbit?.id
-            ?: cage?.id
         val problemReason = values[PROBLEM_REASON_KEY].orEmpty()
         val problemComment = values[PROBLEM_COMMENT_KEY].orEmpty()
         val resultValues = values - PROBLEM_REASON_KEY - PROBLEM_COMMENT_KEY
@@ -1970,11 +1953,11 @@ class MobileMesViewModel @Inject constructor(
                 return
             }
             launchServerAction("Complete production checklist item failed", fallbackMessage = "Не удалось отметить пункт") {
-                runCatching {
+                runCatchingCancellable {
                     productionCall { api -> api.completeChecklistItem(currentEmployee.id, taskId, itemId) }
                 }.onSuccess {
                     Log.d(API_LOG_TAG, "Production checklist item completed. taskId=$taskId itemId=$itemId")
-                    val syncedTask = runCatching {
+                    val syncedTask = runCatchingCancellable {
                         productionCall { api -> api.getTask(currentEmployee.id, taskId) }.toMobileTask(currentEmployee.id)
                     }.getOrNull()
                     if (syncedTask != null) {
@@ -1985,7 +1968,7 @@ class MobileMesViewModel @Inject constructor(
                     lastMessage = "Пункт выполнен"
                 }.onFailure { error ->
                     if (error is HttpException && error.code() == 409) {
-                        val syncedTask = runCatching {
+                        val syncedTask = runCatchingCancellable {
                             productionCall { api -> api.getTask(currentEmployee.id, taskId) }.toMobileTask(currentEmployee.id)
                         }.getOrNull()
                         val syncedItem = syncedTask?.checklist?.firstOrNull { it.id == itemId }
@@ -2020,7 +2003,6 @@ class MobileMesViewModel @Inject constructor(
             }
             val isAnimalTargetTask = task.operationType.isFemaleArrival() ||
                 task.operationType == OperationType.ANIMAL_TRANSFER
-            val completesWithoutPayload = false
             val operationTitle = if (task.operationType == OperationType.ANIMAL_TRANSFER) "Переселение" else "Заселение"
             val resultJson = buildJsonObject {
                 if (task.operationType == OperationType.NEST_SELECTION) {
@@ -2068,9 +2050,7 @@ class MobileMesViewModel @Inject constructor(
                         itemId = itemId,
                         reason = reason.ifBlank { null },
                         comment = comment.ifBlank { null },
-                        values = values +
-                            ("_resultJson" to resultJson.toString()) +
-                            ("_noPayload" to completesWithoutPayload.toString()),
+                        values = values + ("_resultJson" to resultJson.toString()),
                     ),
                 )
                 rememberProductionTargetOverride(taskId, itemId, status, reason, comment, values)
@@ -2084,7 +2064,7 @@ class MobileMesViewModel @Inject constructor(
                 return
             }
             launchServerAction("Complete production target failed", fallbackMessage = "Не удалось сохранить результат") {
-                runCatching {
+                runCatchingCancellable {
                     productionCall { api ->
                         if (status == ChecklistStatus.PROBLEM) {
                             val targetComment = comment.ifBlank { reason.ifBlank { values["palpationResult"].orEmpty() } }
@@ -2097,13 +2077,13 @@ class MobileMesViewModel @Inject constructor(
                                 request = ProductionTargetCommentProblemRequest(comment = targetComment),
                             )
                         } else {
-                            Log.d(API_LOG_TAG, "Sending production target completion. taskId=$taskId targetId=$itemId operation=${task.operationType} noPayload=$completesWithoutPayload")
+                            Log.d(API_LOG_TAG, "Sending production target completion. taskId=$taskId targetId=$itemId operation=${task.operationType}")
                             api.completeTarget(
                                 employeeId = currentEmployee.id,
                                 taskId = taskId,
                                 targetId = itemId,
                                 request = CompleteTargetRequest(
-                                    result = resultJson.takeUnless { completesWithoutPayload },
+                                    result = resultJson,
                                     rfid = rfid,
                                     deviceId = deviceId,
                                 ),
@@ -2113,7 +2093,7 @@ class MobileMesViewModel @Inject constructor(
                 }.onSuccess {
                     Log.d(API_LOG_TAG, "Production target request succeeded. taskId=$taskId targetId=$itemId operation=${task.operationType} status=$status")
                     rememberProductionTargetOverride(taskId, itemId, status, reason, comment, values)
-                    val syncedTask = runCatching {
+                    val syncedTask = runCatchingCancellable {
                         productionCall { api -> api.getTask(currentEmployee.id, taskId) }
                             .toMobileTask(currentEmployee.id)
                     }.onFailure { error ->
@@ -2137,7 +2117,7 @@ class MobileMesViewModel @Inject constructor(
                     }
                     val isLastTarget = task.checklist.count { it.status == ChecklistStatus.PENDING } == 1
                     if (isLastTarget && isAnimalTargetTask) {
-                        runCatching { productionCall { api -> api.completeTask(currentEmployee.id, taskId) } }
+                        runCatchingCancellable { productionCall { api -> api.completeTask(currentEmployee.id, taskId) } }
                             .onSuccess {
                                 updateTask(taskId) { current -> current.copy(status = TaskStatus.DONE, result = current.result.copy(completedAt = "now")) }
                                 lastMessage = "$operationTitle успешно завершено"
@@ -2149,7 +2129,7 @@ class MobileMesViewModel @Inject constructor(
                 }.onFailure { error ->
                     Log.e(API_LOG_TAG, "Production target request failed: ${error.toHttpDebugMessage()}. taskId=$taskId targetId=$itemId operation=${task.operationType} status=$status", error)
                     if (error is HttpException && error.code() == 409) {
-                        val syncedTask = runCatching {
+                        val syncedTask = runCatchingCancellable {
                             productionCall { api -> api.getTask(currentEmployee.id, taskId) }.toMobileTask(currentEmployee.id)
                         }.getOrNull()
                         val syncedItem = syncedTask?.checklist?.firstOrNull { it.id == itemId }
@@ -2197,7 +2177,7 @@ class MobileMesViewModel @Inject constructor(
                 if (rfid.isNotEmpty()) add("RFID: $rfid")
                 if (comment.isNotBlank()) add(comment.trim())
             }.joinToString("; ").ifBlank { null }
-            runCatching {
+            runCatchingCancellable {
                 workTaskApi.completeWorkSubtask(
                     subtaskId = subtaskId,
                     request = CompleteWorkSubtaskRequest(
@@ -2215,7 +2195,7 @@ class MobileMesViewModel @Inject constructor(
                 val isLastSettlementItem = current?.operationType?.isFemaleArrival() == true &&
                     current.checklist.count { it.status == ChecklistStatus.PENDING } <= 1
                 if (isLastSettlementItem) {
-                    runCatching {
+                    runCatchingCancellable {
                         workTaskApi.completeWorkTask(
                             id = taskId.toLong(),
                             request = CompleteWorkTaskRequest(comment = reportComment),
@@ -2268,13 +2248,9 @@ class MobileMesViewModel @Inject constructor(
     }
 
     fun completeTask(taskId: String, commentOverride: String? = null) {
-        val currentTask = tasks.first { it.id == taskId }
+        val currentTask = taskOrNull(taskId) ?: return
         val completionComment = commentOverride ?: currentTask.result.comment
-        val checklist = if (USE_GENERAL_TEMPLATE_FOR_ALL_OPERATIONS) {
-            currentTask.checklist.map { item ->
-                if (item.status == ChecklistStatus.PENDING) item.copy(status = ChecklistStatus.DONE) else item
-            }
-        } else currentTask.checklist
+        val checklist = currentTask.checklist
         val pending = checklist.count { it.status == ChecklistStatus.PENDING }
         if (pending > 0 && currentTask.operationType != OperationType.NEST_SELECTION) {
             lastMessage = "Нельзя завершить задачу: осталось $pending необработанных пунктов чек-листа"
@@ -2319,7 +2295,7 @@ class MobileMesViewModel @Inject constructor(
         if (remoteTaskId == null) {
             if (taskId.isProductionTaskId()) {
                 launchServerAction("Complete production task failed", fallbackMessage = "Не удалось завершить задачу") {
-                    runCatching {
+                    runCatchingCancellable {
                         productionCall { api ->
                             if (shouldSubmitStandaloneResult) {
                                 val resultJson = currentTask.productionResultJson(completionComment)
@@ -2334,7 +2310,7 @@ class MobileMesViewModel @Inject constructor(
                             lastMessage = "Задача завершена"
                         }
                         .onFailure { error ->
-                            val syncedTask = runCatching {
+                            val syncedTask = runCatchingCancellable {
                                 productionCall { api -> api.getTask(currentEmployee.id, taskId) }.toMobileTask(currentEmployee.id)
                             }.getOrNull()
                             if (syncedTask?.status == TaskStatus.DONE) {
@@ -2360,7 +2336,7 @@ class MobileMesViewModel @Inject constructor(
         }
 
         launchServerAction("Complete work task action failed", fallbackMessage = "Не удалось завершить задачу") {
-            runCatching {
+            runCatchingCancellable {
                 if (currentTask.isGeneral) {
                     currentTask.pendingGeneralSubtaskIds.forEach { subtaskId ->
                         workTaskApi.completeWorkSubtask(
@@ -2419,7 +2395,7 @@ class MobileMesViewModel @Inject constructor(
     fun skipTask(taskId: String, reason: String) = updateTask(taskId) { it.copy(status = TaskStatus.SKIPPED, result = it.result.copy(problemReason = reason, comment = reason)).markOffline() }
 
     fun rejectGeneralTask(taskId: String, reason: String, commentOverride: String? = null) {
-        val currentTask = tasks.first { it.id == taskId }
+        val currentTask = taskOrNull(taskId) ?: return
         val rejectionComment = commentOverride ?: currentTask.result.comment
         val remoteTaskId = taskId.toLongOrNull()
         if (remoteTaskId == null) {
@@ -2437,7 +2413,7 @@ class MobileMesViewModel @Inject constructor(
             return
         }
         launchServerAction("Reject general work task action failed", fallbackMessage = "Не удалось отклонить задачу") {
-            runCatching {
+            runCatchingCancellable {
                 workTaskApi.completeWorkTask(
                     id = remoteTaskId,
                     request = CompleteWorkTaskRequest(
@@ -2489,7 +2465,7 @@ class MobileMesViewModel @Inject constructor(
             return
         }
         launchServerAction("Accept work report failed", fallbackMessage = "Не удалось подтвердить выполнение задачи") {
-            runCatching { workTaskApi.acceptWorkReport(reportId) }
+            runCatchingCancellable { workTaskApi.acceptWorkReport(reportId) }
                 .onSuccess { report ->
                     updateTask(taskId) { current ->
                         current.copy(

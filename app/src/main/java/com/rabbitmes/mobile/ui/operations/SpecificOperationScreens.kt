@@ -12,8 +12,6 @@ import com.rabbitmes.mobile.data.MockRepository
 import com.rabbitmes.mobile.domain.*
 import com.rabbitmes.mobile.ui.components.*
 
-private const val SHOW_BLUETOOTH_SCALE_BUTTON = false
-
 @Composable
 fun InseminationScreen(
     task: MobileTask,
@@ -57,11 +55,7 @@ fun InseminationScreen(
             val rabbitId = resolveRabbitId(scannedRfid)
             val isPending = task.checklist.any {
                 it.targetType == TargetType.RABBIT &&
-                    (it.targetId.equals(scannedRfid, ignoreCase = true) ||
-                        it.rabbitId.equals(scannedRfid, ignoreCase = true) ||
-                        it.scanIdentifier.equals(scannedRfid, ignoreCase = true) ||
-                        rabbitId?.let { id -> it.targetId.equals(id, ignoreCase = true) } == true ||
-                        it.label.contains(scannedRfid, ignoreCase = true)) &&
+                    it.matchesRfid(scannedRfid, rabbitId) &&
                     it.status == ChecklistStatus.PENDING
             }
             if (isPending) {
@@ -77,12 +71,7 @@ fun InseminationScreen(
     val checklistItem = selectedRfid?.let { selected ->
         val rabbitId = resolveRabbitId(selected)
         task.checklist.firstOrNull {
-            it.targetType == TargetType.RABBIT &&
-                (it.targetId.equals(selected, ignoreCase = true) ||
-                    it.rabbitId.equals(selected, ignoreCase = true) ||
-                    it.scanIdentifier.equals(selected, ignoreCase = true) ||
-                    rabbitId?.let { id -> it.targetId.equals(id, ignoreCase = true) } == true ||
-                    it.label.contains(selected, ignoreCase = true))
+            it.targetType == TargetType.RABBIT && it.matchesRfid(selected, rabbitId)
         }
     }
     val scannerValues = buildMap {
@@ -226,12 +215,7 @@ fun PalpationScreen(
     val checklistItem = selectedRfid?.let { selected ->
         val rabbitId = resolveRabbitId(selected)
         task.checklist.firstOrNull {
-            it.targetType == TargetType.RABBIT &&
-                (it.targetId.equals(selected, ignoreCase = true) ||
-                    it.rabbitId.equals(selected, ignoreCase = true) ||
-                    it.scanIdentifier.equals(selected, ignoreCase = true) ||
-                    rabbitId?.let { id -> it.targetId.equals(id, ignoreCase = true) } == true ||
-                    it.label.contains(selected, ignoreCase = true))
+            it.targetType == TargetType.RABBIT && it.matchesRfid(selected, rabbitId)
         }
     }
 
@@ -303,254 +287,6 @@ fun PalpationScreen(
                 }
             }
         }
-    }
-}
-
-@Composable
-fun WeighingScreen(
-    task: MobileTask,
-    onBack: () -> Unit,
-    onBegin: () -> Unit,
-    onWeighingSaved: (String, Map<String, String>) -> Unit,
-    onPhoto: (String, String) -> Unit,
-    onVideo: (String, String) -> Unit,
-    onFile: (String, String) -> Unit,
-    onComment: (String) -> Unit,
-    onChecklistDone: (String) -> Unit,
-    onChecklistProblem: (String, String, String) -> Unit,
-    onChecklistSkip: (String, String) -> Unit,
-    onComplete: () -> Unit,
-    onSkip: (String) -> Unit,
-    canEdit: Boolean = true,
-) {
-    val pendingCages = task.checklist
-        .filter { it.status == ChecklistStatus.PENDING }
-        .mapNotNull { item -> MockRepository.cage(item.targetId)?.let { cage -> item to cage } }
-    var openedItemId by remember(task.id) { mutableStateOf<String?>(null) }
-    var weightGrams by remember(task.id) { mutableStateOf("") }
-
-    LaunchedEffect(task.checklist) {
-        if (pendingCages.none { (item) -> item.id == openedItemId }) {
-            openedItemId = null
-            weightGrams = ""
-        }
-    }
-
-    TaskExecutionScaffold(
-        task = task,
-        onBack = onBack,
-        onBegin = onBegin,
-        onComplete = onComplete,
-        onSkip = onSkip,
-        onChecklistDone = onChecklistDone,
-        onChecklistProblem = onChecklistProblem,
-        onChecklistSkip = onChecklistSkip,
-        allowRootComplete = false,
-        canEdit = canEdit,
-        checklistAfterContent = true,
-        checklistDescription = "Сохраненный вес отображается в готовых пунктах.",
-        afterChecklist = {
-            ProblemAndMediaControls(onPhoto, onVideo, onFile, onComment)
-            ExecutionEvidencePanel(task)
-        },
-    ) {
-        MesCard {
-            Text("Клетки контрольной группы", fontWeight = FontWeight.Bold)
-            if (pendingCages.isEmpty()) {
-                Text("Все клетки взвешены", color = MaterialTheme.colorScheme.onSurfaceVariant)
-            }
-            pendingCages.forEach { (item, cage) ->
-                val isOpened = openedItemId == item.id
-                Surface(
-                    color = MaterialTheme.colorScheme.background,
-                    shape = MaterialTheme.shapes.medium,
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .padding(top = MesSpacing.smallGap),
-                ) {
-                    Column(Modifier.padding(MesSpacing.contentGap)) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
-                        ) {
-                            Column(Modifier.weight(1f)) {
-                                Text(item.label, fontWeight = FontWeight.SemiBold)
-                                Text("Клетка ${cage.code}", color = MaterialTheme.colorScheme.onSurfaceVariant)
-                            }
-                            TextButton(
-                                onClick = {
-                                    openedItemId = if (isOpened) null else item.id
-                                    weightGrams = ""
-                                },
-                                enabled = task.status != TaskStatus.NEW,
-                            ) { Text(if (isOpened) "Закрыть" else "Открыть") }
-                        }
-
-                        if (isOpened) {
-                            OutlinedTextField(
-                                value = weightGrams,
-                                onValueChange = { weightGrams = it.filter(Char::isDigit) },
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(top = MesSpacing.smallGap),
-                                label = { Text("Вес, г") },
-                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                                singleLine = true,
-                            )
-                            if (SHOW_BLUETOOTH_SCALE_BUTTON) {
-                                OutlinedButton(
-                                    onClick = { weightGrams = (3100..3900).random().toString() },
-                                    modifier = Modifier.fillMaxWidth(),
-                                ) { Text("Mock Bluetooth-весы") }
-                            }
-                            Button(
-                                onClick = {
-                                    onWeighingSaved(
-                                        item.id,
-                                        mapOf(
-                                            "Клетка" to cage.code,
-                                            "Вес, г" to weightGrams,
-                                        ),
-                                    )
-                                    openedItemId = null
-                                    weightGrams = ""
-                                },
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(top = MesSpacing.contentGap),
-                                enabled = weightGrams.toIntOrNull()?.let { it > 0 } == true,
-                            ) { Text("Сохранить вес") }
-                        }
-                    }
-                }
-            }
-        }
-    }
-}
-
-@Composable
-fun CageOperationScreen(title: String, task: MobileTask, scannedRfid: String?, fieldsTitle: String, onBack: () -> Unit, onBegin: () -> Unit, onScan: (String, Map<String,String>) -> Unit, onOpenRfidScanner: (Map<String, String>) -> Unit, onValue: (String,String) -> Unit, onPhoto: (String,String)->Unit, onVideo: (String,String)->Unit, onFile: (String,String)->Unit, onComment: (String)->Unit, onChecklistDone: (String)->Unit, onChecklistProblem: (String,String,String)->Unit, onChecklistSkip: (String,String)->Unit, onComplete: () -> Unit, onSkip: (String)->Unit, canEdit: Boolean = true) {
-    var ok by remember { mutableStateOf(true) }
-    var number by remember { mutableStateOf("0") }
-    var requestSent by remember(task.id) { mutableStateOf(false) }
-    var successful by remember(task.id) { mutableStateOf(false) }
-    var completedCount by remember(task.id) { mutableIntStateOf(task.checklist.count { it.status == ChecklistStatus.DONE }) }
-    val newCompletedCount = task.checklist.count { it.status == ChecklistStatus.DONE }
-    val pendingSettlementTarget = task.checklist.firstOrNull { it.status == ChecklistStatus.PENDING }
-    val settlementFinished = task.operationType == OperationType.ANIMAL_SETTLEMENT &&
-        task.checklist.isNotEmpty() && pendingSettlementTarget == null
-    LaunchedEffect(newCompletedCount) {
-        if (requestSent && newCompletedCount > completedCount) {
-            successful = true
-            requestSent = false
-        }
-        completedCount = newCompletedCount
-    }
-    TaskExecutionScaffold(task, onBack, onBegin, onComplete, onSkip, onChecklistDone, onChecklistProblem, onChecklistSkip, allowRootComplete = false, canEdit = canEdit) {
-        if (task.operationType != OperationType.ANIMAL_SETTLEMENT) {
-            MesCard { Text(fieldsTitle, fontWeight = FontWeight.Bold); Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) { Text("Готово / норма"); Switch(ok, { ok = it; onValue("ok", it.toString()) }) }; OutlinedTextField(number, { number = it; onValue("count", it) }, Modifier.fillMaxWidth(), label = { Text("Количество / показатель") }) }
-        }
-        if (task.operationType == OperationType.ANIMAL_SETTLEMENT) {
-            MesCard {
-                Text("Клетка для заселения", fontWeight = FontWeight.Bold)
-                Spacer(Modifier.height(6.dp))
-                Text(pendingSettlementTarget?.label ?: "Все клетки заселены")
-                Text("Заселено $newCompletedCount из ${task.checklist.size}", style = MaterialTheme.typography.bodySmall)
-            }
-        }
-        CageScanPanel(title, onScan = { rfid ->
-            successful = false
-            requestSent = true
-            onScan(rfid, mapOf("ok" to ok.toString(), "count" to number))
-        }, onOpenScanner = { onOpenRfidScanner(mapOf("ok" to ok.toString(), "count" to number)) }, initialRfid = scannedRfid, showSelectionButtons = task.operationType != OperationType.ANIMAL_SETTLEMENT)
-        if (successful) {
-            MesCard {
-                Text(
-                    if (settlementFinished) "Задача успешно завершена" else "Клетка успешно заселена",
-                    color = ru.profikrol.operator.uikit.theme.mobileSuccessGreen,
-                    fontWeight = FontWeight.Bold,
-                )
-                if (settlementFinished) {
-                    Spacer(Modifier.height(12.dp))
-                    Button(
-                        onClick = onBack,
-                        modifier = Modifier.fillMaxWidth(),
-                    ) {
-                        Text("Задача завершена")
-                    }
-                }
-            }
-        }
-        ProblemAndMediaControls(onPhoto, onVideo, onFile, onComment)
-        ExecutionEvidencePanel(task)
-    }
-}
-
-@Composable
-fun NestPreparationScreen(task: MobileTask, onBack: () -> Unit, onBegin: () -> Unit, onPhoto: (String,String)->Unit, onVideo: (String,String)->Unit, onFile: (String,String)->Unit, onComment: (String)->Unit, onChecklistDone: (String)->Unit, onChecklistProblem: (String,String,String)->Unit, onChecklistSkip: (String,String)->Unit, onComplete: () -> Unit, onSkip: (String)->Unit, canEdit: Boolean = true) {
-    val pendingItems = task.checklist.filter { it.status == ChecklistStatus.PENDING }
-    TaskExecutionScaffold(task, onBack, onBegin, onComplete, onSkip, onChecklistDone, onChecklistProblem, onChecklistSkip, allowRootComplete = false, canEdit = canEdit) {
-        MesCard {
-            Text("Подготовка гнезд", fontWeight = FontWeight.Bold)
-            Text("Отмечайте готовность по номеру клетки.", color = MaterialTheme.colorScheme.onSurfaceVariant)
-            Spacer(Modifier.height(MesSpacing.contentGap))
-            if (pendingItems.isEmpty()) {
-                Text("Все клетки отмечены", color = MaterialTheme.colorScheme.onSurfaceVariant)
-            } else {
-                pendingItems.forEach { item ->
-                    Surface(
-                        color = MaterialTheme.colorScheme.background,
-                        shape = MaterialTheme.shapes.medium,
-                        modifier = Modifier.fillMaxWidth().padding(vertical = MesSpacing.smallGap)
-                    ) {
-                        Column(Modifier.padding(MesSpacing.contentGap)) {
-                            Text(item.label, fontWeight = FontWeight.SemiBold)
-                            Spacer(Modifier.height(MesSpacing.smallGap))
-                            Row(horizontalArrangement = Arrangement.spacedBy(MesSpacing.smallGap), modifier = Modifier.fillMaxWidth()) {
-                                Button(onClick = { onChecklistDone(item.id) }, modifier = Modifier.weight(1f)) { Text("Готова") }
-                                OutlinedButton(
-                                    onClick = { onChecklistProblem(item.id, "Клетка не готова", "Гнездо не подготовлено") },
-                                    modifier = Modifier.weight(1f)
-                                ) { Text("Не готова") }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-        ProblemAndMediaControls(onPhoto, onVideo, onFile, onComment)
-        ExecutionEvidencePanel(task)
-    }
-}
-
-@Composable
-fun HangarGenericOperationScreen(task: MobileTask, definition: OperationDefinition, onBack: () -> Unit, onBegin: () -> Unit, onValue: (String,String) -> Unit, onPhoto: (String,String)->Unit, onVideo: (String,String)->Unit, onFile: (String,String)->Unit, onComment: (String)->Unit, onChecklistDone: (String)->Unit, onChecklistProblem: (String,String,String)->Unit, onChecklistSkip: (String,String)->Unit, onComplete: () -> Unit, onSkip: (String)->Unit, canEdit: Boolean = true) {
-    TaskExecutionScaffold(task, onBack, onBegin, onComplete, onSkip, onChecklistDone, onChecklistProblem, onChecklistSkip, canEdit = canEdit) {
-        MesCard { Text(definition.type.title, fontWeight = FontWeight.Bold); GenericFields(definition, onValue) }
-        ProblemAndMediaControls(onPhoto, onVideo, onFile, onComment)
-        ExecutionEvidencePanel(task)
-    }
-}
-
-@Composable
-fun LightAutomationTaskScreen(task: MobileTask, onBack: () -> Unit, onBegin: () -> Unit, onValue: (String,String) -> Unit, onPhoto: (String,String)->Unit, onVideo: (String,String)->Unit, onFile: (String,String)->Unit, onComment: (String)->Unit, onChecklistDone: (String)->Unit, onChecklistProblem: (String,String,String)->Unit, onChecklistSkip: (String,String)->Unit, onComplete: () -> Unit, onSkip: (String)->Unit, canEdit: Boolean = true) {
-    var hours by remember { mutableStateOf("14") }
-    var mode by remember { mutableStateOf("База 14:00") }
-    TaskExecutionScaffold(task, onBack, onBegin, onComplete, onSkip, onChecklistDone, onChecklistProblem, onChecklistSkip, canEdit = canEdit) {
-        MesCard { Text("Управление освещением", fontWeight = FontWeight.Bold); OutlinedTextField(hours, { hours = it; onValue("lightHours", it) }, Modifier.fillMaxWidth(), label = { Text("Длительность светового дня, ч") }); Row(horizontalArrangement = Arrangement.spacedBy(MesSpacing.smallGap)) { listOf("База 14:00", "Стимуляция 22:00").forEach { FilterChip(selected = mode == it, onClick = { mode = it; onValue("mode", it) }, label = { Text(it) }) } } }
-        ProblemAndMediaControls(onPhoto, onVideo, onFile, onComment)
-        ExecutionEvidencePanel(task)
-    }
-}
-
-@Composable
-fun FeedOperationScreen(task: MobileTask, onBack: () -> Unit, onBegin: () -> Unit, onValue: (String,String) -> Unit, onPhoto: (String,String)->Unit, onVideo: (String,String)->Unit, onFile: (String,String)->Unit, onComment: (String)->Unit, onChecklistDone: (String)->Unit, onChecklistProblem: (String,String,String)->Unit, onChecklistSkip: (String,String)->Unit, onComplete: () -> Unit, onSkip: (String)->Unit, canEdit: Boolean = true) {
-    var feed by remember { mutableStateOf("Лактация") }
-    TaskExecutionScaffold(task, onBack, onBegin, onComplete, onSkip, onChecklistDone, onChecklistProblem, onChecklistSkip, canEdit = canEdit) {
-        MesCard { Text("Подача / проверка корма", fontWeight = FontWeight.Bold); Row(horizontalArrangement = Arrangement.spacedBy(MesSpacing.smallGap)) { listOf("Откорм", "Отъем", "Лактация").forEach { FilterChip(selected = feed == it, onClick = { feed = it; onValue("feedType", it) }, label = { Text(it) }) } } }
-        ProblemAndMediaControls(onPhoto, onVideo, onFile, onComment)
-        ExecutionEvidencePanel(task)
     }
 }
 

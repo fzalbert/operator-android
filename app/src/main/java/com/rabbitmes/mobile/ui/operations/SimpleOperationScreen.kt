@@ -36,7 +36,6 @@ private val SimpleText = Color(0xFF10231B)
 private val SimpleMuted = Color(0xFF60726A)
 private val SimpleBorder = Color(0xFFDCE6E1)
 private val SimpleRed = Color(0xFFDC4C4C)
-private const val USE_GENERAL_TEMPLATE_FOR_ALL_OPERATIONS = false
 
 @Composable
 fun SimpleOperationScreen(
@@ -83,7 +82,6 @@ fun SimpleOperationScreen(
         return
     }
 
-    val useGeneralTemplate = USE_GENERAL_TEMPLATE_FOR_ALL_OPERATIONS
     var activeItemId by remember(task.id) { mutableStateOf<String?>(null) }
     val activeItem = task.checklist.firstOrNull { it.id == activeItemId }
     val pending = task.checklist.filter { it.status == ChecklistStatus.PENDING }
@@ -91,7 +89,7 @@ fun SimpleOperationScreen(
     val doneCount = task.checklist.count { it.status == ChecklistStatus.DONE }
     val problemCount = task.checklist.count { it.status == ChecklistStatus.PROBLEM }
     val allProcessed = task.checklist.isEmpty() || pending.isEmpty()
-    val requiresScan = !useGeneralTemplate && definition.requiresScan && task.checklist.none {
+    val requiresScan = definition.requiresScan && task.checklist.none {
         it.serverType.equals("general", ignoreCase = true)
     }
     val listState = rememberLazyListState()
@@ -103,7 +101,7 @@ fun SimpleOperationScreen(
         previousProcessedCount = closed.size
     }
 
-    if (!useGeneralTemplate && activeItem != null && !requiresScan) {
+    if (activeItem != null && !requiresScan) {
         SimpleItemForm(
             task = task,
             definition = definition,
@@ -199,20 +197,7 @@ fun SimpleOperationScreen(
         }
 
         if (task.status != TaskStatus.NEW && canEdit) {
-            if (useGeneralTemplate) {
-                item {
-                    SimpleStandaloneForm(
-                        task = task,
-                        definition = definition,
-                        onValue = onValue,
-                        onComment = onComment,
-                        onComplete = onComplete,
-                        onSkip = onSkip,
-                        onGeneralComplete = onGeneralComplete,
-                        onGeneralReject = onGeneralReject,
-                    )
-                }
-            } else if (requiresScan) {
+            if (requiresScan) {
                 item {
                     SimpleScanPanel(
                         task = task,
@@ -245,7 +230,7 @@ fun SimpleOperationScreen(
             }
         }
 
-        if (!useGeneralTemplate && task.checklist.isNotEmpty()) {
+        if (task.checklist.isNotEmpty()) {
             item { SimpleSectionTitle(if (requiresScan) "Чек-лист закрывается сканированием" else "К исполнению") }
             if (pending.isEmpty()) item { SimpleEmpty("Все пункты обработаны") }
             pending.forEach { checklistItem ->
@@ -749,12 +734,8 @@ fun ProductionAnimalTransferScreen(
 
     LaunchedEffect(scannedRfid, task.checklist) {
         if (!scannedRfid.isNullOrBlank()) {
-            val scannedRabbit = MockRepository.rabbitByRfid(scannedRfid)
-            val item = pendingItems.firstOrNull { checklistItem ->
-                checklistItem.targetId.equals(scannedRfid, ignoreCase = true) ||
-                    checklistItem.label.contains(scannedRfid, ignoreCase = true) ||
-                    scannedRabbit?.id?.let { checklistItem.targetId.equals(it, ignoreCase = true) } == true
-            } ?: pendingItems.singleOrNull()
+            val item = pendingItems.firstOrNull { checklistItem -> checklistItem.matchesRfid(scannedRfid) }
+                ?: pendingItems.singleOrNull()
             if (item != null) {
                 selectedItemId = item.id
                 cellId = ""
@@ -1222,264 +1203,6 @@ fun ProductionMortalityRoundScreen(
         if (!canEdit) {
             item { SimpleEmpty("Задача доступна только для просмотра") }
         }
-        item { Spacer(Modifier.height(24.dp)) }
-    }
-}
-
-@Composable
-private fun AnimalSettlementScreen(
-    task: MobileTask,
-    definition: OperationDefinition,
-    onBack: () -> Unit,
-    onBegin: () -> Unit,
-    onValue: (String, String) -> Unit,
-    onComplete: () -> Unit,
-    onPhoto: (String, String) -> Unit,
-    onVideo: (String, String) -> Unit,
-    onFile: (String, String) -> Unit,
-    onComment: (String) -> Unit,
-    canEdit: Boolean,
-) {
-    val females = MockRepository.rabbits.filter { it.sex.equals("Самка", ignoreCase = true) }
-    val cells = MockRepository.allCages.filterNot { it.occupied }
-    var femaleId by remember(task.id) { mutableStateOf(task.result.values["femaleId"].orEmpty()) }
-    var cellId by remember(task.id) { mutableStateOf(task.result.values["cellId"].orEmpty()) }
-    var hasProblem by remember(task.id) { mutableStateOf(false) }
-    var problemReason by remember(task.id) { mutableStateOf(animalSettlementProblemReasons.first()) }
-    var problemComment by remember(task.id) { mutableStateOf(task.result.comment) }
-
-    val selectedFemale = females.firstOrNull { it.id == femaleId }
-    val selectedCell = cells.firstOrNull { it.id == cellId }
-    val canSubmit = femaleId.isNotBlank() && cellId.isNotBlank() && task.status != TaskStatus.NEW
-
-    LazyColumn(
-        modifier = Modifier.fillMaxSize().background(SimpleBackground).statusBarsPadding(),
-        contentPadding = PaddingValues(horizontal = 18.dp),
-        verticalArrangement = Arrangement.spacedBy(10.dp),
-    ) {
-        item {
-            Text(
-                "← Назад",
-                color = SimpleGreen,
-                fontWeight = FontWeight.ExtraBold,
-                modifier = Modifier.padding(vertical = 10.dp).clickable(onClick = onBack),
-            )
-        }
-        item {
-            Column(
-                Modifier.fillMaxWidth()
-                    .clip(RoundedCornerShape(26.dp))
-                    .background(Brush.linearGradient(listOf(SimpleGreen, SimpleDarkGreen)))
-                    .padding(18.dp),
-            ) {
-                Row(Modifier.fillMaxWidth(), Arrangement.SpaceBetween, Alignment.CenterVertically) {
-                    SimplePriorityBadge(task.priority)
-                    Text(
-                        "${task.plannedStart} · ${task.plannedDurationMinutes} мин",
-                        color = Color(0xFFD6EEE2),
-                        fontSize = 13.sp,
-                    )
-                }
-                Spacer(Modifier.height(12.dp))
-                Text("Заселение животных", color = Color.White, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Black)
-                Spacer(Modifier.height(5.dp))
-                Text(
-                    listOf(definition.type.title, workshopName(task), hangarName(task))
-                        .filter(String::isNotBlank)
-                        .joinToString(" · "),
-                    color = Color(0xFFD6EEE2),
-                )
-                Spacer(Modifier.height(12.dp))
-                Text("Исполнитель: оператор", color = Color.White, fontWeight = FontWeight.Bold)
-                Text("Приёмка: главный технолог", color = Color(0xFFD6EEE2))
-                if (task.status == TaskStatus.NEW && canEdit) {
-                    Spacer(Modifier.height(14.dp))
-                    SimpleButton("Приступить", onBegin, Modifier.fillMaxWidth())
-                }
-            }
-        }
-
-        if (task.status != TaskStatus.NEW && canEdit) {
-            item {
-                SimpleCard {
-                    SimpleSectionTitle("Размещение животного")
-                    Text(
-                        "Выберите самку и свободную клетку. После публикации API списки будут загружаться с сервера.",
-                        color = SimpleMuted,
-                    )
-                    SelectionDropdown(
-                        value = femaleId,
-                        onValueChange = { selectedId ->
-                            femaleId = selectedId
-                            onValue("femaleId", selectedId)
-                        },
-                        options = females.map { it.id },
-                        label = "Самка (FemaleId)",
-                    )
-                    selectedFemale?.let { female ->
-                        SimpleReadonly("Выбранная самка", "RFID ${female.rfid} · ID ${female.id}")
-                    }
-                    SelectionDropdown(
-                        value = cellId,
-                        onValueChange = { selectedId ->
-                            cellId = selectedId
-                            onValue("cellId", selectedId)
-                        },
-                        options = cells.map { it.id },
-                        label = "Клетка (CellId)",
-                    )
-                    selectedCell?.let { cell ->
-                        SimpleReadonly("Выбранная клетка", "${cell.code} · ID ${cell.id}")
-                    }
-                }
-            }
-            item {
-                SimpleCard {
-                    SimpleSectionTitle("Данные для отправки")
-                    SimpleReadonly("FemaleId", femaleId.ifBlank { "Не выбрана" })
-                    SimpleReadonly("CellId", cellId.ifBlank { "Не выбрана" })
-                }
-            }
-            item {
-                SimpleCard {
-                    SimpleProblemBlock(
-                        problem = hasProblem,
-                        onProblem = { hasProblem = it },
-                        reason = problemReason,
-                        onReason = {
-                            problemReason = it
-                            onValue("problemReason", it)
-                        },
-                        comment = problemComment,
-                        onComment = {
-                            problemComment = it
-                            onValue("problemComment", it)
-                        },
-                        reasons = animalSettlementProblemReasons,
-                        onPhoto = onPhoto,
-                        onVideo = onVideo,
-                        onFile = onFile,
-                        attachments = task.result.attachments,
-                    )
-                }
-            }
-            item {
-                SimpleButton(
-                    text = if (task.requiresAcceptance) "Завершить и отправить на приёмку" else "Завершить заселение",
-                    onClick = {
-                        onValue("femaleId", femaleId)
-                        onValue("cellId", cellId)
-                        if (hasProblem) {
-                            onValue("problemReason", problemReason)
-                            if (problemComment.isNotBlank()) onComment(problemComment)
-                        }
-                        onComplete()
-                    },
-                    modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
-                    enabled = canSubmit,
-                )
-            }
-        }
-        if (!canEdit) {
-            item { SimpleEmpty("Задача доступна только для просмотра") }
-        }
-        item { Spacer(Modifier.height(24.dp)) }
-    }
-}
-
-@Composable
-private fun NestControlRoundScreen(
-    task: MobileTask,
-    definition: OperationDefinition,
-    onBack: () -> Unit,
-    onBegin: () -> Unit,
-    onChecklistProblem: (String, String, String) -> Unit,
-    onComplete: () -> Unit,
-    canEdit: Boolean,
-) {
-    val availableCages = task.checklist.filter { it.status == ChecklistStatus.PENDING }
-    val problems = task.checklist.filter { it.status == ChecklistStatus.PROBLEM }
-    var selectedItemId by remember(task.id) { mutableStateOf("") }
-    var selectedIssue by remember(task.id) { mutableStateOf("") }
-    var count by remember(task.id) { mutableStateOf("") }
-    var comment by remember(task.id) { mutableStateOf("") }
-    var cageMenu by remember { mutableStateOf(false) }
-    var issueMenu by remember { mutableStateOf(false) }
-    var error by remember { mutableStateOf("") }
-    val selectedItem = task.checklist.firstOrNull { it.id == selectedItemId }
-    val issues = definition.fields.firstOrNull { it.id == "issue" }?.options.orEmpty()
-
-    LazyColumn(
-        modifier = Modifier.fillMaxSize().background(SimpleBackground).statusBarsPadding(),
-        contentPadding = PaddingValues(18.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp),
-    ) {
-        item { Text("← Назад", color = SimpleGreen, fontWeight = FontWeight.ExtraBold, modifier = Modifier.clickable(onClick = onBack).padding(vertical = 4.dp)) }
-        item {
-            Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(26.dp)).background(Brush.linearGradient(listOf(SimpleGreen, SimpleDarkGreen))).padding(18.dp)) {
-                Text(task.title, color = Color.White, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Black)
-                Text("${workshopName(task)} · ${hangarName(task)}", color = Color(0xFFD6EEE2))
-                Spacer(Modifier.height(14.dp))
-                Row(horizontalArrangement = Arrangement.spacedBy(7.dp)) {
-                    SimpleMetric(problems.size.toString(), "замечаний", Modifier.weight(1f), true)
-                    SimpleMetric(task.checklist.size.toString(), "клеток", Modifier.weight(1f), true)
-                }
-                if (task.status == TaskStatus.NEW && canEdit) {
-                    Spacer(Modifier.height(14.dp))
-                    SimpleButton("Начать обход", onBegin, Modifier.fillMaxWidth())
-                }
-            }
-        }
-        if (task.status != TaskStatus.NEW && canEdit) {
-            item {
-                SimpleCard {
-                    Text("Добавить замечание", color = SimpleText, fontSize = 20.sp, fontWeight = FontWeight.Black)
-                    Text("Если в клетке всё в порядке, ничего добавлять не нужно.", color = SimpleMuted)
-                    Box {
-                        OutlinedButton(onClick = { cageMenu = true }, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(16.dp)) {
-                            Text(selectedItem?.label ?: "Выберите клетку", modifier = Modifier.weight(1f))
-                            Text("⌄")
-                        }
-                        DropdownMenu(expanded = cageMenu, onDismissRequest = { cageMenu = false }) {
-                            availableCages.forEach { cage -> DropdownMenuItem(text = { Text(cage.label) }, onClick = { selectedItemId = cage.id; cageMenu = false }) }
-                        }
-                    }
-                    Box {
-                        OutlinedButton(onClick = { issueMenu = true }, modifier = Modifier.fillMaxWidth(), shape = RoundedCornerShape(16.dp)) {
-                            Text(selectedIssue.ifBlank { "Выберите проблему" }, modifier = Modifier.weight(1f))
-                            Text("⌄")
-                        }
-                        DropdownMenu(expanded = issueMenu, onDismissRequest = { issueMenu = false }) {
-                            issues.forEach { issue -> DropdownMenuItem(text = { Text(issue) }, onClick = { selectedIssue = issue; issueMenu = false }) }
-                        }
-                    }
-                    OutlinedTextField(count, { count = it.filter(Char::isDigit) }, Modifier.fillMaxWidth(), label = { Text("Количество (если применимо)") }, keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number), shape = RoundedCornerShape(16.dp))
-                    OutlinedTextField(comment, { comment = it }, Modifier.fillMaxWidth(), label = { Text("Комментарий") }, minLines = 2, shape = RoundedCornerShape(16.dp))
-                    if (error.isNotBlank()) Text(error, color = SimpleRed, fontWeight = FontWeight.Bold)
-                    SimpleButton("Добавить замечание", {
-                        when {
-                            selectedItem == null -> error = "Выберите клетку"
-                            selectedIssue.isBlank() -> error = "Выберите проблему"
-                            else -> {
-                                val details = listOfNotNull(count.takeIf(String::isNotBlank)?.let { "Количество: $it" }, comment.takeIf(String::isNotBlank)).joinToString(" · ")
-                                onChecklistProblem(selectedItem.id, selectedIssue, details)
-                                selectedItemId = ""; selectedIssue = ""; count = ""; comment = ""; error = ""
-                            }
-                        }
-                    }, Modifier.fillMaxWidth())
-                }
-            }
-            item {
-                SimpleButton(
-                    if (problems.isEmpty()) "Завершить обход — замечаний нет" else "Завершить и отправить (${problems.size})",
-                    onComplete,
-                    Modifier.fillMaxWidth(),
-                )
-            }
-        }
-        item { SimpleSectionTitle("Зафиксированные замечания") }
-        if (problems.isEmpty()) item { SimpleEmpty("Пока замечаний нет — остальные клетки считаются проверенными без проблем") }
-        problems.forEach { problem -> item(problem.id) { SimpleResultCard(problem, definition) } }
         item { Spacer(Modifier.height(24.dp)) }
     }
 }
