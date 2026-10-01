@@ -8,6 +8,7 @@ import dagger.hilt.InstallIn
 import dagger.hilt.components.SingletonComponent
 import kotlinx.serialization.ExperimentalSerializationApi
 import kotlinx.serialization.json.Json
+import okhttp3.Dns
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.logging.HttpLoggingInterceptor
@@ -20,6 +21,8 @@ import ru.profikrol.operator.data.remote.profile.ProfileApi
 import ru.profikrol.operator.data.remote.rabbit.RabbitApi
 import ru.profikrol.operator.data.remote.cell.CellApi
 import ru.profikrol.operator.data.remote.production.ProductionTaskApi
+import java.net.InetAddress
+import java.net.UnknownHostException
 import java.security.SecureRandom
 import java.security.cert.X509Certificate
 import java.util.concurrent.TimeUnit
@@ -124,13 +127,14 @@ object NetworkModule {
 
     private fun retrofit(client: OkHttpClient, json: Json): Retrofit =
         Retrofit.Builder()
-            .baseUrl(BASE_URL)
+            .baseUrl(BuildConfig.API_BASE_URL)
             .client(client)
             .addConverterFactory(json.asConverterFactory("application/json".toMediaType()))
             .build()
 
     private fun baseClient(logging: HttpLoggingInterceptor): OkHttpClient.Builder =
         OkHttpClient.Builder()
+            .dns(productionDnsFallback)
             // Сетевой интерцептор: в лог попадает запрос уже с токеном и повторы после refresh.
             .addNetworkInterceptor(logging)
             .connectTimeout(30, TimeUnit.SECONDS)
@@ -144,6 +148,34 @@ object NetworkModule {
                     hostnameVerifier(unsafeHostnameVerifier)
                 }
             }
+
+    private val productionDnsFallback: Dns = object : Dns {
+        override fun lookup(hostname: String): List<InetAddress> {
+            return try {
+                Dns.SYSTEM.lookup(hostname)
+            } catch (error: UnknownHostException) {
+                if (
+                    BuildConfig.API_FALLBACK_IP.isBlank() ||
+                    !hostname.equals(BuildConfig.API_FALLBACK_HOST, ignoreCase = true)
+                ) {
+                    throw error
+                }
+                Log.w(
+                    AUTH_LOG_TAG,
+                    "System DNS failed for $hostname; using configured production fallback",
+                )
+                listOf(InetAddress.getByAddress(hostname, BuildConfig.API_FALLBACK_IP.toIpv4Bytes()))
+            }
+        }
+    }
+
+    private fun String.toIpv4Bytes(): ByteArray {
+        val octets = split('.').map { it.toIntOrNull() }
+        require(octets.size == 4 && octets.all { it != null && it in 0..255 }) {
+            "Invalid API fallback IPv4 address"
+        }
+        return octets.map { requireNotNull(it).toByte() }.toByteArray()
+    }
 
     private val unsafeTrustManager = object : X509TrustManager {
         override fun checkClientTrusted(chain: Array<out X509Certificate>?, authType: String?) = Unit

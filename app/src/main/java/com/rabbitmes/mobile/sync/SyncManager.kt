@@ -5,6 +5,8 @@ import com.rabbitmes.mobile.core.UserMessages
 import com.rabbitmes.mobile.core.runCatchingCancellable
 import com.rabbitmes.mobile.core.toHttpDebugMessage
 import com.rabbitmes.mobile.core.toUserMessage
+import com.rabbitmes.mobile.data.mapper.allTargets
+import com.rabbitmes.mobile.data.mapper.toChecklistStatus
 import com.rabbitmes.mobile.data.task.ProductionTaskRemote
 import com.rabbitmes.mobile.data.task.ProductionTaskRepository
 import com.rabbitmes.mobile.domain.ChecklistStatus
@@ -187,11 +189,31 @@ class SyncManager @Inject constructor(
                 alreadyDone = { itemProcessed(taskId, payload.itemId) },
             )
             OfflineActionType.SUBMIT_PRODUCTION_RESULT -> remote.submitResult(taskId, payload.values.getValue(RESULT_JSON_KEY))
+            OfflineActionType.CANCEL_PRODUCTION_TASK -> reportTaskProblem(taskId, payload.reason, payload.comment)
             OfflineActionType.COMPLETE_PRODUCTION_TASK -> idempotent(
                 action = { remote.complete(taskId) },
                 alreadyDone = { remote.task(taskId).status == TaskStatus.DONE },
             )
         }
+    }
+
+    /** Проблема по всем незакрытым целям задачи, затем завершение задачи. */
+    private suspend fun reportTaskProblem(taskId: String, reason: String?, comment: String?) {
+        val pendingTargets = remote.details(taskId).allTargets().filter { target ->
+            target.isCompleted != true && target.status.orEmpty().toChecklistStatus() == ChecklistStatus.PENDING
+        }
+        require(pendingTargets.isNotEmpty()) { "В задаче нет незакрытых целей для отметки проблемы" }
+        val problemComment = listOfNotNull(reason, comment)
+            .map(String::trim)
+            .filter(String::isNotBlank)
+            .distinct()
+            .joinToString(". ")
+            .ifBlank { "Невозможно выполнить задачу" }
+        pendingTargets.forEach { target -> remote.reportTargetProblem(taskId, target.id, problemComment) }
+        idempotent(
+            action = { remote.complete(taskId) },
+            alreadyDone = { remote.task(taskId).status == TaskStatus.DONE },
+        )
     }
 
     private suspend fun itemProcessed(taskId: String, itemId: String?): Boolean {
@@ -222,6 +244,7 @@ class SyncManager @Inject constructor(
         OfflineActionType.COMPLETE_PRODUCTION_CHECKLIST_ITEM -> "Не удалось отметить пункт"
         OfflineActionType.COMPLETE_PRODUCTION_TARGET,
         OfflineActionType.PROBLEM_PRODUCTION_TARGET -> "Не удалось сохранить результат"
+        OfflineActionType.CANCEL_PRODUCTION_TASK -> "Не удалось отметить проблему"
         OfflineActionType.SUBMIT_PRODUCTION_RESULT,
         OfflineActionType.COMPLETE_PRODUCTION_TASK -> "Не удалось завершить задачу"
     }

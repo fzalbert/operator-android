@@ -24,3 +24,19 @@ fun Iterable<MobileTask>.orderedOpenTasks(): List<MobileTask> =
             .thenBy { it.sortOrder }
             .then(mobileTaskExecutionComparator),
     )
+
+fun Iterable<MobileTask>.withSingleInProgressTask(): List<MobileTask> {
+    val tasks = toList()
+    val activeTaskId = tasks
+        .orderedOpenTasks()
+        .firstOrNull { it.status == TaskStatus.IN_PROGRESS }
+        ?.id
+
+    return tasks.map { task ->
+        if (task.status == TaskStatus.IN_PROGRESS && task.id != activeTaskId) {
+            task.copy(status = TaskStatus.NEW)
+        } else {
+            task
+        }
+    }
+}

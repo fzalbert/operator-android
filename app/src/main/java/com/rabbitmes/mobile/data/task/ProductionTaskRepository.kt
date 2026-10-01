@@ -14,6 +14,7 @@ import com.rabbitmes.mobile.domain.OperationType
 import com.rabbitmes.mobile.domain.TargetType
 import com.rabbitmes.mobile.domain.TaskStatus
 import com.rabbitmes.mobile.domain.orderedOpenTasks
+import com.rabbitmes.mobile.domain.withSingleInProgressTask
 import com.rabbitmes.mobile.session.EmployeeSession
 import com.rabbitmes.mobile.session.ShiftRepository
 import kotlinx.coroutines.CoroutineScope
@@ -125,6 +126,7 @@ class ProductionTaskRepository @Inject constructor(
                         remote
                     }
                 }
+                .withSingleInProgressTask()
             // Успешный ответ сервера надёжнее флага сети эмулятора, который на ферме бывает false.
             shiftRepository.setOnline(true)
             persist()
@@ -189,7 +191,7 @@ class ProductionTaskRepository @Inject constructor(
         val cached = offlineRepository.restoreTasks(employeeSession.id)
         if (cached.isNotEmpty()) {
             hasLoadedRemote = true
-            _tasks.value = cached
+            _tasks.value = cached.withSingleInProgressTask()
         }
     }
 

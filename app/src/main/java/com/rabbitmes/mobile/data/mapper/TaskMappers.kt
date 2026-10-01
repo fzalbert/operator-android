@@ -37,6 +37,8 @@ private val OPERATION_ALIASES = mapOf(
     "перевод животных" to OperationType.ANIMAL_TRANSFER,
     "переселение" to OperationType.ANIMAL_TRANSFER,
     "переселение животных" to OperationType.ANIMAL_TRANSFER,
+    "забой" to OperationType.SLAUGHTER_SHIPMENT,
+    "забой отгрузка" to OperationType.SLAUGHTER_SHIPMENT,
     "kindling" to OperationType.OKROL,
     "nest equalization" to OperationType.NEST_SELECTION,
     "female arrival" to OperationType.FEMALE_DELIVERY,
@@ -150,17 +152,22 @@ internal fun String.productionIdValue(): String {
 
 internal fun MobileTask.productionResultJson(comment: String = result.comment): String = buildJsonObject {
     val fields = MockRepository.operation(operationType).fields.associateBy { it.id }
-    result.values.forEach { (key, value) ->
-        if (value.isBlank()) return@forEach
-        when (fields[key]?.type) {
-            FieldType.BOOLEAN -> put(key, value.toBooleanStrictOrNull() ?: false)
-            FieldType.NUMBER, FieldType.TEMPERATURE, FieldType.HOURS -> {
-                value.toLongOrNull()?.let { put(key, it) }
-                    ?: value.toDoubleOrNull()?.let { put(key, it) }
-                    ?: put(key, value)
+    if (operationType == OperationType.SLAUGHTER_SHIPMENT) {
+        val rawCount = result.values["animalCount"] ?: result.values["count"]
+        rawCount?.toDoubleOrNull()?.toInt()?.let { put("animalCount", it) }
+    } else {
+        result.values.forEach { (key, value) ->
+            if (value.isBlank()) return@forEach
+            when (fields[key]?.type) {
+                FieldType.BOOLEAN -> put(key, value.toBooleanStrictOrNull() ?: false)
+                FieldType.NUMBER, FieldType.TEMPERATURE, FieldType.HOURS -> {
+                    value.toLongOrNull()?.let { put(key, it) }
+                        ?: value.toDoubleOrNull()?.let { put(key, it) }
+                        ?: put(key, value)
+                }
+                FieldType.PHOTO, FieldType.VIDEO, FieldType.FILE -> Unit
+                else -> put(key, value)
             }
-            FieldType.PHOTO, FieldType.VIDEO, FieldType.FILE -> Unit
-            else -> put(key, value)
         }
     }
     if (comment.isNotBlank()) put("comment", comment)
@@ -169,7 +176,12 @@ internal fun MobileTask.productionResultJson(comment: String = result.comment): 
 internal fun ProductionTaskDetailsDto.toMobileTask(employeeId: String): MobileTask {
     val operationCandidates = listOfNotNull(task.operationCode, task.title, task.description)
     val operationKeys = operationCandidates.map { it.operationLookupKey() }
-    val operationType = operationKeys.firstNotNullOfOrNull(OPERATION_ALIASES::get)
+    // Переселение определяется по заголовку раньше кода операции: у него бывает общий код.
+    val operationType = if (
+        OPERATION_ALIASES[task.title.orEmpty().operationLookupKey()] == OperationType.ANIMAL_TRANSFER
+    ) {
+        OperationType.ANIMAL_TRANSFER
+    } else operationKeys.firstNotNullOfOrNull(OPERATION_ALIASES::get)
         ?: operationKeys.firstNotNullOfOrNull { operationKey ->
             OperationType.entries.firstOrNull { type ->
                 type.name.operationLookupKey() == operationKey ||
@@ -234,7 +246,7 @@ private fun String.toTaskStatus(): TaskStatus = when (normalizedStatus()) {
     else -> TaskStatus.NEW
 }
 
-private fun String.toChecklistStatus(): ChecklistStatus = when (normalizedStatus()) {
+internal fun String.toChecklistStatus(): ChecklistStatus = when (normalizedStatus()) {
     "DONE", "COMPLETED", "FINISHED", "ACCEPTED", "APPROVED" -> ChecklistStatus.DONE
     "PROBLEM", "FAILED", "BLOCKED", "ABORTED", "REJECTED" -> ChecklistStatus.PROBLEM
     "SKIPPED", "CANCELLED", "CANCELED" -> ChecklistStatus.SKIPPED

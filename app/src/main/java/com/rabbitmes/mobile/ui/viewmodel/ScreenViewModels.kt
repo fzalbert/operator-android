@@ -7,12 +7,11 @@ import com.rabbitmes.mobile.core.UserMessages
 import com.rabbitmes.mobile.core.runCatchingCancellable
 import com.rabbitmes.mobile.data.NotificationRepository
 import com.rabbitmes.mobile.data.mapper.isOpen
-import com.rabbitmes.mobile.data.reference.OperationCatalog
+import com.rabbitmes.mobile.PROFILE_OPERATION_TITLES
 import com.rabbitmes.mobile.data.task.ProductionTaskRepository
 import com.rabbitmes.mobile.domain.Employee
 import com.rabbitmes.mobile.domain.MobileTask
 import com.rabbitmes.mobile.domain.NotificationUi
-import com.rabbitmes.mobile.domain.OperationDefinition
 import com.rabbitmes.mobile.domain.ShiftState
 import com.rabbitmes.mobile.session.EmployeeSession
 import com.rabbitmes.mobile.session.ShiftRepository
@@ -23,6 +22,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.launch
 import retrofit2.HttpException
 import javax.inject.Inject
 
@@ -105,8 +105,9 @@ class ShiftViewModel @Inject constructor(
         }
     }
 
-    private suspend fun onShiftOpened() {
-        taskRepository.load()
+    /** Задачи грузятся отдельно, чтобы индикатор смены не висел на всё время загрузки. */
+    private fun onShiftOpened() {
+        viewModelScope.launch { runCatchingCancellable { taskRepository.load() } }
         taskRepository.startAutoRefresh()
     }
 }
@@ -143,11 +144,10 @@ class SyncViewModel @Inject constructor(
 class ProfileViewModel @Inject constructor(
     employeeSession: EmployeeSession,
     taskRepository: ProductionTaskRepository,
-    catalog: OperationCatalog,
 ) : ViewModel() {
     val employee: StateFlow<Employee> = employeeSession.employee
     val tasks: StateFlow<List<MobileTask>> = state(taskRepository.visibleTasksFlow(employeeSession), emptyList())
-    val operations: List<OperationDefinition> = catalog.all
+    val operations: List<String> = PROFILE_OPERATION_TITLES
 }
 
 @HiltViewModel

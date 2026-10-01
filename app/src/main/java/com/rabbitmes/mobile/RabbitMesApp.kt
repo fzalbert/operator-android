@@ -256,15 +256,15 @@ private fun TaskExecutionDestination(
             onClose()
         },
         onSkip = { reason ->
-            vm.skip(reason)
+            vm.reject(reason)
             onClose()
         },
         onGeneralComplete = { comment ->
             vm.complete(comment)
             onClose()
         },
-        onGeneralReject = { reason, _ ->
-            vm.skip(reason)
+        onGeneralReject = { reason, comment ->
+            vm.reject(reason, comment)
             onClose()
         },
         onOpenAnimal = { rfid -> onOpenAnimal(rfid, task.id) },

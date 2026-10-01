@@ -33,6 +33,7 @@ import com.rabbitmes.mobile.domain.TargetType
 import com.rabbitmes.mobile.domain.TaskStatus
 import com.rabbitmes.mobile.domain.matchesRfid
 import com.rabbitmes.mobile.domain.operations.TargetResult
+import com.rabbitmes.mobile.domain.operations.TargetResultContext
 import com.rabbitmes.mobile.domain.operations.TargetResults
 import com.rabbitmes.mobile.session.ShiftRepository
 import com.rabbitmes.mobile.sync.SyncManager
@@ -118,8 +119,25 @@ class TaskExecutionViewModel @Inject constructor(
     fun addComment(comment: String) =
         taskRepository.update(taskId) { it.copy(result = it.result.copy(comment = comment)) }
 
-    fun skip(reason: String) = taskRepository.update(taskId) {
-        it.copy(status = TaskStatus.SKIPPED, result = it.result.copy(problemReason = reason, comment = reason))
+    /**
+     * Задачу нельзя выполнить: на сервере по всем открытым целям ставится проблема,
+     * и задача завершается.
+     */
+    fun reject(reason: String, comment: String? = null) {
+        val task = task.value ?: return
+        val rejectionComment = comment ?: task.result.comment
+        syncManager.enqueue(
+            taskId,
+            OfflineActionType.CANCEL_PRODUCTION_TASK,
+            OfflineActionPayload(reason = reason, comment = rejectionComment.ifBlank { null }),
+        )
+        taskRepository.update(taskId) {
+            it.copy(
+                status = TaskStatus.DONE,
+                result = it.result.copy(problemReason = reason, comment = rejectionComment, completedAt = "now"),
+            )
+        }
+        messages.show(if (isOnline) "Задача завершена с проблемой" else "Проблема сохранена офлайн")
     }
 
     fun startRfidScan(values: Map<String, String>) {
@@ -369,6 +387,8 @@ class TaskExecutionViewModel @Inject constructor(
         comment: String = "",
         values: Map<String, String> = emptyMap(),
     ) {
+        _scannedRfid.value = null
+        _scannedValues.value = emptyMap()
         val task = task.value ?: return
         val item = task.checklist.firstOrNull { it.id == itemId }
         when (item?.serverType) {
@@ -390,7 +410,7 @@ class TaskExecutionViewModel @Inject constructor(
         comment: String,
         values: Map<String, String>,
     ) {
-        val result = when (val built = TargetResults.build(task.operationType, item, values)) {
+        val result = when (val built = TargetResults.build(task.operationType, item, values, TargetResultContext(::cellIdFor))) {
             is TargetResult.Invalid -> {
                 messages.show(built.message)
                 return
@@ -431,6 +451,12 @@ class TaskExecutionViewModel @Inject constructor(
             },
         )
     }
+
+    /** id клетки по выбору оператора: подпись из списка, id или значение с префиксом. */
+    private fun cellIdFor(selected: String): Long? =
+        references.cells.firstOrNull { cell ->
+            cell.displayName.equals(selected, ignoreCase = true) || cell.id.toString() == selected.productionIdValue()
+        }?.id ?: selected.productionIdValue().toLongOrNull()
 
     private fun updateItemLocally(
         itemId: String,

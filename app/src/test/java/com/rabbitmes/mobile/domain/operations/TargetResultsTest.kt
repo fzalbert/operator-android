@@ -45,12 +45,27 @@ class TargetResultsTest {
     }
 
     @Test
-    fun `weighing rabbit needs rabbit number`() {
-        val unnumbered = cage.copy(targetId = "abc", label = "Кролик")
-        assertTrue(TargetResults.build(OperationType.WEIGHING_RABBIT, unnumbered, emptyMap()) is TargetResult.Invalid)
-        val json = ready(OperationType.WEIGHING_RABBIT, mapOf("weightGrams" to "2500"), cage.copy(targetId = "cage-3")).json
-        assertEquals(3, json["rabbitId"]!!.jsonPrimitive.int)
-        assertEquals(2500, json["weightGrams"]!!.jsonPrimitive.int)
+    fun `weighing rabbits sends all weights of the cage`() {
+        val json = ready(OperationType.WEIGHING_RABBIT, mapOf("weightsGrams" to "1800, 0, 2100")).json
+        assertEquals("[1800,2100]", json["weightsGrams"].toString())
+    }
+
+    @Test
+    fun `nest selection sends only one of removed and added`() {
+        val json = ready(OperationType.NEST_SELECTION, mapOf("alive" to "8", "added" to "2")).json
+        assertTrue(json.containsKey("added"))
+        assertFalse(json.containsKey("removed"))
+    }
+
+    @Test
+    fun `animal transfer resolves selected cell`() {
+        val result = TargetResults.build(
+            OperationType.ANIMAL_TRANSFER,
+            cage,
+            mapOf("cellId" to "Ряд 1 · Клетка 5"),
+            TargetResultContext { selected -> if (selected == "Ряд 1 · Клетка 5") 55L else null },
+        ) as TargetResult.Ready
+        assertEquals(55, result.json["cellId"]!!.jsonPrimitive.int)
     }
 
     @Test

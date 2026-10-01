@@ -12,6 +12,14 @@ import com.rabbitmes.mobile.data.MockRepository
 import com.rabbitmes.mobile.domain.*
 import com.rabbitmes.mobile.ui.components.*
 
+/** Кроличий пункт задачи по RFID: сначала среди ожидающих, потом среди уже обработанных. */
+private fun MobileTask.findRabbitChecklistItem(rfid: String, resolvedRabbitId: String?, pendingOnly: Boolean): ChecklistItem? =
+    checklist.firstOrNull { item ->
+        item.targetType == TargetType.RABBIT &&
+            (!pendingOnly || item.status == ChecklistStatus.PENDING) &&
+            item.matchesRfid(rfid, resolvedRabbitId)
+    }
+
 @Composable
 fun InseminationScreen(
     task: MobileTask,
@@ -53,12 +61,8 @@ fun InseminationScreen(
                 return@LaunchedEffect
             }
             val rabbitId = resolveRabbitId(scannedRfid)
-            val isPending = task.checklist.any {
-                it.targetType == TargetType.RABBIT &&
-                    it.matchesRfid(scannedRfid, rabbitId) &&
-                    it.status == ChecklistStatus.PENDING
-            }
-            if (isPending) {
+            val isKnown = task.findRabbitChecklistItem(scannedRfid, rabbitId, pendingOnly = false) != null
+            if (isKnown) {
                 rfidInput = scannedRfid
                 selectedRfid = scannedRfid
             } else if (selectedRfid == scannedRfid) {
@@ -68,11 +72,17 @@ fun InseminationScreen(
         }
     }
 
+    LaunchedEffect(task.checklist, submittedRfid) {
+        if (submittedRfid != null) {
+            rfidInput = ""
+            selectedRfid = null
+        }
+    }
+
     val checklistItem = selectedRfid?.let { selected ->
         val rabbitId = resolveRabbitId(selected)
-        task.checklist.firstOrNull {
-            it.targetType == TargetType.RABBIT && it.matchesRfid(selected, rabbitId)
-        }
+        task.findRabbitChecklistItem(selected, rabbitId, pendingOnly = true)
+            ?: task.findRabbitChecklistItem(selected, rabbitId, pendingOnly = false)
     }
     val scannerValues = buildMap {
         if (hasProblem) {
@@ -124,6 +134,13 @@ fun InseminationScreen(
                 Column(verticalArrangement = Arrangement.spacedBy(MesSpacing.contentGap)) {
                     Text("RFID найден: $selected", color = MaterialTheme.colorScheme.primary)
 
+                    if (task.status == TaskStatus.NEW) {
+                        Text(
+                            "Сначала нажмите «Приступить»",
+                            color = MaterialTheme.colorScheme.error,
+                        )
+                    }
+
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.SpaceBetween,
@@ -137,7 +154,7 @@ fun InseminationScreen(
                         OutlinedTextField(
                             value = problemComment,
                             onValueChange = { problemComment = it },
-                            modifier = Modifier.fillMaxWidth(),
+                            modifier = Modifier.fillMaxWidth().forceSoftwareKeyboardOnFocus(),
                             label = { Text("Опишите проблему") },
                             minLines = 3,
                         )
@@ -161,14 +178,15 @@ fun InseminationScreen(
                                 }
                             }
                             submittedRfid = rfid
-                            onScan(rfid, values)
                             rfidInput = ""
                             selectedRfid = null
                             hasProblem = false
                             problemComment = ""
+                            onScan(rfid, values)
                         },
-                        enabled = task.status != TaskStatus.NEW &&
-                            checklistItem?.status == ChecklistStatus.PENDING &&
+                        enabled = canEdit &&
+                            task.status != TaskStatus.NEW &&
+                            checklistItem != null &&
                             (!hasProblem || problemComment.isNotBlank()),
                         modifier = Modifier.fillMaxWidth(),
                     ) {
@@ -212,11 +230,17 @@ fun PalpationScreen(
         }
     }
 
+    LaunchedEffect(task.checklist, submittedRfid) {
+        if (submittedRfid != null) {
+            rfidInput = ""
+            selectedRfid = null
+        }
+    }
+
     val checklistItem = selectedRfid?.let { selected ->
         val rabbitId = resolveRabbitId(selected)
-        task.checklist.firstOrNull {
-            it.targetType == TargetType.RABBIT && it.matchesRfid(selected, rabbitId)
-        }
+        task.findRabbitChecklistItem(selected, rabbitId, pendingOnly = true)
+            ?: task.findRabbitChecklistItem(selected, rabbitId, pendingOnly = false)
     }
 
     TaskExecutionScaffold(
@@ -267,21 +291,21 @@ fun PalpationScreen(
                     Button(
                         onClick = {
                             submittedRfid = rfid
-                            onScan(rfid, mapOf("pregnant" to "true", "palpationResult" to "Сукрольная"))
                             rfidInput = ""
                             selectedRfid = null
+                            onScan(rfid, mapOf("pregnant" to "true", "palpationResult" to "Сукрольная"))
                         },
-                        enabled = task.status != TaskStatus.NEW && checklistItem?.status == ChecklistStatus.PENDING,
+                        enabled = canEdit && task.status != TaskStatus.NEW && checklistItem != null,
                         modifier = Modifier.weight(1f),
                     ) { Text("Беременна") }
                     OutlinedButton(
                         onClick = {
                             submittedRfid = rfid
-                            onScan(rfid, mapOf("pregnant" to "false", "palpationResult" to "Не беременна"))
                             rfidInput = ""
                             selectedRfid = null
+                            onScan(rfid, mapOf("pregnant" to "false", "palpationResult" to "Не беременна"))
                         },
-                        enabled = task.status != TaskStatus.NEW && checklistItem?.status == ChecklistStatus.PENDING,
+                        enabled = canEdit && task.status != TaskStatus.NEW && checklistItem != null,
                         modifier = Modifier.weight(1f),
                     ) { Text("Не беременна") }
                 }

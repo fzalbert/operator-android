@@ -21,7 +21,7 @@ private fun HttpException.toUserMessage(fallback: String): String {
     val serverMessage = peekErrorBody()
         .extractServerErrorMessage()
         ?.takeIf(String::isSuitableForUser)
-    if (serverMessage != null) return serverMessage
+    if (serverMessage != null) return serverMessage.localizeServerFieldNames()
 
     return when (code()) {
         400 -> "$fallback. Проверьте введённые данные"
@@ -35,6 +35,14 @@ private fun HttpException.toUserMessage(fallback: String): String {
         else -> fallback
     }
 }
+
+/** Подменяет имена полей бэка в текстах ошибок на понятные оператору. */
+internal fun String.localizeServerFieldNames(): String = this
+    .replace("\"added\"", "«положили»", ignoreCase = true)
+    .replace("\"removed\"", "«забрали»", ignoreCase = true)
+    .replace(Regex("\\badded\\b", RegexOption.IGNORE_CASE), "«положили»")
+    .replace(Regex("\\bremoved\\b", RegexOption.IGNORE_CASE), "«забрали»")
+    .replace(Regex("\\banimalCount\\b", RegexOption.IGNORE_CASE), "«количество животных»")
 
 private fun HttpException.peekErrorBody(): String = runCatchingCancellable {
     response()?.errorBody()?.source()?.let { source ->

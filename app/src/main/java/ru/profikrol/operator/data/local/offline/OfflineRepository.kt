@@ -16,6 +16,8 @@ enum class OfflineActionType {
     PROBLEM_PRODUCTION_TARGET,
     SUBMIT_PRODUCTION_RESULT,
     COMPLETE_PRODUCTION_TASK,
+    /** Задача не может быть выполнена: проблема по всем открытым целям и завершение. */
+    CANCEL_PRODUCTION_TASK,
 }
 
 @Serializable
