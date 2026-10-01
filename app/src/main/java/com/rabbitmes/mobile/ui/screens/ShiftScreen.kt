@@ -40,7 +40,6 @@ fun ShiftScreen(
     onOpenNext: (String) -> Unit,
     onOpenNotifications: () -> Unit,
     onLogout: () -> Unit,
-    bottomBar: @Composable () -> Unit,
 ) {
     val active = shift.startedAt != null && shift.finishedAt == null
     val openTasks = tasks.filter { it.status != TaskStatus.DONE && it.status != TaskStatus.SENT && it.status != TaskStatus.SKIPPED }
@@ -49,7 +48,7 @@ fun ShiftScreen(
     val progress = if (totalItems == 0) 0f else closedItems.toFloat() / totalItems
     val greetingName = employee.fullName.greetingName()
 
-    Scaffold(bottomBar = bottomBar, containerColor = MaterialTheme.colorScheme.background) { padding ->
+    Scaffold(containerColor = MaterialTheme.colorScheme.background) { padding ->
         LazyColumn(
             Modifier.fillMaxSize().padding(padding),
             contentPadding = PaddingValues(bottom = 24.dp),

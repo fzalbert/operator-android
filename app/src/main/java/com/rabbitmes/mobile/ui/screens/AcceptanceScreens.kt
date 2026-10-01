@@ -27,9 +27,8 @@ private val acceptanceProblemReasons = listOf(
  * Экран оставлен под новую приёмку production-задач.
  */
 @Composable
-fun AcceptanceQueueScreen(onBack: () -> Unit, bottomBar: @Composable () -> Unit) {
+fun AcceptanceQueueScreen(onBack: () -> Unit) {
     Scaffold(
-        bottomBar = bottomBar,
         containerColor = Color.Transparent,
     ) { padding ->
         LazyColumn(Modifier.fillMaxSize().padding(padding), contentPadding = PaddingValues(bottom = MesSpacing.screenBottom)) {

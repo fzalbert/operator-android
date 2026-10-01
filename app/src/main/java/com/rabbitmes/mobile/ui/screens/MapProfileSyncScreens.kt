@@ -27,13 +27,12 @@ import com.rabbitmes.mobile.ui.components.*
 import ru.profikrol.operator.uikit.theme.mobileSuccessGreen
 
 @Composable
-fun SyncQueueScreen(shift: ShiftState, tasks: List<MobileTask>, onSync: () -> Unit, onBack: () -> Unit, bottomBar: @Composable () -> Unit) {
+fun SyncQueueScreen(shift: ShiftState, tasks: List<MobileTask>, onSync: () -> Unit, onBack: () -> Unit) {
     val pendingTasks = tasks.filter { it.offlineEvents > 0 }
     val statusColor = if (shift.isOnline) mobileSuccessGreen else Color(0xFFE98500)
     val hasPending = shift.pendingSyncEvents > 0 || pendingTasks.isNotEmpty()
 
     Scaffold(
-        bottomBar = bottomBar,
         containerColor = Color.Transparent,
     ) { padding ->
         LazyColumn(
@@ -117,14 +116,13 @@ fun SyncQueueScreen(shift: ShiftState, tasks: List<MobileTask>, onSync: () -> Un
 }
 
 @Composable
-fun ProfileScreen(employee: Employee, tasks: List<MobileTask>, operations: List<OperationDefinition>, onLogout: () -> Unit, bottomBar: @Composable () -> Unit) {
+fun ProfileScreen(employee: Employee, tasks: List<MobileTask>, operations: List<OperationDefinition>, onLogout: () -> Unit) {
     val allowedOperations = operations
         .filter { employee.role in it.allowedRoles }
         .distinctBy { it.type }
         .sortedBy { it.type.title }
 
     Scaffold(
-        bottomBar = bottomBar,
         containerColor = Color.Transparent,
     ) { padding ->
         LazyColumn(Modifier.fillMaxSize().padding(padding)) {

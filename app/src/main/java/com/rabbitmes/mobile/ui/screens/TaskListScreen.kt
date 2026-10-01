@@ -19,11 +19,11 @@ import com.rabbitmes.mobile.domain.*
 import com.rabbitmes.mobile.ui.components.*
 
 @Composable
-fun TaskListScreen(tasks: List<MobileTask>, nextTask: MobileTask?, message: String?, shiftStarted: Boolean, onOpen: (String) -> Unit, onBack: () -> Unit, bottomBar: @Composable () -> Unit) {
+fun TaskListScreen(tasks: List<MobileTask>, nextTask: MobileTask?, message: String?, shiftStarted: Boolean, onOpen: (String) -> Unit, onBack: () -> Unit) {
     val open = tasks.orderedOpenTasks()
     val problems = open.sumOf { task -> task.checklist.count { it.status == ChecklistStatus.PROBLEM } + task.targets.count { it.status == ChecklistStatus.PROBLEM } }
     val largeFont = LocalDensity.current.fontScale >= 1.3f
-    Scaffold(bottomBar = bottomBar, containerColor = MaterialTheme.colorScheme.background) { padding ->
+    Scaffold(containerColor = MaterialTheme.colorScheme.background) { padding ->
         LazyColumn(Modifier.fillMaxSize().padding(padding), contentPadding = PaddingValues(bottom = 24.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             item { AppHeader("Мои задачи", "Профикроль", onBack) }
             item {
