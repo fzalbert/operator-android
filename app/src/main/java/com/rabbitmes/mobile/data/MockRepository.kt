@@ -21,12 +21,6 @@ object MockRepository {
     )
 
     val allCages: List<Cage> = workshop.hangars.flatMap { it.rows }.flatMap { it.cages }
-    private val hangarACageCodes: List<String> = workshop.hangars
-        .first { it.id == "h-1" }
-        .rows
-        .flatMap { it.cages }
-        .map { it.code }
-
     val rabbits: List<Rabbit> = allCages.filter { it.occupied }.take(60).mapIndexed { index, cage ->
         Rabbit(
             id = "rabbit-${index + 1}",
@@ -121,57 +115,4 @@ object MockRepository {
     fun rabbit(id: String) = rabbits.firstOrNull { it.id == id }
     fun cage(id: String) = allCages.firstOrNull { it.id == id }
 
-    private fun rabbitChecklist(prefix: String, count: Int = 12) = rabbits.take(count).mapIndexed { index, rabbit -> ChecklistItem("$prefix-r-${index + 1}", "${rabbit.earNumber} · ${rabbit.rfid}", TargetType.RABBIT, rabbit.id) }
-    private fun cageChecklist(prefix: String, count: Int = 18) = allCages.take(count).mapIndexed { index, cage -> ChecklistItem("$prefix-c-${index + 1}", "${cage.code} · ${cage.rfid}", TargetType.CAGE, cage.id) }
-    private fun cageNumberChecklist(prefix: String, count: Int = 18) = allCages.take(count).mapIndexed { index, cage -> ChecklistItem("$prefix-c-${index + 1}", "Клетка ${cage.code}", TargetType.CAGE, cage.id) }
-    private fun weighingTargets(count: Int = 4) = allCages.take(count).mapIndexed { index, cage ->
-        TaskTarget("weight-c-${index + 1}", "Ряд ${cage.rowNumber} · клетка ${cage.number}", TargetType.CAGE, cage.id)
-    }
-    private fun weighingChecklist(count: Int = 4) = allCages.take(count).mapIndexed { index, cage ->
-        ChecklistItem("legacy-weight-c-${index + 1}", "Ряд ${cage.rowNumber} · клетка ${cage.number}", TargetType.CAGE, cage.id)
-    }
-    private fun meatRabbitWeighingTargets(count: Int = 4) = allCages.take(count).mapIndexed { index, cage ->
-        TaskTarget(
-            id = "meat-rabbit-weight-${index + 1}",
-            label = "Мясной кролик ${index + 1} · ${cage.code} · без RFID",
-            targetType = TargetType.RABBIT,
-            targetId = "mock-meat-rabbit-${index + 1}",
-        )
-    }
-
-    fun mockWeighingTasks(employeeId: String): List<MobileTask> = listOf(
-        MobileTask("mock-weighing-cage", "Взвешивание клетки с мясными кроликами", OperationType.WEIGHING_CAGE, "ws-1", "h-1", employeeId, "2026-09-02", "11:30", 45, Priority.HIGH, TaskStatus.NEW, emptyList(), false, description = "Взвесьте всех мясных кроликов в клетке вместе и укажите общий вес.", targets = weighingTargets(3)),
-        MobileTask("mock-weighing-rabbit", "Взвешивание мясных кроликов по одному", OperationType.WEIGHING_RABBIT, "ws-1", "h-1", employeeId, "2026-09-02", "12:30", 45, Priority.HIGH, TaskStatus.NEW, emptyList(), false, description = "Взвесьте каждого мясного кролика отдельно. RFID не требуется.", targets = meatRabbitWeighingTargets(4)),
-    )
-    private fun waterRowChecklist(hangarId: String): List<ChecklistItem> =
-        workshop.hangars
-            .firstOrNull { it.id == hangarId }
-            ?.rows
-            .orEmpty()
-            .map { row ->
-                ChecklistItem(
-                    id = "water-${hangarId}-${row.id}",
-                    label = "Ряд ${row.number}",
-                    targetType = TargetType.ROW,
-                    targetId = row.id,
-                )
-            }
-
-    fun initialTasks(): List<MobileTask> = listOf(
-        MobileTask("task-1", "Осеменение самок", OperationType.INSEMINATION, "ws-1", "h-1", "emp-1", "2026-07-09", "08:30", 180, Priority.URGENT, TaskStatus.NEW, rabbitChecklist("ins", 4), true, RoleId.CHIEF_TECHNOLOGIST, AcceptanceStatus.NOT_REQUIRED),
-        MobileTask("task-2", "Взвешивание контрольной группы", OperationType.WEIGHING, "ws-1", "h-1", "emp-1", "2026-07-09", "11:00", 90, Priority.HIGH, TaskStatus.NEW, weighingChecklist(), false),
-        MobileTask("task-3", "Подготовка гнезд", OperationType.NEST_PREPARATION, "ws-1", "h-1", "emp-1", "2026-07-09", "13:00", 120, Priority.HIGH, TaskStatus.NEW, cageNumberChecklist("nestprep", 18), true, RoleId.CHIEF_TECHNOLOGIST, AcceptanceStatus.NOT_REQUIRED),
-        MobileTask("task-4", "Контроль лактации", OperationType.NEST_CONTROL, "ws-1", "h-1", "emp-1", "2026-07-09", "15:00", 150, Priority.NORMAL, TaskStatus.NEW, cageChecklist("nestctl", 12), true, RoleId.CHIEF_TECHNOLOGIST, AcceptanceStatus.NOT_REQUIRED),
-        MobileTask("task-5", "Проверка светового режима", OperationType.LIGHTING_CHECK, "ws-1", "h-1", "emp-1", "2026-07-09", "06:05", 20, Priority.NORMAL, TaskStatus.NEW, emptyList(), false),
-        MobileTask("task-6", "Мойка ангара после цикла", OperationType.WASHING, "ws-1", "h-2", "emp-3", "2026-07-09", "09:00", 240, Priority.HIGH, TaskStatus.DONE, emptyList(), true, RoleId.CHIEF_TECHNOLOGIST, AcceptanceStatus.WAITING),
-        MobileTask("task-7", "Дезинфекция ангара", OperationType.DISINFECTION, "ws-1", "h-2", "emp-3", "2026-07-09", "14:00", 180, Priority.NORMAL, TaskStatus.NEW, emptyList(), true, RoleId.CHIEF_TECHNOLOGIST, AcceptanceStatus.NOT_REQUIRED),
-        MobileTask("task-8", "Приемка ангара", OperationType.HANGAR_ACCEPTANCE, "ws-1", "h-2", "emp-2", "2026-07-09", "17:00", 60, Priority.HIGH, TaskStatus.NEW, emptyList(), false),
-        MobileTask("task-9", "Пальпация", OperationType.PALPATION, "ws-1", "h-1", "emp-1", "2026-07-09", "16:00", 120, Priority.NORMAL, TaskStatus.NEW, rabbitChecklist("pal", 10), false),
-        MobileTask("task-10", "Выравнивание гнезд", OperationType.NEST_SELECTION, "ws-1", "h-1", "emp-1", "2026-07-09", "16:40", 90, Priority.HIGH, TaskStatus.NEW, cageNumberChecklist("sel", 10), true, RoleId.CHIEF_TECHNOLOGIST, AcceptanceStatus.NOT_REQUIRED),
-        MobileTask("task-11", "Проверка корма", OperationType.FEED_CHECK, "ws-1", "h-1", "emp-1", "2026-07-09", "07:30", 20, Priority.NORMAL, TaskStatus.NEW, emptyList(), false),
-        MobileTask("task-12", "Проверка воды", OperationType.WATER_CHECK, "ws-1", "h-1", "emp-1", "2026-07-09", "07:40", 20, Priority.NORMAL, TaskStatus.NEW, waterRowChecklist("h-1"), false),
-        MobileTask("task-13", "Проверить крепление поилки в ряду 2", OperationType.CUSTOM_TASK, "ws-1", "h-1", "emp-1", "2026-07-09", "17:20", 20, Priority.HIGH, TaskStatus.NEW, emptyList(), false, description = "Проверьте клетку Р2-К7. Если крепление ослаблено — зафиксируйте замечание и приложите фото."),
-        MobileTask("task-14", "Переселение кролей по клеткам", OperationType.ANIMAL_TRANSFER, "ws-1", "h-1", "emp-1", "2026-07-09", "18:00", 80, Priority.HIGH, TaskStatus.NEW, rabbitChecklist("transfer", 6), false),
-        MobileTask("task-15", "Обход ангара", OperationType.MORTALITY_ROUND, "ws-1", "h-1", "emp-1", "2026-07-09", "18:30", 45, Priority.HIGH, TaskStatus.NEW, emptyList(), false)
-    )
 }

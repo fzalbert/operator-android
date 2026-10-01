@@ -256,24 +256,6 @@ fun StatusBadge(text: String, color: Color) {
     StatusBadge(status.title, c)
 }
 
-@Composable fun PriorityBadge(priority: Priority) {
-    val c = when(priority) {
-        Priority.URGENT -> MaterialTheme.colorScheme.error
-        Priority.HIGH -> MesWarning
-        Priority.NORMAL -> MaterialTheme.colorScheme.primary
-    }
-    StatusBadge(priority.title, c)
-}
-
-@Composable
-fun operationAccent(type: OperationType): Color = when(type) {
-    OperationType.INSEMINATION, OperationType.PALPATION, OperationType.WEIGHING, OperationType.WEIGHING_CAGE, OperationType.WEIGHING_RABBIT, OperationType.ANIMAL_TRANSFER, OperationType.FEMALE_DELIVERY -> MaterialTheme.colorScheme.primary
-    OperationType.NEST_PREPARATION, OperationType.NEST_CONTROL, OperationType.NEST_SELECTION, OperationType.OKROL, OperationType.LACTATION_CONTROL -> MaterialTheme.colorScheme.tertiary
-    OperationType.WASHING, OperationType.DISINFECTION, OperationType.CLEANING, OperationType.DAILY_CLEANING, OperationType.HANGAR_ACCEPTANCE -> mobileSuccessGreen
-    OperationType.LIGHT_STIMULATION, OperationType.LIGHTING_CHECK, OperationType.FEED_CHECK, OperationType.WATER_CHECK, OperationType.DEWORMING_DOSATRON -> MesWarning
-    else -> MaterialTheme.colorScheme.onSurfaceVariant
-}
-
 @Composable fun ProgressLine(done: Int, total: Int) {
     if (total <= 0) return
     val pct = done.toFloat() / total
@@ -281,19 +263,6 @@ fun operationAccent(type: OperationType): Color = when(type) {
         Box(Modifier.fillMaxWidth(pct).height(9.dp).background(MaterialTheme.colorScheme.primary, RoundedCornerShape(20.dp)))
     }
     Spacer(Modifier.height(MesSpacing.tinyGap)); Text("$done / $total", color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.labelMedium)
-}
-
-@Composable fun MetricTile(title: String, value: String, icon: ImageVector, modifier: Modifier = Modifier) {
-    Card(
-        modifier.padding(MesSpacing.cardVertical),
-        shape = RoundedCornerShape(20.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
-    ) {
-        Row(Modifier.padding(MesSpacing.cardInner), verticalAlignment = Alignment.CenterVertically) {
-            Icon(icon, null, tint = MaterialTheme.colorScheme.primary); Spacer(Modifier.width(MesSpacing.smallGap)); Column { Text(value, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleLarge); Text(title, color = MaterialTheme.colorScheme.onSurfaceVariant, style = MaterialTheme.typography.labelMedium) }
-        }
-    }
 }
 
 @Composable

@@ -69,13 +69,11 @@ fun RabbitMesApp(vm: MobileMesViewModel) {
             AppScreen.Tasks,
             AppScreen.Profile,
             AppScreen.Sync -> vm.navigate(AppScreen.Shift)
-            AppScreen.Map -> vm.navigate(AppScreen.Tasks)
             AppScreen.Notifications -> vm.navigate(AppScreen.Shift)
             AppScreen.AcceptanceQueue -> vm.navigate(AppScreen.Tasks)
             is AppScreen.Acceptance -> vm.navigate(AppScreen.AcceptanceQueue)
             is AppScreen.TaskExecution -> vm.navigate(AppScreen.Tasks)
             is AppScreen.RabbitProfile -> vm.navigate(AppScreen.TaskExecution(screen.taskId))
-            is AppScreen.AnimalHistory -> vm.navigate(AppScreen.Tasks)
             AppScreen.Login -> Unit
         }
     }
@@ -85,14 +83,9 @@ fun RabbitMesApp(vm: MobileMesViewModel) {
     ) { _ ->
         Box(Modifier.fillMaxSize()) {
         when(val screen = vm.screen) {
-            AppScreen.Login -> if (vm.tasks.any { it.id.startsWith("mock-") }) {
-                TaskListScreen(vm.tasksForCurrentEmployee(), vm.nextTask(), vm.lastMessage, true, { vm.navigate(AppScreen.TaskExecution(it)) }, { vm.navigate(AppScreen.Shift) }, bottom("tasks"))
-            } else {
-                AuthScreen(onLoggedIn = vm::onLoggedInFromSession)
-            }
+            AppScreen.Login -> AuthScreen(onLoggedIn = vm::onLoggedInFromSession)
             AppScreen.Shift -> ShiftScreen(vm.currentEmployee, vm.shift, vm.tasksForCurrentEmployee(), vm.nextTask(), vm.lastMessage, vm.notifications.count { it.isUnread }, vm.isShiftActionInProgress, vm.isTasksLoading, vm::startShift, vm::finishShift, { vm.navigate(AppScreen.TaskExecution(it)) }, { vm.navigate(AppScreen.Notifications) }, vm::logout, bottom("shift"))
-            AppScreen.Tasks -> TaskListScreen(vm.tasksForCurrentEmployee(), vm.nextTask(), vm.lastMessage, vm.shift.startedAt != null || vm.tasksForCurrentEmployee().any { it.id.startsWith("mock-") }, { vm.navigate(AppScreen.TaskExecution(it)) }, { vm.navigate(AppScreen.Shift) }, bottom("tasks"))
-            AppScreen.Map -> HangarMapScreen(vm.workshop, vm.tasksForCurrentEmployee(), { vm.navigate(AppScreen.TaskExecution(it)) }, { vm.navigate(AppScreen.Tasks) }, bottom("map"))
+            AppScreen.Tasks -> TaskListScreen(vm.tasksForCurrentEmployee(), vm.nextTask(), vm.lastMessage, vm.shift.startedAt != null, { vm.navigate(AppScreen.TaskExecution(it)) }, { vm.navigate(AppScreen.Shift) }, bottom("tasks"))
             AppScreen.Sync -> SyncQueueScreen(vm.shift, vm.tasks, vm::syncNow, { vm.navigate(AppScreen.Tasks) }, bottom("sync"))
             AppScreen.Profile -> ProfileScreen(vm.currentEmployee, vm.tasksForCurrentEmployee(), vm.operations, vm::logout, bottom("profile"))
             AppScreen.Notifications -> NotificationsScreen(vm.notifications, { vm.navigate(AppScreen.Shift) }, vm::markNotificationAsRead, vm::markAllNotificationsAsRead)
@@ -101,7 +94,7 @@ fun RabbitMesApp(vm: MobileMesViewModel) {
                 val task = vm.taskOrNull(screen.taskId)
                 if (task == null) {
                     LaunchedEffect(screen.taskId) { vm.navigate(AppScreen.Tasks) }
-                    TaskListScreen(vm.tasksForCurrentEmployee(), vm.nextTask(), vm.lastMessage, vm.shift.startedAt != null || vm.tasksForCurrentEmployee().any { it.id.startsWith("mock-") }, { vm.navigate(AppScreen.TaskExecution(it)) }, { vm.navigate(AppScreen.Shift) }, bottom("tasks"))
+                    TaskListScreen(vm.tasksForCurrentEmployee(), vm.nextTask(), vm.lastMessage, vm.shift.startedAt != null, { vm.navigate(AppScreen.TaskExecution(it)) }, { vm.navigate(AppScreen.Shift) }, bottom("tasks"))
                 } else {
                     val canEdit = vm.canWorkOnTask(task.id) &&
                         task.status != com.rabbitmes.mobile.domain.TaskStatus.DONE &&
@@ -161,10 +154,6 @@ fun RabbitMesApp(vm: MobileMesViewModel) {
                 } else {
                     AcceptanceScreen(task, vm.remarks, { vm.navigate(AppScreen.AcceptanceQueue) }, { vm.acceptTask(task.id, it); vm.navigate(AppScreen.AcceptanceQueue) }, { vm.rejectTask(task.id, it); vm.navigate(AppScreen.AcceptanceQueue) }, { itemId, reason, comment, attachments -> vm.addRemark(task.id, itemId, reason, comment, attachments) })
                 }
-            }
-            is AppScreen.AnimalHistory -> {
-                val rabbit = vm.rabbits.firstOrNull { it.id == screen.rabbitId } ?: vm.rabbits.first()
-                AnimalHistoryScreen(rabbit, MockRepository.cage(rabbit.cageId), { vm.navigate(AppScreen.Tasks) })
             }
             is AppScreen.RabbitProfile -> RabbitProfileScreen(
                 rfidCode = screen.rfidCode,

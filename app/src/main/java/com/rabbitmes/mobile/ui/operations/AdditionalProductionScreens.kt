@@ -387,28 +387,3 @@ private fun RabbitCageWeightCard(
         }
     }
 }
-
-@Composable
-private fun ProductionTargetPage(
-    task: MobileTask,
-    title: String,
-    onBack: () -> Unit,
-    onBegin: () -> Unit,
-    onComplete: () -> Unit,
-    canEdit: Boolean,
-    targetContent: @Composable (ChecklistItem) -> Unit,
-) {
-    val pending = task.checklist.filter { it.status == ChecklistStatus.PENDING }
-    ProductionPage(task, title, onBack, onBegin, canEdit) {
-        Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            Text("Ожидает: ${pending.size} · Готово: ${task.checklist.size - pending.size}", color = ProductionMuted, fontWeight = FontWeight.Bold)
-            for (target in pending) targetContent(target)
-            if (task.checklist.isNotEmpty() && pending.isEmpty()) {
-                ProductionCard {
-                    Text("Все позиции обработаны", color = ProductionText, fontWeight = FontWeight.Bold)
-                    ProductionButton("Завершить задачу", onComplete)
-                }
-            }
-        }
-    }
-}

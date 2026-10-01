@@ -27,21 +27,6 @@ import com.rabbitmes.mobile.ui.components.*
 import ru.profikrol.operator.uikit.theme.mobileSuccessGreen
 
 @Composable
-fun HangarMapScreen(workshop: Workshop, tasks: List<MobileTask>, onOpenTask: (String) -> Unit, onBack: () -> Unit, bottomBar: @Composable () -> Unit) {
-    val hangar = workshop.hangars.first()
-    Scaffold(
-        bottomBar = bottomBar,
-        containerColor = Color.Transparent,
-    ) { padding ->
-        LazyColumn(Modifier.fillMaxSize().padding(padding), contentPadding = PaddingValues(bottom = MesSpacing.screenBottom)) {
-            item { AppHeader("Карта ангара", "${workshop.name} · ${hangar.name}", onBack) }
-            item { MesCard { Text("Клетки подсвечены по задачам смены", fontWeight = FontWeight.Bold); Row(horizontalArrangement = Arrangement.spacedBy(MesSpacing.smallGap)) { StatusBadge("План", MaterialTheme.colorScheme.primary); StatusBadge("Готово", mobileSuccessGreen); StatusBadge("Проблема", MaterialTheme.colorScheme.error) } } }
-            hangar.rows.forEach { row -> item { Text("Ряд ${row.number}", Modifier.padding(horizontal = MesSpacing.screenHorizontal, vertical = MesSpacing.smallGap), fontWeight = FontWeight.Bold) }; item { Row(Modifier.padding(horizontal = MesSpacing.screenHorizontal).fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(MesSpacing.smallGap)) { row.cages.forEach { cage -> val task = tasks.firstOrNull { it.checklist.any { item -> item.targetId == cage.id } }; val item = task?.checklist?.firstOrNull { it.targetId == cage.id }; val color = when(item?.status) { ChecklistStatus.DONE -> mobileSuccessGreen; ChecklistStatus.PROBLEM -> MaterialTheme.colorScheme.error; ChecklistStatus.SKIPPED -> MaterialTheme.colorScheme.onSurfaceVariant; ChecklistStatus.PENDING -> MaterialTheme.colorScheme.primary; null -> MaterialTheme.colorScheme.outlineVariant }; Box(Modifier.weight(1f).height(42.dp).background(color.copy(alpha=.18f), RoundedCornerShape(10.dp)).clickable(enabled = task != null) { if (task != null) onOpenTask(task.id) }.padding(MesSpacing.tinyGap)) { Text(cage.number.toString(), color = color, style = MaterialTheme.typography.labelSmall) } } } } }
-        }
-    }
-}
-
-@Composable
 fun SyncQueueScreen(shift: ShiftState, tasks: List<MobileTask>, onSync: () -> Unit, onBack: () -> Unit, bottomBar: @Composable () -> Unit) {
     val pendingTasks = tasks.filter { it.offlineEvents > 0 }
     val statusColor = if (shift.isOnline) mobileSuccessGreen else Color(0xFFE98500)
@@ -218,14 +203,5 @@ private fun AllowedOperationsDropdown(operations: List<String>) {
                 }
             }
         }
-    }
-}
-
-@Composable
-fun AnimalHistoryScreen(rabbit: Rabbit, cage: Cage?, onBack: () -> Unit) {
-    LazyColumn(Modifier.fillMaxSize()) {
-        item { AppHeader("История животного", rabbit.rfid, onBack) }
-        item { MesCard { Text("Кролик ${rabbit.earNumber}", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold); Text("Пол: ${rabbit.sex}"); Text("Возраст: ${rabbit.ageDays} дней"); Text("Вес: ${"%.2f".format(rabbit.lastWeightKg)} кг"); Text("Клетка: ${cage?.code ?: "неизвестно"}"); Text("Лактация: ${rabbit.lactationStatus}"); Text("Здоровье: ${rabbit.healthStatus}") } }
-        item { MesCard { Text("Последние события", fontWeight = FontWeight.Bold); Text("Осеменение · ${rabbit.lastInseminationDaysAgo ?: "нет"} дней назад"); Text("Пальпация · ${rabbit.lastPalpation ?: "нет"}"); Text("Последнее взвешивание · ${"%.2f".format(rabbit.lastWeightKg)} кг") } }
     }
 }

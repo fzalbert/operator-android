@@ -243,51 +243,6 @@ fun TaskExecutionScaffold(
 }
 
 @Composable
-fun ScanPanel(
-    title: String,
-    placeholder: String,
-    onScan: (String) -> Unit,
-    onOpenAnimal: ((String) -> Unit)? = null,
-    onOpenScanner: (() -> Unit)? = null,
-    initialRfid: String? = null,
-) {
-    var rfid by remember { mutableStateOf("") }
-    var scannedRfid by remember { mutableStateOf<String?>(null) }
-
-    LaunchedEffect(initialRfid) {
-        if (!initialRfid.isNullOrBlank()) {
-            rfid = initialRfid
-            scannedRfid = initialRfid
-        }
-    }
-    MesCard {
-        Text(title, fontWeight = FontWeight.Bold)
-        Text("Отсканируйте RFID.", color = MaterialTheme.colorScheme.onSurfaceVariant)
-        OutlinedTextField(rfid, { rfid = it; scannedRfid = null }, Modifier.fillMaxWidth(), label = { Text(placeholder) })
-        Button(
-            onClick = { onOpenScanner?.invoke() ?: run { scannedRfid = rfid } },
-            modifier = Modifier.fillMaxWidth(),
-        ) {
-            Icon(Icons.Default.QrCodeScanner, null)
-            Spacer(Modifier.width(MesSpacing.smallGap))
-            Text("Скан")
-        }
-        val rabbit = scannedRfid?.let { MockRepository.rabbitByRfid(it) }
-        if (rabbit != null) {
-            Spacer(Modifier.height(MesSpacing.contentGap))
-            RabbitMiniCard(rabbit, onOpenAnimal)
-        } else if (scannedRfid != null) {
-            Spacer(Modifier.height(MesSpacing.smallGap))
-            Text("RFID отсканирован: $scannedRfid", color = MaterialTheme.colorScheme.onSurfaceVariant)
-        }
-        if (scannedRfid != null) {
-            Spacer(Modifier.height(MesSpacing.contentGap))
-            Button(onClick = { onScan(scannedRfid!!) }, Modifier.fillMaxWidth()) { Text("Выполнено") }
-        }
-    }
-}
-
-@Composable
 fun CageScanPanel(
     title: String,
     onScan: (String) -> Unit,
@@ -350,18 +305,6 @@ fun CageScanPanel(
                 Log.d("RabbitSettlement", "RFID confirmed in settlement UI. rfid=$scannedRfid")
                 onScan(scannedRfid!!)
             }, Modifier.fillMaxWidth()) { Text("Выполнено") }
-        }
-    }
-}
-
-@Composable
-fun RabbitMiniCard(rabbit: Rabbit, onOpenAnimal: ((String) -> Unit)?) {
-    Surface(color = MaterialTheme.colorScheme.background, shape = MaterialTheme.shapes.medium) {
-        Column(Modifier.padding(MesSpacing.contentGap)) {
-            Text("${rabbit.earNumber} · ${rabbit.rfid}", fontWeight = FontWeight.Bold)
-            Text("Возраст ${rabbit.ageDays} дней · вес ${"%.2f".format(rabbit.lastWeightKg)} кг")
-            Text("Статус: ${rabbit.healthStatus}")
-            if (onOpenAnimal != null) TextButton(onClick = { onOpenAnimal(rabbit.id) }) { Text("История животного") }
         }
     }
 }
@@ -479,38 +422,6 @@ private fun ChecklistItem.secondaryTargetLabel(): String {
 }
 
 @Composable
-fun ProblemAndMediaControls(
-    onPhoto: (String, String) -> Unit,
-    onVideo: (String, String) -> Unit,
-    onFile: (String, String) -> Unit,
-    onComment: (String) -> Unit
-) {
-    var comment by remember { mutableStateOf("") }
-    var hasRemarks by remember { mutableStateOf(false) }
-    MesCard {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            verticalAlignment = androidx.compose.ui.Alignment.CenterVertically,
-        ) {
-            Checkbox(checked = hasRemarks, onCheckedChange = { hasRemarks = it })
-            Text("Есть замечания", fontWeight = FontWeight.SemiBold)
-        }
-        if (hasRemarks) {
-            Spacer(Modifier.height(MesSpacing.smallGap))
-            OutlinedTextField(comment, { comment = it; onComment(it) }, Modifier.fillMaxWidth(), label = { Text("Комментарий исполнителя") })
-            Spacer(Modifier.height(MesSpacing.contentGap))
-            AttachmentPickerButtons(onAttachment = { type, name, uri ->
-                when (type) {
-                    AttachmentType.PHOTO -> onPhoto(name, uri)
-                    AttachmentType.VIDEO -> onVideo(name, uri)
-                    AttachmentType.FILE -> onFile(name, uri)
-                }
-            })
-        }
-    }
-}
-
-@Composable
 fun ExecutionEvidencePanel(task: MobileTask) {
     val attachments = task.result.attachments
     if (attachments.isNotEmpty() || task.result.comment.isNotBlank()) {
@@ -523,18 +434,6 @@ fun ExecutionEvidencePanel(task: MobileTask) {
                     Text(attachment.createdAt, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }
-        }
-    }
-}
-
-@Composable
-fun GenericFields(definition: OperationDefinition, onValue: (String, String) -> Unit) {
-    definition.fields.filterNot { it.id.lowercase().contains("rfid") }.forEach { field ->
-        var value by remember(field.id) { mutableStateOf(if (field.options.isNotEmpty()) field.options.first() else "") }
-        when(field.type) {
-            FieldType.BOOLEAN -> Row(Modifier.fillMaxWidth().padding(vertical = 6.dp), horizontalArrangement = Arrangement.SpaceBetween) { Text(field.title); Switch(checked = value == "true", onCheckedChange = { value = it.toString(); onValue(field.id, value) }) }
-            FieldType.SELECT, FieldType.FEED_TYPE -> Column { Text(field.title); field.options.forEach { opt -> FilterChip(selected = value == opt, onClick = { value = opt; onValue(field.id, opt) }, label = { Text(opt) }, modifier = Modifier.padding(end = 6.dp)) } }
-            else -> OutlinedTextField(value, { value = it; onValue(field.id, it) }, Modifier.fillMaxWidth(), label = { Text(field.title + (field.unit?.let { u -> ", $u" } ?: "")) })
         }
     }
 }
