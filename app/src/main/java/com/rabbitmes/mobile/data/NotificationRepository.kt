@@ -17,7 +17,9 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.distinctUntilChanged
-import kotlinx.coroutines.flow.mapNotNull
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.MutableSharedFlow
+import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.isActive
@@ -26,6 +28,7 @@ import org.json.JSONArray
 import org.json.JSONObject
 import ru.profikrol.operator.BuildConfig
 import ru.profikrol.operator.data.local.SessionStore
+import ru.profikrol.operator.data.remote.profile.ProfileApi
 import ru.profikrol.operator.data.remote.grpc.NotificationServiceGrpcKt
 import ru.profikrol.operator.data.remote.grpc.notificationClientMessage
 import java.text.SimpleDateFormat
@@ -44,21 +47,28 @@ import javax.inject.Singleton
 class NotificationRepository @Inject constructor(
     @ApplicationContext context: Context,
     private val sessionStore: SessionStore,
+    private val profileApi: ProfileApi,
 ) {
     private val preferences = context.getSharedPreferences(PREFERENCES, Context.MODE_PRIVATE)
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val _notifications = MutableStateFlow(readStored())
     val notifications: StateFlow<List<NotificationUi>> = _notifications
+    private val _incoming = MutableSharedFlow<NotificationUi>(extraBufferCapacity = 64)
+
+    /** Только новые уведомления из стрима, без восстановленных из хранилища. */
+    val incoming: SharedFlow<NotificationUi> = _incoming
 
     init {
         scope.launch {
             sessionStore.user
-                .mapNotNull { user ->
-                    val token = user?.token?.takeIf(::looksLikeJwt) ?: return@mapNotNull null
+                .map { user ->
+                    val token = user?.token?.takeIf(::looksLikeJwt) ?: return@map null
                     user.id to token
                 }
                 .distinctUntilChanged()
-                .collectLatest { (userId, token) ->
+                .collectLatest { session ->
+                    // null = пользователь вышел: collectLatest отменяет стрим старого токена.
+                    val (userId, token) = session ?: return@collectLatest
                     Log.d(TAG, "Starting notification stream. userId=$userId")
                     connectWithRetry(token)
                 }
@@ -99,13 +109,26 @@ class NotificationRepository @Inject constructor(
                         backendType = message.notificationType,
                     )
                     update { list -> listOf(item) + list }
+                    _incoming.tryEmit(item)
                 }
                 Log.w(TAG, "Notification server stream completed without error")
+                delay(retryDelayMs)
+                retryDelayMs = (retryDelayMs * 2).coerceAtMost(MAX_RETRY_MS)
             } catch (cancelled: CancellationException) {
                 throw cancelled
             } catch (unauthenticated: StatusException) {
                 if (unauthenticated.status.code == Status.Code.UNAUTHENTICATED) {
-                    Log.w(TAG, "Notification stream rejected the access token")
+                    // В фоне REST-запросов нет, и токен никто не обновит. Дёргаем любой
+                    // авторизованный запрос: AccessTokenAuthenticator обновит токен в
+                    // SessionStore, и стрим переподключится с новым через collectLatest.
+                    Log.w(TAG, "Notification stream rejected the access token; refreshing")
+                    runCatching { profileApi.getMyProfile() }
+                        .onFailure { Log.w(TAG, "Token refresh for notification stream failed", it) }
+                    if (sessionStore.currentUser?.token == token) {
+                        delay(retryDelayMs)
+                        retryDelayMs = (retryDelayMs * 2).coerceAtMost(MAX_RETRY_MS)
+                        continue
+                    }
                     return
                 }
                 Log.w(TAG, "Notification stream disconnected; reconnecting after ${retryDelayMs}ms", unauthenticated)
