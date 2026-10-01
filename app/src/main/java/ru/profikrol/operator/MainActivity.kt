@@ -25,8 +25,7 @@ import androidx.core.content.ContextCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
-import com.rabbitmes.mobile.AppScreen
-import com.rabbitmes.mobile.MobileMesViewModel
+import com.rabbitmes.mobile.ui.viewmodel.AppViewModel
 import com.rabbitmes.mobile.RabbitMesApp
 import com.rabbitmes.mobile.notifications.SystemNotifications
 import dagger.hilt.android.AndroidEntryPoint
@@ -39,7 +38,7 @@ import javax.inject.Inject
 
 @AndroidEntryPoint
 class MainActivity : ComponentActivity() {
-    private val vm: MobileMesViewModel by viewModels()
+    private val vm: AppViewModel by viewModels()
     @Inject lateinit var sessionStore: SessionStore
     private val notificationPermissionLauncher =
         registerForActivityResult(ActivityResultContracts.RequestPermission()) { requestBatteryOptimizationExemption() }
@@ -87,7 +86,7 @@ class MainActivity : ComponentActivity() {
     private fun openNotificationsIfRequested(intent: Intent?) {
         if (intent?.getBooleanExtra(SystemNotifications.EXTRA_OPEN_NOTIFICATIONS, false) != true) return
         intent.removeExtra(SystemNotifications.EXTRA_OPEN_NOTIFICATIONS)
-        if (vm.screen != AppScreen.Login) vm.navigate(AppScreen.Notifications)
+        vm.requestOpenNotifications()
     }
 
     /**

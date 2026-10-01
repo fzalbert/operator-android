@@ -1806,8 +1806,6 @@ private fun problemReasons(type: OperationType): List<String> = when (type) {
     )
 }
 
-const val PROBLEM_REASON_KEY = "__problemReason"
-const val PROBLEM_COMMENT_KEY = "__problemComment"
 
 private fun workshopName(task: MobileTask): String =
     MockRepository.workshop.takeIf { it.id == task.workshopId }?.name.orEmpty()

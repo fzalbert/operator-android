@@ -1,172 +1,278 @@
 package com.rabbitmes.mobile
 
-import androidx.activity.compose.BackHandler
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.remember
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.size
-import androidx.compose.ui.Alignment
-import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.unit.dp
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.unit.dp
+import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.navigation.NavHostController
+import androidx.navigation.compose.NavHost
+import androidx.navigation.compose.composable
+import androidx.navigation.compose.rememberNavController
+import androidx.navigation.toRoute
 import com.rabbitmes.mobile.domain.ChecklistStatus
 import com.rabbitmes.mobile.ui.components.BottomNav
 import com.rabbitmes.mobile.ui.operations.OperationScreenFactory
-import com.rabbitmes.mobile.ui.screens.*
+import com.rabbitmes.mobile.ui.screens.AcceptanceQueueScreen
+import com.rabbitmes.mobile.ui.screens.NotificationsScreen
+import com.rabbitmes.mobile.ui.screens.ProfileScreen
+import com.rabbitmes.mobile.ui.screens.ShiftScreen
+import com.rabbitmes.mobile.ui.screens.SyncQueueScreen
+import com.rabbitmes.mobile.ui.screens.TaskListScreen
+import com.rabbitmes.mobile.ui.viewmodel.AppViewModel
+import com.rabbitmes.mobile.ui.viewmodel.NotificationsViewModel
+import com.rabbitmes.mobile.ui.viewmodel.ProfileViewModel
+import com.rabbitmes.mobile.ui.viewmodel.ShiftViewModel
+import com.rabbitmes.mobile.ui.viewmodel.SyncViewModel
+import com.rabbitmes.mobile.ui.viewmodel.TaskExecutionViewModel
+import com.rabbitmes.mobile.ui.viewmodel.TaskListViewModel
 import ru.profikrol.operator.feature.auth.AuthScreen
 import ru.profikrol.operator.feature.rabbitprofile.RabbitProfileScreen
 
 @Composable
-fun RabbitMesApp(vm: MobileMesViewModel) {
+fun RabbitMesApp(appViewModel: AppViewModel) {
     val lifecycleOwner = LocalLifecycleOwner.current
     val snackbarHostState = remember { SnackbarHostState() }
-    val appError = vm.appError
+    val isLoggedIn by appViewModel.isLoggedIn.collectAsStateWithLifecycle()
+    val appError by appViewModel.error.collectAsStateWithLifecycle()
+    val isBusy by appViewModel.busy.collectAsStateWithLifecycle()
 
     LaunchedEffect(appError?.id) {
         val error = appError ?: return@LaunchedEffect
         snackbarHostState.showSnackbar(error.message)
-        vm.consumeAppError(error.id)
+        appViewModel.consumeError(error.id)
     }
 
-    DisposableEffect(lifecycleOwner, vm) {
+    DisposableEffect(lifecycleOwner, appViewModel) {
         val observer = LifecycleEventObserver { _, event ->
             when (event) {
-                Lifecycle.Event.ON_START -> vm.startTasksAutoRefresh()
-                Lifecycle.Event.ON_STOP -> vm.stopTasksAutoRefresh()
+                Lifecycle.Event.ON_START -> appViewModel.onAppStarted()
+                Lifecycle.Event.ON_STOP -> appViewModel.onAppStopped()
                 else -> Unit
             }
         }
         lifecycleOwner.lifecycle.addObserver(observer)
-        if (lifecycleOwner.lifecycle.currentState.isAtLeast(Lifecycle.State.STARTED)) {
-            vm.startTasksAutoRefresh()
-        }
-        onDispose {
-            lifecycleOwner.lifecycle.removeObserver(observer)
-            vm.stopTasksAutoRefresh()
-        }
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
     }
 
-    fun bottom(current: String): @Composable () -> Unit = { BottomNav(current, vm.shift.pendingSyncEvents) { key ->
-        when(key) { "shift" -> vm.navigate(AppScreen.Shift); "tasks" -> vm.navigate(AppScreen.Tasks); "accept" -> vm.navigate(AppScreen.AcceptanceQueue); "sync" -> vm.navigate(AppScreen.Sync); "profile" -> vm.navigate(AppScreen.Profile) }
-    } }
-
-    BackHandler(enabled = vm.screen !is AppScreen.Login) {
-        when (val screen = vm.screen) {
-            AppScreen.Shift -> Unit
-            AppScreen.Tasks,
-            AppScreen.Profile,
-            AppScreen.Sync -> vm.navigate(AppScreen.Shift)
-            AppScreen.Notifications -> vm.navigate(AppScreen.Shift)
-            AppScreen.AcceptanceQueue -> vm.navigate(AppScreen.Tasks)
-            is AppScreen.TaskExecution -> vm.navigate(AppScreen.Tasks)
-            is AppScreen.RabbitProfile -> vm.navigate(AppScreen.TaskExecution(screen.taskId))
-            AppScreen.Login -> Unit
-        }
-    }
-
-    Scaffold(
-        snackbarHost = { SnackbarHost(snackbarHostState) },
-    ) { _ ->
+    Scaffold(snackbarHost = { SnackbarHost(snackbarHostState) }) { _ ->
         Box(Modifier.fillMaxSize()) {
-        when(val screen = vm.screen) {
-            AppScreen.Login -> AuthScreen(onLoggedIn = vm::onLoggedInFromSession)
-            AppScreen.Shift -> ShiftScreen(vm.currentEmployee, vm.shift, vm.tasksForCurrentEmployee(), vm.nextTask(), vm.lastMessage, vm.notifications.count { it.isUnread }, vm.isShiftActionInProgress, vm.isTasksLoading, vm::startShift, vm::finishShift, { vm.navigate(AppScreen.TaskExecution(it)) }, { vm.navigate(AppScreen.Notifications) }, vm::logout, bottom("shift"))
-            AppScreen.Tasks -> TaskListScreen(vm.tasksForCurrentEmployee(), vm.nextTask(), vm.lastMessage, vm.shift.startedAt != null, { vm.navigate(AppScreen.TaskExecution(it)) }, { vm.navigate(AppScreen.Shift) }, bottom("tasks"))
-            AppScreen.Sync -> SyncQueueScreen(vm.shift, vm.tasks, vm::syncNow, { vm.navigate(AppScreen.Tasks) }, bottom("sync"))
-            AppScreen.Profile -> ProfileScreen(vm.currentEmployee, vm.tasksForCurrentEmployee(), vm.operations, vm::logout, bottom("profile"))
-            AppScreen.Notifications -> NotificationsScreen(vm.notifications, { vm.navigate(AppScreen.Shift) }, vm::markNotificationAsRead, vm::markAllNotificationsAsRead)
-            AppScreen.AcceptanceQueue -> AcceptanceQueueScreen({ vm.navigate(AppScreen.Tasks) }, bottom("accept"))
-            is AppScreen.TaskExecution -> {
-                val task = vm.taskOrNull(screen.taskId)
-                if (task == null) {
-                    LaunchedEffect(screen.taskId) { vm.navigate(AppScreen.Tasks) }
-                    TaskListScreen(vm.tasksForCurrentEmployee(), vm.nextTask(), vm.lastMessage, vm.shift.startedAt != null, { vm.navigate(AppScreen.TaskExecution(it)) }, { vm.navigate(AppScreen.Shift) }, bottom("tasks"))
-                } else {
-                    val canEdit = vm.canWorkOnTask(task.id) &&
-                        task.status != com.rabbitmes.mobile.domain.TaskStatus.DONE &&
-                        task.status != com.rabbitmes.mobile.domain.TaskStatus.SENT &&
-                        task.status != com.rabbitmes.mobile.domain.TaskStatus.SKIPPED
-                    OperationScreenFactory(
-                    task = task,
-                    definition = vm.definition(task.operationType),
-                    scannedRfid = vm.scannedRfidForTask(task.id),
-                    scannedValues = vm.scannedValuesForTask(task.id),
-                    onBack = { vm.navigate(AppScreen.Tasks) },
-                    onBegin = { vm.beginTask(task.id) },
-                    onScan = { rfid, values ->
-                        vm.scanRfidAndCompleteItem(task.id, rfid, values)
-                        vm.clearScannedRfid(task.id)
-                    },
-                    onOpenRfidScanner = { values ->
-                        values.forEach { (key, value) -> vm.updateTaskValue(task.id, key, value) }
-                        vm.startRfidScan(task.id, values)
-                    },
-                    onValue = { key, value -> vm.updateTaskValue(task.id, key, value) },
-                    onPhoto = { name, uri -> vm.addPhoto(task.id, name, uri) },
-                    onVideo = { name, uri -> vm.addVideo(task.id, name, uri) },
-                    onFile = { name, uri -> vm.addFile(task.id, name, uri) },
-                    onComment = { vm.addComment(task.id, it) },
-                    onChecklistDone = { itemId -> vm.markChecklistItem(task.id, itemId, ChecklistStatus.DONE, "", "Выполнено вручную") },
-                    onChecklistDoneWithValues = { itemId, values -> vm.completeChecklistItem(task.id, itemId, values) },
-                    onChecklistProblem = { itemId, reason, comment -> vm.markChecklistItem(task.id, itemId, ChecklistStatus.PROBLEM, reason, comment) },
-                    onChecklistSkip = { itemId, reason -> vm.markChecklistItem(task.id, itemId, ChecklistStatus.SKIPPED, reason, "Пропущено") },
-                    onMortalityRoundProblem = { targetKind, rowId, cageId, rabbitId, comment, count, aliveBorn, stillborn ->
-                        vm.addMortalityRoundProblem(task.id, targetKind, rowId, cageId, rabbitId, comment, count, aliveBorn, stillborn)
-                    },
-                    onComplete = { vm.completeTask(task.id); vm.navigate(AppScreen.Tasks) },
-                    onSkip = {
-                        vm.skipTask(task.id, it)
-                        vm.navigate(AppScreen.Tasks)
-                    },
-                    onGeneralComplete = { comment ->
-                        vm.completeTask(task.id, comment)
-                        vm.navigate(AppScreen.Tasks)
-                    },
-                    onGeneralReject = { reason, _ ->
-                        vm.skipTask(task.id, reason)
-                        vm.navigate(AppScreen.Tasks)
-                    },
-                    onOpenAnimal = { rfid -> vm.navigate(AppScreen.RabbitProfile(rfid, task.id)) },
-                    resolveRabbitId = vm::rabbitIdForRfid,
-                        canEdit = canEdit,
-                    )
-                }
+            if (isLoggedIn) {
+                AppNavHost(appViewModel)
+            } else {
+                AuthScreen(onLoggedIn = appViewModel::onLoggedIn)
             }
-            is AppScreen.RabbitProfile -> RabbitProfileScreen(
-                rfidCode = screen.rfidCode,
-                onBack = { vm.navigate(AppScreen.TaskExecution(screen.taskId)) },
-                onWeighing = { vm.navigate(AppScreen.TaskExecution(screen.taskId)) },
-                onMoving = { vm.navigate(AppScreen.TaskExecution(screen.taskId)) },
-                onCulling = { vm.navigate(AppScreen.TaskExecution(screen.taskId)) },
+            if (isBusy) BusyOverlay()
+        }
+    }
+}
+
+@Composable
+private fun AppNavHost(appViewModel: AppViewModel) {
+    val navController = rememberNavController()
+    val pendingSyncEvents by appViewModel.pendingSyncEvents.collectAsStateWithLifecycle()
+
+    LaunchedEffect(navController) {
+        navController.currentBackStackEntryFlow.collect { appViewModel.onDestinationChanged() }
+    }
+    LaunchedEffect(navController) {
+        appViewModel.openNotificationsRequests.collect {
+            navController.navigate(AppRoute.Notifications) { launchSingleTop = true }
+        }
+    }
+
+    fun bottomBar(current: String): @Composable () -> Unit = {
+        BottomNav(current, pendingSyncEvents) { key ->
+            when (key) {
+                "shift" -> navController.openTab(AppRoute.Shift)
+                "tasks" -> navController.openTab(AppRoute.Tasks)
+                "accept" -> navController.openTab(AppRoute.AcceptanceQueue)
+                "sync" -> navController.openTab(AppRoute.Sync)
+                "profile" -> navController.openTab(AppRoute.Profile)
+            }
+        }
+    }
+    val openTask: (String) -> Unit = { taskId -> navController.navigate(AppRoute.TaskExecution(taskId)) }
+
+    NavHost(navController, startDestination = AppRoute.Shift) {
+        composable<AppRoute.Shift> {
+            val vm: ShiftViewModel = hiltViewModel()
+            ShiftScreen(
+                employee = vm.employee.collectAsStateWithLifecycle().value,
+                shift = vm.shift.collectAsStateWithLifecycle().value,
+                tasks = vm.tasks.collectAsStateWithLifecycle().value,
+                nextTask = vm.nextTask.collectAsStateWithLifecycle().value,
+                message = vm.message.collectAsStateWithLifecycle().value,
+                unreadNotifications = vm.unreadNotifications.collectAsStateWithLifecycle().value,
+                isShiftActionInProgress = vm.isBusy.collectAsStateWithLifecycle().value,
+                isTasksLoading = vm.isTasksLoading.collectAsStateWithLifecycle().value,
+                onStart = vm::startShift,
+                onFinish = vm::finishShift,
+                onOpenNext = openTask,
+                onOpenNotifications = { navController.navigate(AppRoute.Notifications) },
+                onLogout = appViewModel::logout,
+                bottomBar = bottomBar("shift"),
             )
         }
-        if (vm.isServerActionInProgress || vm.isShiftActionInProgress) {
-            Box(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .background(Color.Black.copy(alpha = 0.18f))
-                    .clickable(onClick = {}),
-                contentAlignment = Alignment.Center,
-            ) {
-                CircularProgressIndicator(
-                    modifier = Modifier.size(44.dp),
-                    color = Color(0xFF16794B),
-                    strokeWidth = 4.dp,
-                )
-            }
+        composable<AppRoute.Tasks> {
+            val vm: TaskListViewModel = hiltViewModel()
+            TaskListScreen(
+                tasks = vm.tasks.collectAsStateWithLifecycle().value,
+                nextTask = vm.nextTask.collectAsStateWithLifecycle().value,
+                message = vm.message.collectAsStateWithLifecycle().value,
+                shiftStarted = vm.shiftStarted.collectAsStateWithLifecycle().value,
+                onOpen = openTask,
+                onBack = { navController.openTab(AppRoute.Shift) },
+                bottomBar = bottomBar("tasks"),
+            )
         }
+        composable<AppRoute.Sync> {
+            val vm: SyncViewModel = hiltViewModel()
+            SyncQueueScreen(
+                shift = vm.shift.collectAsStateWithLifecycle().value,
+                tasks = vm.tasks.collectAsStateWithLifecycle().value,
+                onSync = vm::syncNow,
+                onBack = { navController.openTab(AppRoute.Tasks) },
+                bottomBar = bottomBar("sync"),
+            )
         }
+        composable<AppRoute.Profile> {
+            val vm: ProfileViewModel = hiltViewModel()
+            ProfileScreen(
+                employee = vm.employee.collectAsStateWithLifecycle().value,
+                tasks = vm.tasks.collectAsStateWithLifecycle().value,
+                operations = vm.operations,
+                onLogout = appViewModel::logout,
+                bottomBar = bottomBar("profile"),
+            )
+        }
+        composable<AppRoute.Notifications> {
+            val vm: NotificationsViewModel = hiltViewModel()
+            NotificationsScreen(
+                notifications = vm.notifications.collectAsStateWithLifecycle().value,
+                onBack = { navController.popBackStack() },
+                onRead = vm::markAsRead,
+                onReadAll = vm::markAllAsRead,
+            )
+        }
+        composable<AppRoute.AcceptanceQueue> {
+            AcceptanceQueueScreen(onBack = { navController.openTab(AppRoute.Tasks) }, bottomBar = bottomBar("accept"))
+        }
+        composable<AppRoute.TaskExecution> {
+            TaskExecutionDestination(
+                onClose = { navController.openTab(AppRoute.Tasks) },
+                onOpenAnimal = { rfid, taskId -> navController.navigate(AppRoute.RabbitProfile(rfid, taskId)) },
+            )
+        }
+        composable<AppRoute.RabbitProfile> { entry ->
+            val route = entry.toRoute<AppRoute.RabbitProfile>()
+            // Взвешивание, перемещение и выбраковка из профиля пока не подключены: возвращаемся к задаче.
+            RabbitProfileScreen(
+                rfidCode = route.rfidCode,
+                onBack = { navController.popBackStack() },
+                onWeighing = { navController.popBackStack() },
+                onMoving = { navController.popBackStack() },
+                onCulling = { navController.popBackStack() },
+            )
+        }
+    }
+}
+
+@Composable
+private fun TaskExecutionDestination(
+    onClose: () -> Unit,
+    onOpenAnimal: (rfid: String, taskId: String) -> Unit,
+) {
+    val vm: TaskExecutionViewModel = hiltViewModel()
+    val task = vm.task.collectAsStateWithLifecycle().value
+    val scannedRfid by vm.scannedRfid.collectAsStateWithLifecycle()
+    val scannedValues by vm.scannedValues.collectAsStateWithLifecycle()
+
+    DisposableEffect(vm) { onDispose { vm.stopRfidScan() } }
+    if (task == null) {
+        LaunchedEffect(vm.taskId) { onClose() }
+        return
+    }
+    OperationScreenFactory(
+        task = task,
+        definition = vm.definition(task.operationType),
+        scannedRfid = scannedRfid,
+        scannedValues = scannedValues,
+        onBack = onClose,
+        onBegin = vm::begin,
+        onScan = vm::submitScan,
+        onOpenRfidScanner = vm::startRfidScan,
+        onValue = vm::updateValue,
+        onPhoto = vm::addPhoto,
+        onVideo = vm::addVideo,
+        onFile = vm::addFile,
+        onComment = vm::addComment,
+        onChecklistDone = { itemId -> vm.markChecklistItem(itemId, ChecklistStatus.DONE, "", "Выполнено вручную") },
+        onChecklistDoneWithValues = vm::completeChecklistItem,
+        onChecklistProblem = { itemId, reason, comment -> vm.markChecklistItem(itemId, ChecklistStatus.PROBLEM, reason, comment) },
+        onChecklistSkip = { itemId, reason -> vm.markChecklistItem(itemId, ChecklistStatus.SKIPPED, reason, "Пропущено") },
+        onMortalityRoundProblem = vm::addMortalityRoundProblem,
+        onComplete = {
+            vm.complete()
+            onClose()
+        },
+        onSkip = { reason ->
+            vm.skip(reason)
+            onClose()
+        },
+        onGeneralComplete = { comment ->
+            vm.complete(comment)
+            onClose()
+        },
+        onGeneralReject = { reason, _ ->
+            vm.skip(reason)
+            onClose()
+        },
+        onOpenAnimal = { rfid -> onOpenAnimal(rfid, task.id) },
+        resolveRabbitId = vm::rabbitIdForRfid,
+        canEdit = vm.canEdit(task),
+    )
+}
+
+@Composable
+private fun BusyOverlay() {
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Color.Black.copy(alpha = 0.18f))
+            .clickable(onClick = {}),
+        contentAlignment = Alignment.Center,
+    ) {
+        CircularProgressIndicator(
+            modifier = Modifier.size(44.dp),
+            color = Color(0xFF16794B),
+            strokeWidth = 4.dp,
+        )
+    }
+}
+
+/** Вкладки нижнего меню: одна копия экрана, «Смена» всегда в основании стека. */
+private fun NavHostController.openTab(route: AppRoute) {
+    navigate(route) {
+        popUpTo<AppRoute.Shift>()
+        launchSingleTop = true
     }
 }
