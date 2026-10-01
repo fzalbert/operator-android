@@ -19,7 +19,6 @@ import ru.profikrol.operator.data.remote.auth.AuthTokenInterceptor
 import ru.profikrol.operator.data.remote.profile.ProfileApi
 import ru.profikrol.operator.data.remote.rabbit.RabbitApi
 import ru.profikrol.operator.data.remote.cell.CellApi
-import ru.profikrol.operator.data.remote.worktask.WorkTaskApi
 import ru.profikrol.operator.data.remote.production.ProductionTaskApi
 import java.security.SecureRandom
 import java.security.cert.X509Certificate
@@ -96,12 +95,6 @@ object NetworkModule {
     fun provideProfileApi(
         retrofit: Retrofit,
     ): ProfileApi = retrofit.create(ProfileApi::class.java)
-
-    @Provides
-    @Singleton
-    fun provideWorkTaskApi(
-        retrofit: Retrofit,
-    ): WorkTaskApi = retrofit.create(WorkTaskApi::class.java)
 
     @Provides
     @Singleton

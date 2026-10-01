@@ -150,9 +150,6 @@ data class MobileTask(
     val offlineEvents: Int = 0,
     val description: String = "",
     val operationTypeTitle: String = operationType.title,
-    val isGeneral: Boolean = false,
-    val pendingGeneralSubtaskIds: List<Long> = emptyList(),
-    val workReportId: Long? = null,
     val targets: List<TaskTarget> = emptyList(),
     val sortOrder: Int = Int.MAX_VALUE,
 ) {

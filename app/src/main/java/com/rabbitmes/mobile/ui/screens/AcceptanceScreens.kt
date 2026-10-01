@@ -22,16 +22,24 @@ private val acceptanceProblemReasons = listOf(
     "Другая причина",
 )
 
+/**
+ * Старая приёмка работала на устаревшем WorkTaskApi и удалена.
+ * Экран оставлен под новую приёмку production-задач.
+ */
 @Composable
-fun AcceptanceQueueScreen(tasks: List<MobileTask>, onOpen: (String) -> Unit, onBack: () -> Unit, bottomBar: @Composable () -> Unit) {
+fun AcceptanceQueueScreen(onBack: () -> Unit, bottomBar: @Composable () -> Unit) {
     Scaffold(
         bottomBar = bottomBar,
         containerColor = Color.Transparent,
     ) { padding ->
         LazyColumn(Modifier.fillMaxSize().padding(padding), contentPadding = PaddingValues(bottom = MesSpacing.screenBottom)) {
-            item { AppHeader("Приемка", "Задачи, ожидающие проверку", onBack) }
-            if (tasks.isEmpty()) item { MesCard { Text("Нет задач на приемку") } }
-            items(tasks) { task -> TaskCard(task) { onOpen(task.id) } }
+            item { AppHeader("Приемка", "Проверка выполненных задач", onBack) }
+            item {
+                MesCard {
+                    Text("Раздел в разработке", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium)
+                    Text("Приёмка выполненных задач появится в одной из следующих версий.")
+                }
+            }
         }
     }
 }

@@ -11,15 +11,11 @@ import javax.inject.Singleton
 @Serializable
 enum class OfflineActionType {
     START_PRODUCTION_TASK,
-    START_WORK_TASK,
     COMPLETE_PRODUCTION_CHECKLIST_ITEM,
     COMPLETE_PRODUCTION_TARGET,
     PROBLEM_PRODUCTION_TARGET,
     SUBMIT_PRODUCTION_RESULT,
-    COMPLETE_WORK_SUBTASK,
     COMPLETE_PRODUCTION_TASK,
-    COMPLETE_WORK_TASK,
-    ACCEPT_WORK_REPORT,
 }
 
 @Serializable
@@ -28,7 +24,6 @@ data class OfflineActionPayload(
     val reason: String? = null,
     val comment: String? = null,
     val values: Map<String, String> = emptyMap(),
-    val generalSubtaskIds: List<Long> = emptyList(),
 )
 
 @Singleton

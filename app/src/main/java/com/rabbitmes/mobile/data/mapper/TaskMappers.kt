@@ -4,13 +4,10 @@ import com.rabbitmes.mobile.data.MockRepository
 import com.rabbitmes.mobile.domain.*
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
-import ru.profikrol.operator.data.remote.cell.CellDto
 import ru.profikrol.operator.data.remote.cell.localizeCellPositions
 import ru.profikrol.operator.data.remote.production.ProductionTargetDto
 import ru.profikrol.operator.data.remote.production.ProductionTaskDetailsDto
 import ru.profikrol.operator.data.remote.profile.ShiftDto
-import ru.profikrol.operator.data.remote.rabbit.RabbitDto
-import ru.profikrol.operator.data.remote.worktask.WorkTaskDto
 
 internal fun ShiftDto?.toShiftState(employeeId: String, previous: ShiftState): ShiftState =
     if (this == null) {
@@ -31,127 +28,6 @@ internal fun ShiftDto?.toShiftState(employeeId: String, previous: ShiftState): S
     }
 
 internal fun ShiftState.isOpen(): Boolean = startedAt != null && finishedAt == null
-
-internal fun WorkTaskDto.toMobileTask(
-    employeeId: String,
-    rabbits: List<RabbitDto> = emptyList(),
-    cells: List<CellDto> = emptyList(),
-): MobileTask {
-    val operationType = resolveOperationType()
-    val isGeneral = operationType == OperationType.CUSTOM_TASK
-    val targetType = MockRepository.operation(operationType).targetType
-    val checklist = if (isGeneral) {
-        emptyList()
-    } else if (operationType == OperationType.INSEMINATION) {
-        rabbits.toRabbitChecklist(taskId = id)
-    } else if (operationType == OperationType.NEST_SELECTION) {
-        cells.take(1).toCageChecklist(
-            taskId = id,
-            serverSubtaskId = subtasks.firstOrNull()?.id,
-        )
-    } else if (subtasks.isNotEmpty()) {
-        subtasks.map { subtask ->
-            ChecklistItem(
-                id = subtask.id.toString(),
-                label = subtask.name.ifBlank { "Подзадача ${subtask.id}" },
-                targetType = targetType,
-                targetId = subtask.id.toString(),
-                serverType = subtask.type,
-                status = subtask.status.toChecklistStatus(),
-                result = ExecutionResult(
-                    completedAt = subtask.completedAt,
-                    problemReason = subtask.report?.abortReason ?: subtask.skipReason,
-                ),
-            )
-        }
-    } else if (targetType == TargetType.RABBIT) {
-        rabbits.toRabbitChecklist(taskId = id)
-    } else {
-        emptyList()
-    }
-    val taskStatus = status.toTaskStatus()
-    return MobileTask(
-        id = id.toString(),
-        title = name.ifBlank { operationName.orEmpty().ifBlank { programName.orEmpty().ifBlank { "Задача $id" } } },
-        operationType = operationType,
-        workshopId = manufactureId?.toString().orEmpty(),
-        hangarId = manufactureId?.toString().orEmpty(),
-        assignedEmployeeId = employeeId,
-        dueDate = scheduledDate,
-        plannedStart = startedAt.toDisplayTime(),
-        plannedDurationMinutes = durationMinutes ?: 0,
-        priority = Priority.NORMAL,
-        status = taskStatus,
-        checklist = checklist,
-        requiresAcceptance = requiresAcceptance,
-        acceptanceStatus = when {
-            !requiresAcceptance -> AcceptanceStatus.NOT_REQUIRED
-            status.normalizedStatus() == "AWAITING_ACCEPTANCE" -> AcceptanceStatus.WAITING
-            completedAt != null -> AcceptanceStatus.WAITING
-            else -> AcceptanceStatus.NOT_REQUIRED
-        },
-        result = ExecutionResult(
-            completedAt = completedAt,
-        ),
-        description = description.orEmpty().ifBlank {
-            subtasks.map { it.description.orEmpty().trim() }
-                .filter(String::isNotBlank)
-                .distinct()
-                .joinToString("\n")
-        },
-        operationTypeTitle = operationName.orEmpty().ifBlank { operationType.title },
-        isGeneral = isGeneral,
-        pendingGeneralSubtaskIds = if (isGeneral) {
-            subtasks.filterNot { it.status.normalizedStatus() in COMPLETED_SUBTASK_STATUSES }
-                .map { it.id }
-        } else {
-            emptyList()
-        },
-        workReportId = report?.id,
-    )
-}
-
-private val COMPLETED_SUBTASK_STATUSES = setOf("COMPLETED", "DONE", "FINISHED", "SKIPPED")
-
-internal fun WorkTaskDto.resolveOperationType(): OperationType {
-    val candidates = listOf(operationId, operationName, name, operationCategory)
-        .map { it.orEmpty().trim() }
-        .filter(String::isNotBlank)
-    val candidateKeys = candidates.map { it.operationLookupKey() }
-    val resolved = OPERATION_ALIASES[operationId.orEmpty().operationLookupKey()]
-        ?: candidateKeys.firstNotNullOfOrNull(OPERATION_ALIASES::get)
-        ?: OperationType.entries.firstOrNull { type ->
-            candidates.any { candidate ->
-                candidate.equals(type.name, ignoreCase = true) ||
-                    candidate.equals(type.title, ignoreCase = true) ||
-                    candidate.operationLookupKey() == type.title.operationLookupKey()
-            }
-        }
-    return resolved ?: OperationType.CUSTOM_TASK
-}
-
-private val GENERAL_FORM_OPERATION_TYPES = setOf(
-    OperationType.INSEMINATION,
-    OperationType.PALPATION,
-    OperationType.ANIMAL_SETTLEMENT,
-    OperationType.NEST_PREPARATION,
-    OperationType.OKROL,
-    OperationType.NEST_SELECTION,
-    OperationType.NEST_CONTROL,
-    OperationType.WEIGHING,
-    OperationType.ANIMAL_DEPARTURE,
-    OperationType.WEANING,
-    OperationType.SLAUGHTER_SHIPMENT,
-    OperationType.CLEANING,
-    OperationType.FEMALE_DELIVERY,
-    OperationType.DEWORMING_DOSATRON,
-    OperationType.MORTALITY_ROUND,
-    OperationType.FIRST_WEIGHING,
-    OperationType.LIGHT_STIMULATION,
-    OperationType.LIGHTING_CHECK,
-    OperationType.FEED_CHECK,
-    OperationType.MANUAL_FEEDING,
-)
 
 private val OPERATION_ALIASES = mapOf(
     "animal placement" to OperationType.ANIMAL_SETTLEMENT,
@@ -344,44 +220,11 @@ internal fun ProductionTaskDetailsDto.toMobileTask(employeeId: String): MobileTa
         requiresAcceptance = task.requiresAcceptance,
         description = task.description.orEmpty(),
         operationTypeTitle = task.title.orEmpty().ifBlank { operationType.title },
-        isGeneral = false,
         sortOrder = task.sortOrder,
     )
 }
 
-private fun List<RabbitDto>.toRabbitChecklist(taskId: Long): List<ChecklistItem> =
-    asSequence()
-        .mapNotNull { rabbit ->
-            val rfid = rabbit.rfid?.trim().orEmpty()
-            if (rfid.isBlank()) return@mapNotNull null
-            ChecklistItem(
-                id = "task-$taskId-rabbit-${rabbit.id ?: rfid}",
-                label = buildString {
-                    append("RFID: ")
-                    append(rfid)
-                    if (rabbit.age > 0) append(" · Возраст: ${rabbit.age}")
-                },
-                targetType = TargetType.RABBIT,
-                targetId = rfid,
-            )
-        }
-        .distinctBy { it.targetId.lowercase() }
-        .toList()
-
-private fun List<CellDto>.toCageChecklist(
-    taskId: Long,
-    serverSubtaskId: Long?,
-): List<ChecklistItem> =
-    map { cell ->
-        ChecklistItem(
-            id = serverSubtaskId?.toString() ?: "task-$taskId-cell-${cell.id}",
-            label = cell.displayName,
-            targetType = TargetType.CAGE,
-            targetId = cell.displayName,
-        )
-    }
-
-internal fun String.toTaskStatus(): TaskStatus = when (normalizedStatus()) {
+private fun String.toTaskStatus(): TaskStatus = when (normalizedStatus()) {
     "NEW", "CREATED", "PLANNED", "PENDING" -> TaskStatus.NEW
     "IN_PROGRESS", "STARTED", "OPEN", "OPENED" -> TaskStatus.IN_PROGRESS
     "BLOCKED", "PROBLEM", "FAILED", "ABORTED" -> TaskStatus.BLOCKED
@@ -398,13 +241,7 @@ private fun String.toChecklistStatus(): ChecklistStatus = when (normalizedStatus
     else -> ChecklistStatus.PENDING
 }
 
-internal fun String.normalizedStatus(): String = trim()
+private fun String.normalizedStatus(): String = trim()
     .uppercase()
     .replace('-', '_')
     .replace(' ', '_')
-
-internal fun String?.toDisplayTime(): String = this
-    ?.substringAfter('T', "")
-    ?.take(5)
-    ?.takeIf(String::isNotBlank)
-    ?: "—"

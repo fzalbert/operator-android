@@ -16,6 +16,5 @@ sealed class AppScreen {
     data object Notifications : AppScreen()
     data object AcceptanceQueue : AppScreen()
     data class TaskExecution(val taskId: String) : AppScreen()
-    data class Acceptance(val taskId: String) : AppScreen()
     data class RabbitProfile(val rfidCode: String, val taskId: String) : AppScreen()
 }

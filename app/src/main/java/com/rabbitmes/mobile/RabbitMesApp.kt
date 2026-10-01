@@ -21,7 +21,6 @@ import androidx.compose.material3.SnackbarHostState
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
-import com.rabbitmes.mobile.data.MockRepository
 import com.rabbitmes.mobile.domain.ChecklistStatus
 import com.rabbitmes.mobile.ui.components.BottomNav
 import com.rabbitmes.mobile.ui.operations.OperationScreenFactory
@@ -71,7 +70,6 @@ fun RabbitMesApp(vm: MobileMesViewModel) {
             AppScreen.Sync -> vm.navigate(AppScreen.Shift)
             AppScreen.Notifications -> vm.navigate(AppScreen.Shift)
             AppScreen.AcceptanceQueue -> vm.navigate(AppScreen.Tasks)
-            is AppScreen.Acceptance -> vm.navigate(AppScreen.AcceptanceQueue)
             is AppScreen.TaskExecution -> vm.navigate(AppScreen.Tasks)
             is AppScreen.RabbitProfile -> vm.navigate(AppScreen.TaskExecution(screen.taskId))
             AppScreen.Login -> Unit
@@ -89,7 +87,7 @@ fun RabbitMesApp(vm: MobileMesViewModel) {
             AppScreen.Sync -> SyncQueueScreen(vm.shift, vm.tasks, vm::syncNow, { vm.navigate(AppScreen.Tasks) }, bottom("sync"))
             AppScreen.Profile -> ProfileScreen(vm.currentEmployee, vm.tasksForCurrentEmployee(), vm.operations, vm::logout, bottom("profile"))
             AppScreen.Notifications -> NotificationsScreen(vm.notifications, { vm.navigate(AppScreen.Shift) }, vm::markNotificationAsRead, vm::markAllNotificationsAsRead)
-            AppScreen.AcceptanceQueue -> AcceptanceQueueScreen(vm.tasksForAcceptance(), { vm.navigate(AppScreen.Acceptance(it)) }, { vm.navigate(AppScreen.Tasks) }, bottom("accept"))
+            AppScreen.AcceptanceQueue -> AcceptanceQueueScreen({ vm.navigate(AppScreen.Tasks) }, bottom("accept"))
             is AppScreen.TaskExecution -> {
                 val task = vm.taskOrNull(screen.taskId)
                 if (task == null) {
@@ -129,30 +127,21 @@ fun RabbitMesApp(vm: MobileMesViewModel) {
                     },
                     onComplete = { vm.completeTask(task.id); vm.navigate(AppScreen.Tasks) },
                     onSkip = {
-                        if (task.isGeneral) vm.rejectGeneralTask(task.id, it) else vm.skipTask(task.id, it)
+                        vm.skipTask(task.id, it)
                         vm.navigate(AppScreen.Tasks)
                     },
                     onGeneralComplete = { comment ->
                         vm.completeTask(task.id, comment)
                         vm.navigate(AppScreen.Tasks)
                     },
-                    onGeneralReject = { reason, comment ->
-                        vm.rejectGeneralTask(task.id, reason, comment)
+                    onGeneralReject = { reason, _ ->
+                        vm.skipTask(task.id, reason)
                         vm.navigate(AppScreen.Tasks)
                     },
                     onOpenAnimal = { rfid -> vm.navigate(AppScreen.RabbitProfile(rfid, task.id)) },
                     resolveRabbitId = vm::rabbitIdForRfid,
                         canEdit = canEdit,
                     )
-                }
-            }
-            is AppScreen.Acceptance -> {
-                val task = vm.taskOrNull(screen.taskId)
-                if (task == null) {
-                    LaunchedEffect(screen.taskId) { vm.navigate(AppScreen.AcceptanceQueue) }
-                    AcceptanceQueueScreen(vm.tasksForAcceptance(), { vm.navigate(AppScreen.Acceptance(it)) }, { vm.navigate(AppScreen.Tasks) }, bottom("accept"))
-                } else {
-                    AcceptanceScreen(task, vm.remarks, { vm.navigate(AppScreen.AcceptanceQueue) }, { vm.acceptTask(task.id, it); vm.navigate(AppScreen.AcceptanceQueue) }, { vm.rejectTask(task.id, it); vm.navigate(AppScreen.AcceptanceQueue) }, { itemId, reason, comment, attachments -> vm.addRemark(task.id, itemId, reason, comment, attachments) })
                 }
             }
             is AppScreen.RabbitProfile -> RabbitProfileScreen(

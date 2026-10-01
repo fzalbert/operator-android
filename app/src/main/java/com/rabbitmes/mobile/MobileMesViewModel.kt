@@ -7,14 +7,10 @@ import com.rabbitmes.mobile.data.mapper.allTargets
 import com.rabbitmes.mobile.data.mapper.isOpen
 import com.rabbitmes.mobile.data.mapper.mortalityRoundKindTitle
 import com.rabbitmes.mobile.data.mapper.mortalityRoundTargetLabel
-import com.rabbitmes.mobile.data.mapper.normalizedStatus
 import com.rabbitmes.mobile.data.mapper.productionIdValue
 import com.rabbitmes.mobile.data.mapper.productionResultJson
-import com.rabbitmes.mobile.data.mapper.resolveOperationType
-import com.rabbitmes.mobile.data.mapper.toDisplayTime
 import com.rabbitmes.mobile.data.mapper.toMobileTask
 import com.rabbitmes.mobile.data.mapper.toShiftState
-import com.rabbitmes.mobile.data.mapper.toTaskStatus
 import android.util.Log
 import android.content.Context
 import android.provider.Settings
@@ -34,25 +30,17 @@ import ru.profikrol.operator.domain.model.UserRole
 import ru.profikrol.operator.domain.nfc.NfcReader
 import ru.profikrol.operator.domain.repository.AuthRepository
 import ru.profikrol.operator.data.remote.profile.ProfileApi
-import ru.profikrol.operator.data.remote.profile.ShiftDto
 import ru.profikrol.operator.data.remote.rabbit.RabbitApi
 import ru.profikrol.operator.data.remote.rabbit.RabbitDto
 import ru.profikrol.operator.data.remote.cell.CellApi
 import ru.profikrol.operator.data.remote.cell.CellDto
 import ru.profikrol.operator.data.remote.cell.RowDto
-import ru.profikrol.operator.data.remote.cell.localizeCellPositions
-import ru.profikrol.operator.data.remote.worktask.WorkTaskApi
-import ru.profikrol.operator.data.remote.worktask.WorkTaskDto
-import ru.profikrol.operator.data.remote.worktask.CompleteWorkSubtaskRequest
-import ru.profikrol.operator.data.remote.worktask.CompleteWorkTaskRequest
 import ru.profikrol.operator.data.remote.production.AddProductionTargetRequest
 import ru.profikrol.operator.data.remote.production.CompleteTargetRequest
 import ru.profikrol.operator.data.remote.production.MortalityCountResult
 import ru.profikrol.operator.data.remote.production.ProductionMortalityCountProblemRequest
 import ru.profikrol.operator.data.remote.production.ProductionTargetCommentProblemRequest
-import ru.profikrol.operator.data.remote.production.ProductionTargetDto
 import ru.profikrol.operator.data.remote.production.ProductionTaskApi
-import ru.profikrol.operator.data.remote.production.ProductionTaskDetailsDto
 import ru.profikrol.operator.data.remote.production.SubmitProductionTaskResultRequest
 import javax.inject.Inject
 import javax.inject.Named
@@ -72,16 +60,10 @@ import kotlinx.coroutines.supervisorScope
 import com.rabbitmes.mobile.domain.*
 import com.rabbitmes.mobile.ui.operations.PROBLEM_COMMENT_KEY
 import com.rabbitmes.mobile.ui.operations.PROBLEM_REASON_KEY
-import java.io.IOException
 import retrofit2.HttpException
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 import kotlinx.serialization.json.Json
-import kotlinx.serialization.json.JsonArray
-import kotlinx.serialization.json.JsonElement
-import kotlinx.serialization.json.JsonObject
-import kotlinx.serialization.json.JsonPrimitive
-import kotlinx.serialization.json.contentOrNull
 import kotlinx.serialization.json.jsonObject
 
 private const val API_LOG_TAG = "RabbitApi"
@@ -91,13 +73,6 @@ private fun OperationType.isFemaleArrival(): Boolean =
 private const val TASKS_REFRESH_INTERVAL_MS = 30_000L
 private const val RABBITS_PAGE_SIZE = 100
 private const val CELLS_PAGE_SIZE = 100
-private const val START_TASK_STATUS_POLL_ATTEMPTS = 12
-private const val START_TASK_STATUS_POLL_DELAY_MS = 500L
-
-private fun String.isProductionTaskId(): Boolean =
-    toLongOrNull() == null &&
-        !startsWith("mock-", ignoreCase = true) &&
-        !startsWith("demo-", ignoreCase = true)
 
 @HiltViewModel
 class MobileMesViewModel @Inject constructor(
@@ -106,7 +81,6 @@ class MobileMesViewModel @Inject constructor(
     private val authRepository: AuthRepository,
     private val notificationRepository: NotificationRepository,
     private val profileApi: ProfileApi,
-    private val workTaskApi: WorkTaskApi,
     private val productionTaskApi: ProductionTaskApi,
     @Named("productionFallback") private val productionFallbackTaskApi: ProductionTaskApi,
     private val rabbitApi: RabbitApi,
@@ -138,8 +112,6 @@ class MobileMesViewModel @Inject constructor(
     private var hasLoadedRemoteTasks = false
     private var tasksAutoRefreshJob: Job? = null
     private var syncJob: Job? = null
-    var remarks: List<AcceptanceRemark> by mutableStateOf(emptyList())
-        private set
 
     var lastScannedRfid: String? by mutableStateOf(null)
     private val scannedRfidByTaskId = mutableStateMapOf<String, String>()
@@ -273,7 +245,7 @@ class MobileMesViewModel @Inject constructor(
             initials = initials,
         )
         shift = ShiftState(currentEmployee.id)
-        screen = defaultScreenForRole()
+        screen = AppScreen.Shift
         lastMessage = null
         viewModelScope.launch {
             runCatchingCancellable { restoreOfflineState() }
@@ -432,179 +404,101 @@ class MobileMesViewModel @Inject constructor(
                             }
                         }.awaitAll().filterNotNull()
                 }
-            }.onFailure { error ->
-                Log.e(API_LOG_TAG, "Production tasks request failed: ${error.toHttpDebugMessage()}", error)
-            }.getOrDefault(emptyList())
-            runCatchingCancellable {
-                if (currentEmployee.role == RoleId.CHIEF_TECHNOLOGIST) {
-                    val ownTasks = workTaskApi.getMyWorkTasks()
-                    val acceptanceTasks = workTaskApi.getWorkTasksForAcceptance()
-                    ru.profikrol.operator.data.remote.worktask.WorkTaskPageDto(
-                        items = (ownTasks.items + acceptanceTasks.items).distinctBy(WorkTaskDto::id),
-                        total = (ownTasks.items + acceptanceTasks.items).distinctBy(WorkTaskDto::id).size,
-                    )
-                } else {
-                    workTaskApi.getMyWorkTasks()
-                }
+            }.getOrElse { error ->
+                handleError(
+                    error = error,
+                    fallbackMessage = "Не удалось загрузить задачи",
+                    logMessage = "Production tasks request failed: ${error.toHttpDebugMessage()}",
+                    showToUser = showLoading,
+                )
+                return
             }
-                .onSuccess { page ->
-                    Log.d(
-                        API_LOG_TAG,
-                        "Work tasks returned ${page.items.size} items: ${
-                            page.items.joinToString { task ->
-                                "id=${task.id}, operationId=${task.operationId}, operationName=${task.operationName}, name=${task.name}"
-                            }
-                        }",
-                    )
-                    val latestTasks = page.items
-                        .groupBy { task ->
-                            task.scheduledDate to (task.operationId ?: "work-task:${task.id}")
-                        }
-                        .values
-                        .mapNotNull { duplicates ->
-                            duplicates.maxWithOrNull(
-                                compareBy<WorkTaskDto> { it.programScheduleId ?: Long.MIN_VALUE }
-                                    .thenBy { it.id },
-                            )
-                        }
-                    val needsRabbitChecklist = latestTasks.any { task ->
-                        task.resolveOperationType() == OperationType.INSEMINATION ||
-                            (task.subtasks.isEmpty() &&
-                                MockRepository.operation(task.resolveOperationType()).targetType == TargetType.RABBIT)
-                    } || productionTasks.any { task ->
-                        task.operationType == OperationType.INSEMINATION ||
-                            task.operationType == OperationType.PALPATION ||
-                            task.operationType == OperationType.MORTALITY_ROUND ||
-                            task.checklist.any { it.targetType == TargetType.RABBIT }
-                    }
-                    val rabbits = if (needsRabbitChecklist) {
-                        runCatchingCancellable { loadAllRabbits() }
-                            .onSuccess { serverRabbits = it }
-                            .onFailure { error ->
-                                handleError(
-                                    error = error,
-                                    fallbackMessage = "Не удалось загрузить список кроликов",
-                                    logMessage = "Rabbits request failed",
-                                    showToUser = showLoading,
-                                )
-                            }
-                            .getOrDefault(emptyList())
-                    } else {
-                        emptyList()
-                    }
-                    val needsCells = latestTasks.any {
-                        it.resolveOperationType() == OperationType.ANIMAL_TRANSFER ||
-                            MockRepository.operation(it.resolveOperationType()).targetType == TargetType.CAGE
-                    } || productionTasks.any {
-                        it.operationType == OperationType.MORTALITY_ROUND ||
-                            it.operationType == OperationType.ANIMAL_TRANSFER ||
-                            it.operationType == OperationType.NEST_CONTROL ||
-                            it.operationType == OperationType.WEIGHING ||
-                            it.operationType == OperationType.WEIGHING_CAGE ||
-                            it.operationType == OperationType.WEIGHING_RABBIT
-                    }
-                    val requiredCellHangarIds = productionTasks
-                        .mapNotNull { task -> task.hangarId.toLongOrNull() }
-                        .toSet()
-                    val cells = if (needsCells) {
-                        if (serverCells.isNotEmpty() && serverCellHangarIds == requiredCellHangarIds) {
-                            serverCells
-                        } else runCatchingCancellable { loadCells(requiredCellHangarIds) }
-                            .onSuccess {
-                                serverCells = it
-                                serverCellHangarIds = requiredCellHangarIds
-                            }
-                            .onFailure { error ->
-                                handleError(
-                                    error = error,
-                                    fallbackMessage = "Не удалось загрузить список клеток",
-                                    logMessage = "Cells request failed",
-                                    showToUser = showLoading,
-                                )
-                            }
-                            .getOrDefault(emptyList())
-                    } else {
-                        emptyList()
-                    }
-                    if (needsCells && requiredCellHangarIds.isNotEmpty()) {
-                        runCatchingCancellable { loadRows(requiredCellHangarIds) }
-                            .onSuccess { serverRows = it }
-                            .onFailure { error ->
-                                Log.w(API_LOG_TAG, "Rows request failed: ${error.toHttpDebugMessage()}", error)
-                            }
-                    }
-                    val remoteTasks = latestTasks
-                        .filterNot {
-                            val operationType = it.resolveOperationType()
-                            operationType == OperationType.ANIMAL_SETTLEMENT ||
-                                operationType == OperationType.MORTALITY_ROUND
-                        }
-                        .map { dto ->
-                        dto.toMobileTask(currentEmployee.id, rabbits, cells).let { task ->
-                            if (
-                                currentEmployee.role == RoleId.CHIEF_TECHNOLOGIST &&
-                                dto.requiresAcceptance &&
-                                dto.status.normalizedStatus() == "AWAITING_ACCEPTANCE"
-                            ) {
-                                task.copy(
-                                    acceptanceRole = currentEmployee.role,
-                                    acceptanceStatus = AcceptanceStatus.WAITING,
-                                )
-                            } else task
-                        }
-                    }
-                    val productionTasksWithCells = productionTasks.map { task ->
-                        task.copy(
-                            checklist = task.checklist.map { item ->
-                                val cell = item.cageId?.toLongOrNull()?.let { cageId ->
-                                    cells.firstOrNull { it.id == cageId }
-                                }
-                                if (cell == null) item else item.copy(
-                                    cageLabel = cell.displayName,
-                                    rabbitCount = cell.meatRabbitsCount,
-                                )
-                            },
+            val needsRabbits = productionTasks.any { task ->
+                task.operationType == OperationType.INSEMINATION ||
+                    task.operationType == OperationType.PALPATION ||
+                    task.operationType == OperationType.MORTALITY_ROUND ||
+                    task.checklist.any { it.targetType == TargetType.RABBIT }
+            }
+            if (needsRabbits) {
+                runCatchingCancellable { loadAllRabbits() }
+                    .onSuccess { serverRabbits = it }
+                    .onFailure { error ->
+                        handleError(
+                            error = error,
+                            fallbackMessage = "Не удалось загрузить список кроликов",
+                            logMessage = "Rabbits request failed",
+                            showToUser = showLoading,
                         )
                     }
-                    tasks = (
-                        productionTasksWithCells.map { it.withProductionTargetOverrides().withMortalityRoundEvents() } +
-                            remoteTasks
-                        ).distinctBy(MobileTask::id).map { remote ->
-                            val local = tasks.firstOrNull { it.id == remote.id }
-                            if (local?.status == TaskStatus.IN_PROGRESS && remote.status == TaskStatus.NEW) {
-                                remote.copy(status = TaskStatus.IN_PROGRESS)
-                            } else {
-                                remote
-                            }
+            }
+            val needsCells = productionTasks.any {
+                it.operationType == OperationType.MORTALITY_ROUND ||
+                    it.operationType == OperationType.ANIMAL_TRANSFER ||
+                    it.operationType == OperationType.NEST_CONTROL ||
+                    it.operationType == OperationType.WEIGHING ||
+                    it.operationType == OperationType.WEIGHING_CAGE ||
+                    it.operationType == OperationType.WEIGHING_RABBIT
+            }
+            val requiredCellHangarIds = productionTasks
+                .mapNotNull { task -> task.hangarId.toLongOrNull() }
+                .toSet()
+            val cells = if (needsCells) {
+                if (serverCells.isNotEmpty() && serverCellHangarIds == requiredCellHangarIds) {
+                    serverCells
+                } else runCatchingCancellable { loadCells(requiredCellHangarIds) }
+                    .onSuccess {
+                        serverCells = it
+                        serverCellHangarIds = requiredCellHangarIds
+                    }
+                    .onFailure { error ->
+                        handleError(
+                            error = error,
+                            fallbackMessage = "Не удалось загрузить список клеток",
+                            logMessage = "Cells request failed",
+                            showToUser = showLoading,
+                        )
+                    }
+                    .getOrDefault(emptyList())
+            } else {
+                emptyList()
+            }
+            if (needsCells && requiredCellHangarIds.isNotEmpty()) {
+                runCatchingCancellable { loadRows(requiredCellHangarIds) }
+                    .onSuccess { serverRows = it }
+                    .onFailure { error ->
+                        Log.w(API_LOG_TAG, "Rows request failed: ${error.toHttpDebugMessage()}", error)
+                    }
+            }
+            val productionTasksWithCells = productionTasks.map { task ->
+                task.copy(
+                    checklist = task.checklist.map { item ->
+                        val cell = item.cageId?.toLongOrNull()?.let { cageId ->
+                            cells.firstOrNull { it.id == cageId }
                         }
-                    // A successful API refresh is stronger evidence than the emulator's
-                    // network validation flag, which can be false on the farm network.
-                    shift = shift.copy(isOnline = true)
-                    persistTasks()
-                    Log.d(
-                        API_LOG_TAG,
-                        "Tasks visible=${tasks.size}, production=${productionTasks.size}, work=${remoteTasks.size}",
-                    )
-                    hasLoadedRemoteTasks = true
-                    if (
-                        currentEmployee.role == RoleId.CHIEF_TECHNOLOGIST &&
-                        remoteTasks.isNotEmpty() &&
-                        screen == AppScreen.Shift
-                    ) {
-                        screen = AppScreen.AcceptanceQueue
+                        if (cell == null) item else item.copy(
+                            cageLabel = cell.displayName,
+                            rabbitCount = cell.meatRabbitsCount,
+                        )
+                    },
+                )
+            }
+            tasks = productionTasksWithCells
+                .map { it.withProductionTargetOverrides().withMortalityRoundEvents() }
+                .distinctBy(MobileTask::id)
+                .map { remote ->
+                    val local = tasks.firstOrNull { it.id == remote.id }
+                    if (local?.status == TaskStatus.IN_PROGRESS && remote.status == TaskStatus.NEW) {
+                        remote.copy(status = TaskStatus.IN_PROGRESS)
+                    } else {
+                        remote
                     }
                 }
-                .onFailure { error ->
-                    handleError(
-                        error = error,
-                        fallbackMessage = "Не удалось загрузить задачи",
-                        logMessage = "Work tasks request failed",
-                        showToUser = showLoading,
-                    )
-                }
-                .onFailure { error ->
-                    Log.e(API_LOG_TAG, "Work tasks request failed: ${error.toHttpDebugMessage()}", error)
-                }
+            // A successful API refresh is stronger evidence than the emulator's
+            // network validation flag, which can be false on the farm network.
+            shift = shift.copy(isOnline = true)
+            persistTasks()
+            Log.d(API_LOG_TAG, "Tasks visible=${tasks.size}")
+            hasLoadedRemoteTasks = true
         } finally {
             isTasksRequestInProgress = false
             if (showLoading) isTasksLoading = false
@@ -615,15 +509,6 @@ class MobileMesViewModel @Inject constructor(
         }
     }
 
-    private suspend fun waitForTaskToOpen(taskId: String): Boolean {
-        repeat(START_TASK_STATUS_POLL_ATTEMPTS) {
-            loadMyTasks(showLoading = false)
-            val status = taskOrNull(taskId)?.status
-            if (status != null && status != TaskStatus.NEW) return true
-            delay(START_TASK_STATUS_POLL_DELAY_MS)
-        }
-        return false
-    }
 
     private suspend fun loadAllRabbits(): List<RabbitDto> {
         val result = mutableListOf<RabbitDto>()
@@ -715,8 +600,16 @@ class MobileMesViewModel @Inject constructor(
             }
             var sent = 0
             for (action in queued) {
+                val type = OfflineActionType.entries.firstOrNull { it.name == action.type }
+                if (type == null) {
+                    // Действие из старой версии приложения (например, work-задачи), которое
+                    // больше нельзя отправить. Убираем, чтобы оно не блокировало очередь.
+                    Log.w(API_LOG_TAG, "Dropping unsupported offline action. type=${action.type} taskId=${action.taskId}")
+                    offlineRepository.remove(action.id)
+                    continue
+                }
                 try {
-                    executeOfflineAction(action.taskId, OfflineActionType.valueOf(action.type), offlineRepository.payload(action))
+                    executeOfflineAction(action.taskId, type, offlineRepository.payload(action))
                     offlineRepository.remove(action.id)
                     sent++
                 } catch (cancelled: CancellationException) {
@@ -777,8 +670,6 @@ class MobileMesViewModel @Inject constructor(
                 val response = productionCall { it.startTask(currentEmployee.id, taskId) }
                 if (!response.isSuccessful && response.code() != 409) throw HttpException(response)
             }
-            OfflineActionType.START_WORK_TASK -> runCatchingCancellable { workTaskApi.startWorkTask(taskId.toLong()) }
-                .getOrElse { if (it !is HttpException || it.code() != 409) throw it }
             OfflineActionType.COMPLETE_PRODUCTION_CHECKLIST_ITEM -> productionCall { api ->
                 runCatchingCancellable {
                     api.completeChecklistItem(currentEmployee.id, taskId, requireNotNull(payload.itemId))
@@ -821,12 +712,6 @@ class MobileMesViewModel @Inject constructor(
                     SubmitProductionTaskResultRequest(payload.values.getValue("_resultJson")),
                 )
             }
-            OfflineActionType.COMPLETE_WORK_SUBTASK -> runCatchingCancellable {
-                workTaskApi.completeWorkSubtask(
-                    requireNotNull(payload.itemId).toLong(),
-                    CompleteWorkSubtaskRequest(payload.reason, payload.comment, null),
-                )
-            }.getOrElse { if (it !is HttpException || it.code() != 409) throw it }
             OfflineActionType.COMPLETE_PRODUCTION_TASK -> productionCall { api ->
                 runCatchingCancellable { api.completeTask(currentEmployee.id, taskId) }.getOrElse { error ->
                     if (error is HttpException && error.code() == 409) {
@@ -835,14 +720,6 @@ class MobileMesViewModel @Inject constructor(
                     } else throw error
                 }
             }
-            OfflineActionType.COMPLETE_WORK_TASK -> {
-                payload.generalSubtaskIds.forEach { workTaskApi.completeWorkSubtask(it, CompleteWorkSubtaskRequest()) }
-                runCatchingCancellable { workTaskApi.completeWorkTask(taskId.toLong(), CompleteWorkTaskRequest(payload.reason, payload.comment)) }
-                    .getOrElse { if (it !is HttpException || it.code() != 409) throw it }
-            }
-            OfflineActionType.ACCEPT_WORK_REPORT -> runCatchingCancellable {
-                workTaskApi.acceptWorkReport(requireNotNull(payload.itemId).toLong())
-            }.getOrElse { if (it !is HttpException || it.code() != 409) throw it }
         }
     }
     fun markNotificationAsRead(id: Long) {
@@ -902,7 +779,6 @@ class MobileMesViewModel @Inject constructor(
         activeRfidScanTaskId = null
         activeRfidScanValues = emptyMap()
     }
-    fun canReviewAcceptance() = tasks.any { it.acceptanceRole == currentEmployee.role }
     fun tasksForCurrentEmployee() = if (hasLoadedRemoteTasks) {
         tasks
     } else {
@@ -911,7 +787,6 @@ class MobileMesViewModel @Inject constructor(
                 definition(task.operationType).allowedRoles.contains(currentEmployee.role)
         }
     }
-    fun tasksForAcceptance() = tasks.filter { it.requiresAcceptance && it.status == TaskStatus.DONE && it.acceptanceStatus == AcceptanceStatus.WAITING && it.acceptanceRole == currentEmployee.role }
     fun nextTask() = tasksForCurrentEmployee().orderedOpenTasks().firstOrNull()
     fun canWorkOnTask(taskId: String): Boolean = nextTask()?.id == taskId
     fun definition(type: OperationType): OperationDefinition {
@@ -947,11 +822,6 @@ class MobileMesViewModel @Inject constructor(
             },
         )
     }
-    private fun defaultScreenForRole(): AppScreen = when {
-        currentEmployee.role == RoleId.CHIEF_TECHNOLOGIST && tasksForAcceptance().isNotEmpty() -> AppScreen.AcceptanceQueue
-        else -> AppScreen.Shift
-    }
-
     private fun queueOfflineChange(): ShiftState =
         if (shift.isOnline) shift else shift.copy(pendingSyncEvents = shift.pendingSyncEvents + 1)
 
@@ -1026,74 +896,37 @@ class MobileMesViewModel @Inject constructor(
             lastMessage = "Сначала завершите предыдущую задачу"
             return
         }
-        val remoteTaskId = taskId.toLongOrNull()
         if (!shift.isOnline) {
-            val type = if (remoteTaskId == null) OfflineActionType.START_PRODUCTION_TASK else OfflineActionType.START_WORK_TASK
-            enqueueOffline(taskId, type)
+            enqueueOffline(taskId, OfflineActionType.START_PRODUCTION_TASK)
             updateTask(taskId) { it.copy(status = TaskStatus.IN_PROGRESS).markOffline() }
             lastMessage = "Задача начата офлайн"
             return
         }
-        if (taskId.isProductionTaskId()) {
-            val task = taskOrNull(taskId)
-            if (task != null) {
-                launchServerAction("Start production task action failed", fallbackMessage = "Не удалось начать задачу") {
-                    runCatchingCancellable {
-                        val response = productionCall { api -> api.startTask(currentEmployee.id, taskId) }
-                        if (!response.isSuccessful) throw HttpException(response)
-                        runCatchingCancellable { productionCall { api -> api.getTask(currentEmployee.id, taskId) }.toMobileTask(currentEmployee.id) }
-                            .getOrElse { task.copy(status = TaskStatus.IN_PROGRESS) }
-                    }
-                        .onSuccess { updated ->
-                            tasks = tasks.map { if (it.id == taskId) updated else it }
-                            lastMessage = "Задача начата"
-                        }
-                        .onFailure { error ->
-                            if (error is HttpException && error.code() == 409) {
-                                val syncedTask = runCatchingCancellable {
-                                    productionCall { api -> api.getTask(currentEmployee.id, taskId) }.toMobileTask(currentEmployee.id)
-                                }.getOrNull()
-                                if (syncedTask?.status == TaskStatus.IN_PROGRESS || syncedTask?.status == TaskStatus.DONE) {
-                                    tasks = tasks.map { if (it.id == taskId) syncedTask else it }
-                                    lastMessage = "Задача уже открыта"
-                                } else {
-                                    handleError(error, "Не удалось начать задачу", "Start production task failed. taskId=$taskId")
-                                }
-                            } else {
-                                handleError(error, "Не удалось начать задачу", "Start production task failed. taskId=$taskId")
-                            }
-                        }
-                }
-            } else {
-                updateTask(taskId) { it.copy(status = TaskStatus.IN_PROGRESS).markOffline() }
+        val task = taskOrNull(taskId) ?: return
+        launchServerAction("Start production task action failed", fallbackMessage = "Не удалось начать задачу") {
+            runCatchingCancellable {
+                val response = productionCall { api -> api.startTask(currentEmployee.id, taskId) }
+                if (!response.isSuccessful) throw HttpException(response)
+                runCatchingCancellable { productionCall { api -> api.getTask(currentEmployee.id, taskId) }.toMobileTask(currentEmployee.id) }
+                    .getOrElse { task.copy(status = TaskStatus.IN_PROGRESS) }
             }
-            return
-        }
-        launchServerAction("Start work task action failed", fallbackMessage = "Не удалось начать задачу") {
-            runCatchingCancellable { workTaskApi.startWorkTask(requireNotNull(remoteTaskId)) }
-                .onSuccess { remoteTask ->
-                    updateTask(taskId) { task ->
-                        task.copy(
-                            status = remoteTask.status.toTaskStatus(),
-                            plannedStart = remoteTask.startedAt.toDisplayTime(),
-                        )
-                    }
+                .onSuccess { updated ->
+                    tasks = tasks.map { if (it.id == taskId) updated else it }
                     lastMessage = "Задача начата"
                 }
                 .onFailure { error ->
                     if (error is HttpException && error.code() == 409) {
-                        lastMessage = "Открываем задачу..."
-                        val opened = waitForTaskToOpen(taskId)
-                        if (opened) {
-                            lastMessage = "Задача открыта"
+                        val syncedTask = runCatchingCancellable {
+                            productionCall { api -> api.getTask(currentEmployee.id, taskId) }.toMobileTask(currentEmployee.id)
+                        }.getOrNull()
+                        if (syncedTask?.status == TaskStatus.IN_PROGRESS || syncedTask?.status == TaskStatus.DONE) {
+                            tasks = tasks.map { if (it.id == taskId) syncedTask else it }
+                            lastMessage = "Задача уже открыта"
                         } else {
-                            updateTask(taskId) { task ->
-                                task.copy(status = TaskStatus.IN_PROGRESS)
-                            }
-                            lastMessage = "Задача открыта, данные обновятся автоматически"
+                            handleError(error, "Не удалось начать задачу", "Start production task failed. taskId=$taskId")
                         }
                     } else {
-                        handleError(error, "Не удалось начать задачу", "Start work task failed. taskId=$remoteTaskId")
+                        handleError(error, "Не удалось начать задачу", "Start production task failed. taskId=$taskId")
                     }
                 }
         }
@@ -1208,17 +1041,6 @@ class MobileMesViewModel @Inject constructor(
                 "RFID_SETTLEMENT",
                 "Production execution item selected. taskId=$taskId itemId=${matchingItem.id} serverType=${matchingItem.serverType} rfid=$effectiveRfid",
             )
-            completeChecklistItemOnServer(
-                taskId = taskId,
-                itemId = matchingItem.id,
-                status = if (problemReason.isBlank()) ChecklistStatus.DONE else ChecklistStatus.PROBLEM,
-                reason = problemReason,
-                comment = problemComment,
-                values = resultValues + ("rfid" to effectiveRfid),
-            )
-            return
-        }
-        if (matchingItem.id.toLongOrNull() != null && taskId.toLongOrNull() != null) {
             completeChecklistItemOnServer(
                 taskId = taskId,
                 itemId = matchingItem.id,
@@ -1670,69 +1492,7 @@ class MobileMesViewModel @Inject constructor(
             }
             return
         }
-        val subtaskId = itemId.toLongOrNull()
-        val isRemoteTask = taskId.toLongOrNull() != null
-        if (subtaskId == null || !isRemoteTask) {
-            updateChecklistItemLocally(taskId, itemId, status, reason, comment, values)
-            return
-        }
-
-        if (!shift.isOnline) {
-            val rfid = values["rfid"]?.trim().orEmpty()
-            val reportComment = buildList {
-                if (rfid.isNotEmpty()) add("RFID: $rfid")
-                if (comment.isNotBlank()) add(comment.trim())
-            }.joinToString("; ").ifBlank { null }
-            enqueueOffline(taskId, OfflineActionType.COMPLETE_WORK_SUBTASK, OfflineActionPayload(itemId = itemId, reason = reason.ifBlank { null }, comment = reportComment, values = values))
-            updateChecklistItemLocally(taskId, itemId, status, reason, comment, values)
-            lastMessage = "Подзадача сохранена офлайн"
-            return
-        }
-
-        launchServerAction("Complete work subtask action failed", fallbackMessage = "Не удалось завершить подзадачу") {
-            val rfid = values["rfid"]?.trim().orEmpty()
-            val reportComment = buildList {
-                if (rfid.isNotEmpty()) add("RFID: $rfid")
-                if (comment.isNotBlank()) add(comment.trim())
-            }.joinToString("; ").ifBlank { null }
-            runCatchingCancellable {
-                workTaskApi.completeWorkSubtask(
-                    subtaskId = subtaskId,
-                    request = CompleteWorkSubtaskRequest(
-                        abortReason = reason.ifBlank { null },
-                        comment = reportComment,
-                        // The legacy API accepts only its operation-specific params DTO.
-                        // RFID belongs to the production target API, so keep it in the
-                        // legacy report comment instead of sending an incompatible map.
-                        params = null,
-                    ),
-                )
-            }.onSuccess {
-                updateChecklistItemLocally(taskId, itemId, status, reason, comment, values)
-                val current = taskOrNull(taskId)
-                val isLastSettlementItem = current?.operationType?.isFemaleArrival() == true &&
-                    current.checklist.count { it.status == ChecklistStatus.PENDING } <= 1
-                if (isLastSettlementItem) {
-                    runCatchingCancellable {
-                        workTaskApi.completeWorkTask(
-                            id = taskId.toLong(),
-                            request = CompleteWorkTaskRequest(comment = reportComment),
-                        )
-                    }.onSuccess { completedTask ->
-                        updateTask(taskId) { task -> task.copy(status = completedTask.status.toTaskStatus(), result = task.result.copy(completedAt = completedTask.completedAt ?: "now")) }
-                        lastMessage = "Заселение успешно завершено"
-                    }.onFailure { error ->
-                        handleError(error, "RFID сохранён, но задачу не удалось закрыть", "Complete legacy settlement task failed. taskId=$taskId")
-                    }
-                } else if (reason.isBlank()) {
-                    lastMessage = "Подзадача выполнена"
-                } else {
-                    lastMessage = "Подзадача завершена с замечанием"
-                }
-            }.onFailure { error ->
-                handleError(error, "Не удалось завершить подзадачу", "Complete work subtask failed. subtaskId=$subtaskId")
-            }
-        }
+        updateChecklistItemLocally(taskId, itemId, status, reason, comment, values)
     }
 
     private fun updateChecklistItemLocally(
@@ -1774,35 +1534,20 @@ class MobileMesViewModel @Inject constructor(
             lastMessage = "Нельзя завершить задачу: осталось $pending необработанных пунктов чек-листа"
             return
         }
-        val remoteTaskId = taskId.toLongOrNull()
         val shouldSubmitStandaloneResult = currentTask.checklist.isEmpty() &&
             currentTask.operationType != OperationType.MORTALITY_ROUND
         if (!shift.isOnline) {
-            val isProductionTask = taskId.isProductionTaskId()
-            if (isProductionTask) {
-                if (shouldSubmitStandaloneResult) {
-                    enqueueOffline(
-                        taskId,
-                        OfflineActionType.SUBMIT_PRODUCTION_RESULT,
-                        OfflineActionPayload(values = mapOf("_resultJson" to currentTask.productionResultJson(completionComment))),
-                    )
-                }
-                enqueueOffline(taskId, OfflineActionType.COMPLETE_PRODUCTION_TASK)
-            } else if (remoteTaskId != null) {
+            if (shouldSubmitStandaloneResult) {
                 enqueueOffline(
                     taskId,
-                    OfflineActionType.COMPLETE_WORK_TASK,
-                    OfflineActionPayload(
-                        reason = currentTask.result.problemReason,
-                        comment = completionComment.ifBlank { null },
-                        generalSubtaskIds = if (currentTask.isGeneral) currentTask.pendingGeneralSubtaskIds else emptyList(),
-                    ),
+                    OfflineActionType.SUBMIT_PRODUCTION_RESULT,
+                    OfflineActionPayload(values = mapOf("_resultJson" to currentTask.productionResultJson(completionComment))),
                 )
             }
+            enqueueOffline(taskId, OfflineActionType.COMPLETE_PRODUCTION_TASK)
             updateTask(taskId) { current ->
                 current.copy(
                     status = TaskStatus.DONE,
-                    acceptanceStatus = if (current.requiresAcceptance) AcceptanceStatus.WAITING else AcceptanceStatus.NOT_REQUIRED,
                     checklist = checklist,
                     result = current.result.copy(completedAt = "now"),
                 ).markOffline()
@@ -1810,203 +1555,36 @@ class MobileMesViewModel @Inject constructor(
             lastMessage = "Задача завершена офлайн и добавлена в очередь"
             return
         }
-        if (remoteTaskId == null) {
-            if (taskId.isProductionTaskId()) {
-                launchServerAction("Complete production task failed", fallbackMessage = "Не удалось завершить задачу") {
-                    runCatchingCancellable {
-                        productionCall { api ->
-                            if (shouldSubmitStandaloneResult) {
-                                val resultJson = currentTask.productionResultJson(completionComment)
-                                Log.d(API_LOG_TAG, "Sending production task result. taskId=$taskId operation=${currentTask.operationType} result=$resultJson")
-                                api.submitTaskResult(currentEmployee.id, taskId, SubmitProductionTaskResultRequest(resultJson))
-                            }
-                            api.completeTask(currentEmployee.id, taskId)
-                        }
-                    }
-                        .onSuccess {
-                            updateTask(taskId) { current -> current.copy(status = TaskStatus.DONE, checklist = checklist, result = current.result.copy(completedAt = "now")) }
-                            lastMessage = "Задача завершена"
-                        }
-                        .onFailure { error ->
-                            val syncedTask = runCatchingCancellable {
-                                productionCall { api -> api.getTask(currentEmployee.id, taskId) }.toMobileTask(currentEmployee.id)
-                            }.getOrNull()
-                            if (syncedTask?.status == TaskStatus.DONE) {
-                                updateTask(taskId) { syncedTask.copy(checklist = syncedTask.checklist.ifEmpty { checklist }) }
-                                lastMessage = "Задача завершена"
-                            } else {
-                                handleError(error, "Не удалось завершить задачу", "Complete production task failed. taskId=$taskId")
-                            }
-                        }
-                }
-            } else {
-                updateTask(taskId) { current ->
-                    val acceptance = if (current.requiresAcceptance) AcceptanceStatus.WAITING else AcceptanceStatus.NOT_REQUIRED
-                    current.copy(
-                        status = TaskStatus.DONE,
-                        acceptanceStatus = acceptance,
-                        checklist = checklist,
-                        result = current.result.copy(completedAt = "now"),
-                    ).markOffline()
-                }
-            }
-            return
-        }
-
-        launchServerAction("Complete work task action failed", fallbackMessage = "Не удалось завершить задачу") {
+        launchServerAction("Complete production task failed", fallbackMessage = "Не удалось завершить задачу") {
             runCatchingCancellable {
-                if (currentTask.isGeneral) {
-                    currentTask.pendingGeneralSubtaskIds.forEach { subtaskId ->
-                        workTaskApi.completeWorkSubtask(
-                            subtaskId = subtaskId,
-                            request = CompleteWorkSubtaskRequest(),
-                        )
+                productionCall { api ->
+                    if (shouldSubmitStandaloneResult) {
+                        val resultJson = currentTask.productionResultJson(completionComment)
+                        Log.d(API_LOG_TAG, "Sending production task result. taskId=$taskId operation=${currentTask.operationType} result=$resultJson")
+                        api.submitTaskResult(currentEmployee.id, taskId, SubmitProductionTaskResultRequest(resultJson))
                     }
-                }
-                workTaskApi.completeWorkTask(
-                    id = remoteTaskId,
-                    request = CompleteWorkTaskRequest(
-                        abortReason = currentTask.result.problemReason,
-                        comment = completionComment.ifBlank { null },
-                    ),
-                )
-            }.onSuccess { remoteTask ->
-                updateTask(taskId) { current ->
-                    current.copy(
-                        status = remoteTask.status.toTaskStatus(),
-                        acceptanceStatus = if (current.requiresAcceptance) {
-                            AcceptanceStatus.WAITING
-                        } else {
-                            AcceptanceStatus.NOT_REQUIRED
-                        },
-                        checklist = checklist,
-                        result = current.result.copy(completedAt = remoteTask.completedAt ?: "now"),
-                    )
-                }
-                lastMessage = "Задача завершена"
-            }.onFailure { error ->
-                if (currentTask.isGeneral && error is HttpException && error.code() == 409) {
-                    updateTask(taskId) { current ->
-                        current.copy(
-                            status = TaskStatus.DONE,
-                            acceptanceStatus = if (current.requiresAcceptance) {
-                                AcceptanceStatus.WAITING
-                            } else {
-                                AcceptanceStatus.NOT_REQUIRED
-                            },
-                            checklist = checklist,
-                            result = current.result.copy(completedAt = "now"),
-                        )
-                    }
-                    lastMessage = if (currentTask.requiresAcceptance) {
-                        "Задача уже отправлена на приёмку"
-                    } else {
-                        "Задача уже завершена"
-                    }
-                } else {
-                    handleError(error, "Не удалось завершить задачу", "Complete work task failed. taskId=$remoteTaskId")
+                    api.completeTask(currentEmployee.id, taskId)
                 }
             }
+                .onSuccess {
+                    updateTask(taskId) { current -> current.copy(status = TaskStatus.DONE, checklist = checklist, result = current.result.copy(completedAt = "now")) }
+                    lastMessage = "Задача завершена"
+                }
+                .onFailure { error ->
+                    val syncedTask = runCatchingCancellable {
+                        productionCall { api -> api.getTask(currentEmployee.id, taskId) }.toMobileTask(currentEmployee.id)
+                    }.getOrNull()
+                    if (syncedTask?.status == TaskStatus.DONE) {
+                        updateTask(taskId) { syncedTask.copy(checklist = syncedTask.checklist.ifEmpty { checklist }) }
+                        lastMessage = "Задача завершена"
+                    } else {
+                        handleError(error, "Не удалось завершить задачу", "Complete production task failed. taskId=$taskId")
+                    }
+                }
         }
     }
 
     fun skipTask(taskId: String, reason: String) = updateTask(taskId) { it.copy(status = TaskStatus.SKIPPED, result = it.result.copy(problemReason = reason, comment = reason)).markOffline() }
-
-    fun rejectGeneralTask(taskId: String, reason: String, commentOverride: String? = null) {
-        val currentTask = taskOrNull(taskId) ?: return
-        val rejectionComment = commentOverride ?: currentTask.result.comment
-        val remoteTaskId = taskId.toLongOrNull()
-        if (remoteTaskId == null) {
-            skipTask(taskId, reason)
-            return
-        }
-
-        updateTask(taskId) { task ->
-            task.copy(result = task.result.copy(problemReason = reason)).markOffline()
-        }
-        if (!shift.isOnline) {
-            enqueueOffline(taskId, OfflineActionType.COMPLETE_WORK_TASK, OfflineActionPayload(reason = reason, comment = rejectionComment.ifBlank { null }))
-            updateTask(taskId) { it.copy(status = TaskStatus.DONE, result = it.result.copy(completedAt = "now")).markOffline() }
-            lastMessage = "Отклонение сохранено офлайн"
-            return
-        }
-        launchServerAction("Reject general work task action failed", fallbackMessage = "Не удалось отклонить задачу") {
-            runCatchingCancellable {
-                workTaskApi.completeWorkTask(
-                    id = remoteTaskId,
-                    request = CompleteWorkTaskRequest(
-                        abortReason = reason,
-                            comment = rejectionComment.ifBlank { null },
-                    ),
-                )
-            }.onSuccess { remoteTask ->
-                updateTask(taskId) { task ->
-                    task.copy(
-                        status = remoteTask.status.toTaskStatus(),
-                        result = task.result.copy(
-                            problemReason = reason,
-                            completedAt = remoteTask.completedAt ?: "now",
-                        ),
-                    )
-                }
-                lastMessage = "Задача отклонена"
-            }.onFailure { error ->
-                handleError(error, "Не удалось отклонить задачу", "Reject general work task failed. taskId=$remoteTaskId")
-            }
-        }
-    }
-
-    fun addRemark(taskId: String, itemId: String?, reason: String, comment: String, attachments: List<MediaAttachment>) {
-        remarks = listOf(AcceptanceRemark("remark-${System.currentTimeMillis()}", taskId, itemId, reason, comment, attachments, "now")) + remarks
-        if (itemId != null) updateTask(taskId) { task -> task.copy(checklist = task.checklist.map { if (it.id == itemId) it.copy(reviewStatus = ReviewStatus.REJECTED, reviewerComment = comment) else it }).markOffline() }
-        else shift = queueOfflineChange()
-    }
-
-    fun acceptTask(taskId: String, comment: String = "") {
-        val task = tasks.firstOrNull { it.id == taskId } ?: return
-        val reportId = task.workReportId
-        if (reportId == null) {
-            lastMessage = "У задачи отсутствует серверный отчёт для приёмки"
-            return
-        }
-        if (!shift.isOnline) {
-            enqueueOffline(taskId, OfflineActionType.ACCEPT_WORK_REPORT, OfflineActionPayload(itemId = reportId.toString(), comment = comment.ifBlank { null }))
-            updateTask(taskId) { current ->
-                current.copy(
-                    status = TaskStatus.SENT,
-                    acceptanceStatus = AcceptanceStatus.ACCEPTED,
-                    acceptedByEmployeeId = currentEmployee.id,
-                    acceptanceComment = comment,
-                ).markOffline()
-            }
-            lastMessage = "Приёмка сохранена офлайн"
-            return
-        }
-        launchServerAction("Accept work report failed", fallbackMessage = "Не удалось подтвердить выполнение задачи") {
-            runCatchingCancellable { workTaskApi.acceptWorkReport(reportId) }
-                .onSuccess { report ->
-                    updateTask(taskId) { current ->
-                        current.copy(
-                            status = TaskStatus.SENT,
-                            acceptanceStatus = AcceptanceStatus.ACCEPTED,
-                            acceptedByEmployeeId = report.acceptedByEmployeeId ?: currentEmployee.id,
-                            acceptanceComment = comment,
-                            checklist = current.checklist.map { item ->
-                                item.copy(reviewStatus = if (item.reviewStatus == ReviewStatus.REJECTED) ReviewStatus.REJECTED else ReviewStatus.ACCEPTED)
-                            },
-                        )
-                    }
-                    lastMessage = "Выполнение задачи подтверждено"
-                }
-                .onFailure { error ->
-                    handleError(error, "Не удалось подтвердить выполнение задачи", "Accept work report failed. reportId=$reportId")
-                }
-        }
-    }
-
-    fun rejectTask(taskId: String, comment: String) {
-        lastMessage = "Возврат на доработку пока не поддерживается сервером"
-    }
 
     override fun onCleared() {
         stopRfidScan()
