@@ -12,6 +12,9 @@ import retrofit2.http.Path
 import retrofit2.http.Query
 
 interface ProductionTaskApi {
+    @GET("api/v1/production/operations")
+    suspend fun getOperations(): List<ProductionOperationDto>
+
     @GET("api/v1/production/tasks/employee/{employeeId}")
     suspend fun getEmployeeTasks(@Header("X-Employee-Id") requesterEmployeeId: String, @Path("employeeId") employeeId: String, @Query("completed") completed: Boolean = false): List<ProductionTaskDto>
 
@@ -43,6 +46,13 @@ interface ProductionTaskApi {
     suspend fun completeTask(@Header("X-Employee-Id") employeeId: String, @Path("id") taskId: String)
 
 }
+
+@Serializable
+data class ProductionOperationDto(
+    val code: String? = null,
+    val name: String? = null,
+    val allowedRoleCodes: List<String> = emptyList(),
+)
 
 @Serializable
 data class AddProductionTargetRequest(

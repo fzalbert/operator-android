@@ -67,7 +67,11 @@ object NetworkModule {
     fun provideAuthlessRetrofit(
         @Named("authless") client: OkHttpClient,
         json: Json,
-    ): Retrofit = retrofit(client, json)
+    ): Retrofit = Retrofit.Builder()
+        .baseUrl(BuildConfig.AUTH_API_BASE_URL)
+        .client(client)
+        .addConverterFactory(json.asConverterFactory("application/json".toMediaType()))
+        .build()
 
     @Provides
     @Singleton
@@ -108,17 +112,6 @@ object NetworkModule {
     fun provideProductionTaskApi(client: OkHttpClient, json: Json): ProductionTaskApi =
         Retrofit.Builder()
             .baseUrl(BuildConfig.PRODUCTION_API_BASE_URL)
-            .client(client)
-            .addConverterFactory(json.asConverterFactory("application/json".toMediaType()))
-            .build()
-            .create(ProductionTaskApi::class.java)
-
-    @Provides
-    @Singleton
-    @Named("productionFallback")
-    fun provideProductionFallbackTaskApi(client: OkHttpClient, json: Json): ProductionTaskApi =
-        Retrofit.Builder()
-            .baseUrl(BuildConfig.API_BASE_URL)
             .client(client)
             .addConverterFactory(json.asConverterFactory("application/json".toMediaType()))
             .build()

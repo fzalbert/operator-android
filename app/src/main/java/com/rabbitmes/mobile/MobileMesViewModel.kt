@@ -36,9 +36,9 @@ import ru.profikrol.operator.data.remote.production.ProductionMortalityCountProb
 import ru.profikrol.operator.data.remote.production.ProductionTargetCommentProblemRequest
 import ru.profikrol.operator.data.remote.production.ProductionTaskApi
 import ru.profikrol.operator.data.remote.production.ProductionTaskDetailsDto
+import ru.profikrol.operator.data.remote.production.ProductionOperationDto
 import ru.profikrol.operator.data.remote.production.SubmitProductionTaskResultRequest
 import javax.inject.Inject
-import javax.inject.Named
 import com.rabbitmes.mobile.data.MockRepository
 import com.rabbitmes.mobile.data.NotificationRepository
 import androidx.lifecycle.viewModelScope
@@ -389,6 +389,20 @@ private fun String.normalizedStatus(): String = trim()
     .replace('-', '_')
     .replace(' ', '_')
 
+private fun ProductionOperationDto.isAllowedFor(role: UserRole?): Boolean {
+    if (allowedRoleCodes.isEmpty() || role == UserRole.SuperAdmin) return true
+    val normalizedCodes = allowedRoleCodes.map { code ->
+        code.trim().lowercase().replace('-', '_').replace(' ', '_')
+    }
+    val expectedCodes = when (role) {
+        UserRole.Technologist -> setOf("technologist", "chief_technologist")
+        UserRole.Operator,
+        null -> setOf("operator")
+        UserRole.SuperAdmin -> emptySet()
+    }
+    return normalizedCodes.any(expectedCodes::contains)
+}
+
 private fun String?.toDisplayTime(): String = this
     ?.substringAfter('T', "")
     ?.take(5)
@@ -404,7 +418,6 @@ class MobileMesViewModel @Inject constructor(
     private val profileApi: ProfileApi,
     private val workTaskApi: WorkTaskApi,
     private val productionTaskApi: ProductionTaskApi,
-    @Named("productionFallback") private val productionFallbackTaskApi: ProductionTaskApi,
     private val rabbitApi: RabbitApi,
     private val cellApi: CellApi,
     private val offlineRepository: OfflineRepository,
@@ -459,6 +472,7 @@ class MobileMesViewModel @Inject constructor(
     private var serverCells by mutableStateOf<List<CellDto>>(emptyList())
     private var serverRows by mutableStateOf<List<RowDto>>(emptyList())
     private var serverCellHangarIds: Set<Long> = emptySet()
+    private var profileOperations by mutableStateOf<List<String>>(emptyList())
     private val deviceId: String by lazy {
         Settings.Secure.getString(appContext.contentResolver, Settings.Secure.ANDROID_ID)
             .orEmpty()
@@ -481,18 +495,10 @@ class MobileMesViewModel @Inject constructor(
         if (appError?.id == id) appError = null
     }
 
-    private suspend fun <T> productionCall(action: suspend (ProductionTaskApi) -> T): T =
-        try {
-            Log.d(API_LOG_TAG, "Production API request via production service")
-            action(productionTaskApi)
-        } catch (error: HttpException) {
-            if (error.code() == 404) {
-                Log.w(API_LOG_TAG, "Production service returned 404, retrying gateway fallback")
-                action(productionFallbackTaskApi)
-            } else {
-                throw error
-            }
-        }
+    private suspend fun <T> productionCall(action: suspend (ProductionTaskApi) -> T): T {
+        Log.d(API_LOG_TAG, "Production API request via production service")
+        return action(productionTaskApi)
+    }
 
     private fun safeLaunch(
         logMessage: String,
@@ -672,6 +678,7 @@ class MobileMesViewModel @Inject constructor(
 
     private fun refreshProfile() {
         safeLaunch("Profile refresh failed") {
+            refreshProfileOperations()
             runCatching { profileApi.getMyProfile() }
                 .onSuccess { profile ->
                     currentEmployee = currentEmployee.copy(id = profile.employeeId)
@@ -686,6 +693,24 @@ class MobileMesViewModel @Inject constructor(
                 }
                 .onFailure { error -> handleError(error, "Не удалось обновить профиль", "Profile refresh failed") }
         }
+    }
+
+    private suspend fun refreshProfileOperations() {
+        runCatching { productionCall(ProductionTaskApi::getOperations) }
+            .onSuccess { operations ->
+                val role = sessionStore.currentUser?.role
+                profileOperations = operations
+                    .filter { it.isAllowedFor(role) }
+                    .mapNotNull { it.name?.trim()?.takeIf(String::isNotBlank) }
+                    .distinct()
+            }
+            .onFailure { error ->
+                Log.e(
+                    API_LOG_TAG,
+                    "Production operations request failed: ${error.toHttpDebugMessage()}",
+                    error,
+                )
+            }
     }
 
     private suspend fun loadMyTasks(showLoading: Boolean = true) {
@@ -736,25 +761,15 @@ class MobileMesViewModel @Inject constructor(
                 Log.e(API_LOG_TAG, "Production tasks request failed: ${error.toHttpDebugMessage()}", error)
             }.getOrDefault(emptyList())
             runCatching {
-                if (currentEmployee.role == RoleId.CHIEF_TECHNOLOGIST) {
-                    val ownTasks = workTaskApi.getMyWorkTasks()
-                    val acceptanceTasks = workTaskApi.getWorkTasksForAcceptance()
-                    ru.profikrol.operator.data.remote.worktask.WorkTaskPageDto(
-                        items = (ownTasks.items + acceptanceTasks.items).distinctBy(WorkTaskDto::id),
-                        total = (ownTasks.items + acceptanceTasks.items).distinctBy(WorkTaskDto::id).size,
-                    )
-                } else {
-                    workTaskApi.getMyWorkTasks()
-                }
+                ru.profikrol.operator.data.remote.worktask.WorkTaskPageDto(
+                    items = emptyList(),
+                    total = 0,
+                )
             }
                 .onSuccess { page ->
                     Log.d(
                         API_LOG_TAG,
-                        "Work tasks returned ${page.items.size} items: ${
-                            page.items.joinToString { task ->
-                                "id=${task.id}, operationId=${task.operationId}, operationName=${task.operationName}, name=${task.name}"
-                            }
-                        }",
+                        "Legacy work task loading is disabled; tasks are loaded from Production API",
                     )
                     val latestTasks = page.items
                         .groupBy { task ->
@@ -1210,6 +1225,7 @@ class MobileMesViewModel @Inject constructor(
     }
 
     fun startRfidScan(taskId: String, values: Map<String, String> = emptyMap()) {
+        if (!ensureTaskStarted(taskId)) return
         if (!nfcReader.isAvailable) {
             val message = "NFC недоступен. Включите NFC на устройстве и попробуйте снова"
             lastMessage = message
@@ -1238,7 +1254,7 @@ class MobileMesViewModel @Inject constructor(
         activeRfidScanValues = emptyMap()
     }
     fun canReviewAcceptance() = tasks.any { it.acceptanceRole == currentEmployee.role }
-    fun profileOperationTitles(): List<String> = PROFILE_OPERATION_TITLES
+    fun profileOperationTitles(): List<String> = profileOperations
     fun tasksForCurrentEmployee() = (if (hasLoadedRemoteTasks) {
         tasks
     } else {
@@ -1357,13 +1373,33 @@ class MobileMesViewModel @Inject constructor(
         shift = queueOfflineChange()
         persistTasks()
     }
+
+    private fun ensureTaskStarted(taskId: String): Boolean {
+        val task = taskOrNull(taskId) ?: return false
+        if (task.status == TaskStatus.NEW) {
+            lastMessage = "Сначала нажмите «Приступить»"
+            return false
+        }
+        if (task.status == TaskStatus.DONE || task.status == TaskStatus.SENT || task.status == TaskStatus.SKIPPED) {
+            lastMessage = "Задача уже завершена"
+            return false
+        }
+        return true
+    }
+
     fun beginTask(taskId: String) {
         if (!canWorkOnTask(taskId)) {
             lastMessage = "Сначала завершите предыдущую задачу"
             return
         }
+        val task = taskOrNull(taskId) ?: return
+        if (task.status != TaskStatus.NEW) return
         val remoteTaskId = taskId.toLongOrNull()
         if (!shift.isOnline) {
+            if (taskId.isProductionTaskId()) {
+                lastMessage = "Для начала задачи требуется подключение к серверу"
+                return
+            }
             val type = if (remoteTaskId == null) OfflineActionType.START_PRODUCTION_TASK else OfflineActionType.START_WORK_TASK
             enqueueOffline(taskId, type)
             updateTask(taskId) { it.copy(status = TaskStatus.IN_PROGRESS).markOffline() }
@@ -1371,14 +1407,12 @@ class MobileMesViewModel @Inject constructor(
             return
         }
         if (taskId.isProductionTaskId()) {
-            val task = taskOrNull(taskId)
-            if (task != null) {
-                launchServerAction("Start production task action failed", fallbackMessage = "Не удалось начать задачу") {
+            launchServerAction("Start production task action failed", fallbackMessage = "Не удалось начать задачу") {
                     runCatching {
                         val response = productionCall { api -> api.startTask(currentEmployee.id, taskId) }
                         if (!response.isSuccessful) throw HttpException(response)
-                        runCatching { productionCall { api -> api.getTask(currentEmployee.id, taskId) }.toMobileTask(currentEmployee.id) }
-                            .getOrElse { task.copy(status = TaskStatus.IN_PROGRESS) }
+                        productionCall { api -> api.getTask(currentEmployee.id, taskId) }
+                            .toMobileTask(currentEmployee.id)
                     }
                         .onSuccess { updated ->
                             val startedTask = if (updated.status == TaskStatus.NEW) {
@@ -1404,9 +1438,6 @@ class MobileMesViewModel @Inject constructor(
                                 handleError(error, "Не удалось начать задачу", "Start production task failed. taskId=$taskId")
                             }
                         }
-                }
-            } else {
-                updateTask(taskId) { it.copy(status = TaskStatus.IN_PROGRESS).markOffline() }
             }
             return
         }
@@ -1440,7 +1471,10 @@ class MobileMesViewModel @Inject constructor(
         }
     }
 
-    fun updateTaskValue(taskId: String, key: String, value: String) = updateTask(taskId) { it.copy(result = it.result.copy(values = it.result.values + (key to value))).markOffline() }
+    fun updateTaskValue(taskId: String, key: String, value: String) {
+        if (!ensureTaskStarted(taskId)) return
+        updateTask(taskId) { it.copy(result = it.result.copy(values = it.result.values + (key to value))).markOffline() }
+    }
     private fun media(type: AttachmentType, label: String, localUri: String) = MediaAttachment(
         id = "media-${System.currentTimeMillis()}",
         type = type,
@@ -1449,12 +1483,25 @@ class MobileMesViewModel @Inject constructor(
         createdAt = "now",
         uploaded = false
     )
-    fun addPhoto(taskId: String, label: String, localUri: String) = updateTask(taskId) { val attachment = media(AttachmentType.PHOTO, label, localUri); it.copy(result = it.result.copy(photos = it.result.photos + label, attachments = it.result.attachments + attachment)).markOffline() }
-    fun addVideo(taskId: String, label: String, localUri: String) = updateTask(taskId) { val attachment = media(AttachmentType.VIDEO, label, localUri); it.copy(result = it.result.copy(videos = it.result.videos + label, attachments = it.result.attachments + attachment)).markOffline() }
-    fun addFile(taskId: String, label: String, localUri: String) = updateTask(taskId) { val attachment = media(AttachmentType.FILE, label, localUri); it.copy(result = it.result.copy(attachments = it.result.attachments + attachment)).markOffline() }
-    fun addComment(taskId: String, comment: String) = updateTask(taskId) { it.copy(result = it.result.copy(comment = comment)).markOffline() }
+    fun addPhoto(taskId: String, label: String, localUri: String) {
+        if (!ensureTaskStarted(taskId)) return
+        updateTask(taskId) { val attachment = media(AttachmentType.PHOTO, label, localUri); it.copy(result = it.result.copy(photos = it.result.photos + label, attachments = it.result.attachments + attachment)).markOffline() }
+    }
+    fun addVideo(taskId: String, label: String, localUri: String) {
+        if (!ensureTaskStarted(taskId)) return
+        updateTask(taskId) { val attachment = media(AttachmentType.VIDEO, label, localUri); it.copy(result = it.result.copy(videos = it.result.videos + label, attachments = it.result.attachments + attachment)).markOffline() }
+    }
+    fun addFile(taskId: String, label: String, localUri: String) {
+        if (!ensureTaskStarted(taskId)) return
+        updateTask(taskId) { val attachment = media(AttachmentType.FILE, label, localUri); it.copy(result = it.result.copy(attachments = it.result.attachments + attachment)).markOffline() }
+    }
+    fun addComment(taskId: String, comment: String) {
+        if (!ensureTaskStarted(taskId)) return
+        updateTask(taskId) { it.copy(result = it.result.copy(comment = comment)).markOffline() }
+    }
 
     fun scanRfidAndCompleteItem(taskId: String, rfid: String, values: Map<String, String> = emptyMap()) {
+        if (!ensureTaskStarted(taskId)) return
         Log.d("RFID_TEST", "MobileMesViewModel получил: $rfid")
 
         val currentTask = tasks.first { it.id == taskId }
@@ -1613,6 +1660,7 @@ class MobileMesViewModel @Inject constructor(
         reason: String = "",
         comment: String = "",
     ) {
+        if (!ensureTaskStarted(taskId)) return
         if (status == ChecklistStatus.DONE || status == ChecklistStatus.PROBLEM) {
             completeChecklistItemOnServer(
                 taskId = taskId,
@@ -1627,6 +1675,7 @@ class MobileMesViewModel @Inject constructor(
     }
 
     fun completeChecklistItem(taskId: String, itemId: String, values: Map<String, String>) {
+        if (!ensureTaskStarted(taskId)) return
         completeChecklistItemOnServer(
             taskId = taskId,
             itemId = itemId,
@@ -1646,6 +1695,7 @@ class MobileMesViewModel @Inject constructor(
         aliveBorn: Int?,
         stillborn: Int?,
     ) {
+        if (!ensureTaskStarted(taskId)) return
         val task = taskOrNull(taskId) ?: return
         val normalizedKind = targetKind.trim()
         val normalizedRowId = rowId.trim()
@@ -2127,6 +2177,7 @@ class MobileMesViewModel @Inject constructor(
     }
 
     fun completeTask(taskId: String, commentOverride: String? = null) {
+        if (!ensureTaskStarted(taskId)) return
         val currentTask = tasks.first { it.id == taskId }
         val completionComment = commentOverride ?: currentTask.result.comment
         val checklist = if (USE_GENERAL_TEMPLATE_FOR_ALL_OPERATIONS) {
@@ -2282,6 +2333,7 @@ class MobileMesViewModel @Inject constructor(
     fun skipTask(taskId: String, reason: String) = updateTask(taskId) { it.copy(status = TaskStatus.SKIPPED, result = it.result.copy(problemReason = reason, comment = reason)).markOffline() }
 
     fun rejectGeneralTask(taskId: String, reason: String, commentOverride: String? = null) {
+        if (!ensureTaskStarted(taskId)) return
         val currentTask = tasks.first { it.id == taskId }
         val rejectionComment = commentOverride ?: currentTask.result.comment
         val remoteTaskId = taskId.toLongOrNull()

@@ -26,6 +26,7 @@ android {
 
     buildTypes {
         debug {
+            buildConfigField("String", "AUTH_API_BASE_URL", "\"http://195.58.153.25:5216/\"")
             buildConfigField("String", "API_BASE_URL", "\"http://195.58.153.25:5216/\"")
             buildConfigField("String", "PRODUCTION_API_BASE_URL", "\"http://195.58.153.25:55915/\"")
             buildConfigField("String", "API_FALLBACK_HOST", "\"\"")
@@ -35,6 +36,7 @@ android {
             buildConfigField("boolean", "NOTIFICATIONS_GRPC_TLS", "true")
         }
         release {
+            buildConfigField("String", "AUTH_API_BASE_URL", "\"https://profikrol.org/\"")
             buildConfigField("String", "API_BASE_URL", "\"https://profikrol.org/\"")
             buildConfigField("String", "PRODUCTION_API_BASE_URL", "\"https://profikrol.org/\"")
             buildConfigField("String", "API_FALLBACK_HOST", "\"profikrol.org\"")
