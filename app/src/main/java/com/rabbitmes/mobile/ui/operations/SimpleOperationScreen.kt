@@ -749,8 +749,6 @@ fun AnimalSettlementScreen(
         }
     }
 
-    LaunchedEffect(Unit) { rfidFocusRequester.requestFocus() }
-
     val selectedItem = task.checklist.firstOrNull { it.id == selectedItemId }
     val selectedRabbit = selectedItem?.let { item ->
         MockRepository.rabbit(item.targetId) ?: MockRepository.rabbitByRfid(item.targetId)
@@ -794,6 +792,7 @@ fun AnimalSettlementScreen(
         }
         if (task.status != TaskStatus.NEW && canEdit) {
             item {
+                LaunchedEffect(Unit) { rfidFocusRequester.requestFocus() }
                 SimpleCard {
                     SimpleSectionTitle("Сканирование")
                     Text("Отсканируйте RFID, чтобы открыть карточку кроля из задания.", color = SimpleMuted)
