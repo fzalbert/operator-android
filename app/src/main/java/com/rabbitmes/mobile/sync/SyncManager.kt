@@ -197,18 +197,25 @@ class SyncManager @Inject constructor(
         }
     }
 
-    /** Проблема по всем незакрытым целям задачи, затем завершение задачи. */
+    /** Проблема по всем незакрытым целям задачи и завершение; без открытых целей — замечание к задаче. */
     private suspend fun reportTaskProblem(taskId: String, reason: String?, comment: String?) {
         val pendingTargets = remote.details(taskId).allTargets().filter { target ->
             target.isCompleted != true && target.status.orEmpty().toChecklistStatus() == ChecklistStatus.PENDING
         }
-        require(pendingTargets.isNotEmpty()) { "В задаче нет незакрытых целей для отметки проблемы" }
         val problemComment = listOfNotNull(reason, comment)
             .map(String::trim)
             .filter(String::isNotBlank)
             .distinct()
             .joinToString(". ")
             .ifBlank { "Невозможно выполнить задачу" }
+        // Открытых целей нет: замечание пишется к самой задаче, и сервер сразу её закрывает.
+        if (pendingTargets.isEmpty()) {
+            idempotent(
+                action = { remote.reportTaskProblem(taskId, problemComment) },
+                alreadyDone = { remote.task(taskId).status == TaskStatus.DONE },
+            )
+            return
+        }
         pendingTargets.forEach { target -> remote.reportTargetProblem(taskId, target.id, problemComment) }
         idempotent(
             action = { remote.complete(taskId) },

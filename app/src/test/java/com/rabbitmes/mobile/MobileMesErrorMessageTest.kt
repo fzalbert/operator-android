@@ -1,5 +1,6 @@
 package com.rabbitmes.mobile
 
+import com.rabbitmes.mobile.core.problemCode
 import com.rabbitmes.mobile.core.toUserMessage
 import java.io.IOException
 import okhttp3.MediaType.Companion.toMediaType
@@ -63,6 +64,17 @@ class MobileMesErrorMessageTest {
             "Для выравнивания гнезд нужно указать либо «положили», либо «забрали» — одно из двух.",
             error.toUserMessage("Не удалось сохранить результат"),
         )
+    }
+
+    @Test
+    fun `reads problem code from conflict body`() {
+        val error = httpError(
+            409,
+            """{"title":"Конфликт","detail":"В ангаре уже открыта смена","status":409,"code":"hangar_occupied"}""",
+        )
+
+        assertEquals("hangar_occupied", error.problemCode())
+        assertEquals(null, httpError(409, "").problemCode())
     }
 
     private fun httpError(code: Int, body: String): HttpException = HttpException(

@@ -37,15 +37,14 @@ fun interface TargetResultContext {
 
 object TargetResults {
     private val handlers: Map<OperationType, TargetResultHandler> = mapOf(
-        OperationType.NEST_SELECTION to NestSelectionHandler,
-        OperationType.SLAUGHTER_SHIPMENT to SlaughterShipmentHandler,
+        OperationType.NEST_EQUALIZATION to NestEqualizationHandler,
+        OperationType.SLAUGHTER_SHIPPING to SlaughterShippingHandler,
         OperationType.WEIGHING_RABBIT to WeighingRabbitHandler,
-        OperationType.WEIGHING to WeighingHandler,
-        OperationType.WEIGHING_CAGE to WeighingHandler,
-        OperationType.ANIMAL_TRANSFER to AnimalTransferHandler,
+        OperationType.WEIGHING_CAGE to WeighingCageHandler,
+        OperationType.ANIMAL_SETTLEMENT to AnimalSettlementHandler,
         OperationType.PALPATION to PalpationHandler,
         OperationType.INSEMINATION to InseminationHandler,
-        OperationType.FEMALE_DELIVERY to FemaleDeliveryHandler,
+        OperationType.FEMALE_ARRIVAL to FemaleArrivalHandler,
     )
 
     fun handler(type: OperationType): TargetResultHandler = handlers[type] ?: GenericHandler
@@ -74,7 +73,7 @@ private object GenericHandler : TargetResultHandler {
     }
 }
 
-private object NestSelectionHandler : TargetResultHandler {
+private object NestEqualizationHandler : TargetResultHandler {
     override fun JsonObjectBuilder.fill(item: ChecklistItem, values: Map<String, String>, context: TargetResultContext) {
         put("alive", values["alive"]?.toIntOrNull() ?: 0)
         put("stillborn", values["stillborn"]?.toLongOrNull() ?: 0L)
@@ -86,7 +85,7 @@ private object NestSelectionHandler : TargetResultHandler {
     }
 }
 
-private object SlaughterShipmentHandler : TargetResultHandler {
+private object SlaughterShippingHandler : TargetResultHandler {
     override fun JsonObjectBuilder.fill(item: ChecklistItem, values: Map<String, String>, context: TargetResultContext) {
         put("animalCount", values["animalCount"]?.toIntOrNull() ?: values["count"]?.toIntOrNull() ?: 0)
     }
@@ -106,7 +105,7 @@ internal fun parseWeighingRabbitWeights(rawWeights: String?): List<Int> =
         .mapNotNull { it.trim().toIntOrNull() }
         .filter { it > 0 }
 
-private object WeighingHandler : TargetResultHandler {
+private object WeighingCageHandler : TargetResultHandler {
     override fun JsonObjectBuilder.fill(item: ChecklistItem, values: Map<String, String>, context: TargetResultContext) {
         put("weightGrams", values["weightGrams"]?.toIntOrNull() ?: 0)
     }
@@ -129,7 +128,7 @@ private object InseminationHandler : TargetResultHandler {
 }
 
 /** Заселение самки: клетка из цели, RFID и возраст в днях. */
-private object FemaleDeliveryHandler : TargetResultHandler {
+private object FemaleArrivalHandler : TargetResultHandler {
     override val requiresRfid = true
 
     override fun validate(item: ChecklistItem, values: Map<String, String>): String? {
@@ -146,7 +145,7 @@ private object FemaleDeliveryHandler : TargetResultHandler {
 }
 
 /** Переселение: клетка назначения, выбранная из списка. */
-private object AnimalTransferHandler : TargetResultHandler {
+private object AnimalSettlementHandler : TargetResultHandler {
     override fun JsonObjectBuilder.fill(item: ChecklistItem, values: Map<String, String>, context: TargetResultContext) {
         val selected = values["cellId"].orEmpty()
         val cellId = context.cellId(selected)

@@ -1,6 +1,6 @@
 package com.rabbitmes.mobile
 
-import com.rabbitmes.mobile.data.MockRepository
+import com.rabbitmes.mobile.data.reference.OperationDefinitions
 import com.rabbitmes.mobile.domain.operations.parseWeighingRabbitWeights
 import com.rabbitmes.mobile.domain.OperationType
 import org.junit.Assert.assertEquals
@@ -25,7 +25,7 @@ class WeighingRabbitPayloadTest {
 
     @Test
     fun `cage weighing uses backend weightGrams field`() {
-        val definition = MockRepository.operation(OperationType.WEIGHING_CAGE)
+        val definition = OperationDefinitions.of(OperationType.WEIGHING_CAGE)
 
         assertEquals("weightGrams", definition.fields.first().id)
     }

@@ -33,7 +33,7 @@ fun RabbitProfileSectionCard(
             color = MaterialTheme.colorScheme.outlineVariant,
         ),
         colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surface,
+            containerColor = MaterialTheme.colorScheme.surfaceContainerLowest,
         ),
     ) {
         Column(

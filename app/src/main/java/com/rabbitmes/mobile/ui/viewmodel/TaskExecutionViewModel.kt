@@ -86,6 +86,11 @@ class TaskExecutionViewModel @Inject constructor(
 
     private val isOnline: Boolean get() = shiftRepository.isOnline
 
+    /** В очереди есть неотправленные действия: сервер ещё не видит, например, старт задачи. */
+    val hasPendingSync: StateFlow<Boolean> = shiftRepository.shift
+        .map { it.pendingSyncEvents > 0 }
+        .stateIn(viewModelScope, SharingStarted.Eagerly, shiftRepository.current.pendingSyncEvents > 0)
+
     fun definition(type: OperationType): OperationDefinition = catalog.definition(type)
 
     fun rabbitIdForRfid(rfid: String): String? = references.rabbitIdForRfid(rfid)
@@ -99,7 +104,11 @@ class TaskExecutionViewModel @Inject constructor(
 
     fun begin() {
         if (!taskRepository.canWorkOn(taskId)) {
-            messages.show("Сначала завершите предыдущую задачу")
+            // Просроченная задача стоит в очереди первой и не пускает к остальным, пока её не закрыть.
+            val blocking = taskRepository.nextTask()
+            messages.show(
+                if (blocking?.isOverdue == true) "Сначала завершите просроченную задачу" else "Сначала завершите предыдущую задачу",
+            )
             return
         }
         taskRepository.update(taskId) { it.copy(status = TaskStatus.IN_PROGRESS) }
@@ -188,12 +197,16 @@ class TaskExecutionViewModel @Inject constructor(
     fun complete(commentOverride: String? = null) {
         val task = task.value ?: return
         val pending = task.checklist.count { it.status == ChecklistStatus.PENDING }
-        if (pending > 0 && task.operationType != OperationType.NEST_SELECTION) {
+        if (pending > 0 && task.operationType != OperationType.NEST_EQUALIZATION) {
             messages.show("Нельзя завершить задачу: осталось $pending необработанных пунктов чек-листа")
             return
         }
         val comment = commentOverride ?: task.result.comment
-        val submitsStandaloneResult = task.checklist.isEmpty() && task.operationType != OperationType.MORTALITY_ROUND
+        // Результат задачи целиком шлём только у операции с полями формы: общей задаче слать нечего,
+        // а пустой результат сервер для части операций отклоняет.
+        val submitsStandaloneResult = task.checklist.isEmpty() &&
+            task.operationType != OperationType.MORTALITY_ROUND &&
+            catalog.definition(task.operationType).fields.isNotEmpty()
         if (submitsStandaloneResult) {
             syncManager.enqueue(
                 taskId,
@@ -318,7 +331,7 @@ class TaskExecutionViewModel @Inject constructor(
                 item.matchesRfid(normalizedRfid, rabbitIdForRfid(normalizedRfid))
         }
         // Заселение самки: RFID новый, поэтому берём первую свободную цель.
-        val settlementTarget = if (task.operationType == OperationType.FEMALE_DELIVERY) {
+        val settlementTarget = if (task.operationType == OperationType.FEMALE_ARRIVAL) {
             task.checklist.firstOrNull { it.serverType == SERVER_TYPE_TARGET && it.status == ChecklistStatus.PENDING }
                 ?: task.checklist.firstOrNull { it.status == ChecklistStatus.PENDING }
         } else {
@@ -435,7 +448,7 @@ class TaskExecutionViewModel @Inject constructor(
         syncManager.enqueue(taskId, type, payload)
 
         // Заселение и переселение закрываются сами после последней цели.
-        val closesTask = task.operationType == OperationType.FEMALE_DELIVERY || task.operationType == OperationType.ANIMAL_TRANSFER
+        val closesTask = task.operationType == OperationType.FEMALE_ARRIVAL || task.operationType == OperationType.ANIMAL_SETTLEMENT
         val isLastTarget = task.checklist.count { it.status == ChecklistStatus.PENDING } == 1
         if (closesTask && isLastTarget) {
             syncManager.enqueue(taskId, OfflineActionType.COMPLETE_PRODUCTION_TASK)
@@ -445,7 +458,7 @@ class TaskExecutionViewModel @Inject constructor(
             when {
                 !isOnline -> "Результат сохранён офлайн"
                 closesTask && isLastTarget ->
-                    if (task.operationType == OperationType.ANIMAL_TRANSFER) "Переселение успешно завершено" else "Заселение успешно завершено"
+                    if (task.operationType == OperationType.ANIMAL_SETTLEMENT) "Переселение успешно завершено" else "Заселение успешно завершено"
                 result.rfid != null -> "RFID сохранён: ${result.rfid}"
                 else -> "Позиция выполнена"
             },

@@ -9,6 +9,11 @@ import kotlinx.coroutines.flow.update
 import ru.profikrol.operator.data.local.offline.OfflineRepository
 import ru.profikrol.operator.data.remote.profile.ProfileApi
 import ru.profikrol.operator.data.remote.profile.ProfileDto
+import ru.profikrol.operator.data.remote.profile.ProfileManufactureDto
+import ru.profikrol.operator.data.remote.profile.ShiftApi
+import ru.profikrol.operator.data.remote.profile.StartShiftRequest
+import retrofit2.HttpException
+import com.rabbitmes.mobile.core.DeviceInfo
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -19,6 +24,8 @@ import javax.inject.Singleton
 @Singleton
 class ShiftRepository @Inject constructor(
     private val profileApi: ProfileApi,
+    private val shiftApi: ShiftApi,
+    private val deviceInfo: DeviceInfo,
     private val offlineRepository: OfflineRepository,
     private val employeeSession: EmployeeSession,
 ) {
@@ -49,14 +56,31 @@ class ShiftRepository @Inject constructor(
         offlineRepository.saveShift(employeeSession.id, _shift.value)
     }
 
-    suspend fun open(): ShiftState = apply(profileApi.openShift().toShiftState(employeeSession.id, _shift.value))
+    /** Начинает смену в ангаре (ProductionProgram) и перечитывает её из профиля. */
+    suspend fun open(hangarId: Long): ShiftState {
+        shiftApi.startShift(StartShiftRequest(hangarId, deviceInfo.deviceId))
+        refreshFromProfile()
+        return _shift.value
+    }
 
-    suspend fun close(): ShiftState = apply(profileApi.closeShift().toShiftState(employeeSession.id, _shift.value))
+    /** Закрывает активную смену. 404 и 409 — открытой смены уже нет. */
+    suspend fun close(): ShiftState {
+        val response = shiftApi.closeShift()
+        if (!response.isSuccessful && response.code() != 404 && response.code() != 409) throw HttpException(response)
+        refreshFromProfile()
+        return _shift.value
+    }
 
-    /** Обновляет id сотрудника и смену из профиля. */
+    private val _manufactures = MutableStateFlow<List<ProfileManufactureDto>>(emptyList())
+
+    /** Цеха сотрудника с ангарами из последнего профиля. */
+    val manufactures: StateFlow<List<ProfileManufactureDto>> = _manufactures.asStateFlow()
+
+    /** Обновляет id сотрудника, цеха и смену из профиля. */
     suspend fun refreshFromProfile(): ProfileDto {
         val profile = profileApi.getMyProfile()
         employeeSession.updateId(profile.employeeId)
+        _manufactures.value = profile.manufactures
         apply(profile.shift.toShiftState(employeeSession.id, _shift.value))
         return profile
     }

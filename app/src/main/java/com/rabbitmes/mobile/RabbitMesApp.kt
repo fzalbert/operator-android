@@ -1,5 +1,6 @@
 package com.rabbitmes.mobile
 
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
@@ -16,6 +17,8 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -39,13 +42,15 @@ import com.rabbitmes.mobile.ui.operations.OperationScreenFactory
 import com.rabbitmes.mobile.ui.screens.AcceptanceQueueScreen
 import com.rabbitmes.mobile.ui.screens.NotificationsScreen
 import com.rabbitmes.mobile.ui.screens.ProfileScreen
-import com.rabbitmes.mobile.ui.screens.ShiftScreen
+import com.rabbitmes.mobile.shift.ui.PickHangarScreen
+import com.rabbitmes.mobile.shift.ui.ShiftHomeScreen
+import com.rabbitmes.mobile.shift.ui.ShiftHomeViewModel
+import com.rabbitmes.mobile.shift.ui.ShiftUiState
 import com.rabbitmes.mobile.ui.screens.SyncQueueScreen
 import com.rabbitmes.mobile.ui.screens.TaskListScreen
 import com.rabbitmes.mobile.ui.viewmodel.AppViewModel
 import com.rabbitmes.mobile.ui.viewmodel.NotificationsViewModel
 import com.rabbitmes.mobile.ui.viewmodel.ProfileViewModel
-import com.rabbitmes.mobile.ui.viewmodel.ShiftViewModel
 import com.rabbitmes.mobile.ui.viewmodel.SyncViewModel
 import com.rabbitmes.mobile.ui.viewmodel.TaskExecutionViewModel
 import com.rabbitmes.mobile.ui.viewmodel.TaskListViewModel
@@ -128,22 +133,43 @@ private fun MainScreen(appViewModel: AppViewModel) {
             modifier = Modifier.padding(innerPadding).consumeWindowInsets(innerPadding),
         ) {
             composable<AppRoute.Shift> {
-                val vm: ShiftViewModel = hiltViewModel()
-                ShiftScreen(
-                    employee = vm.employee.collectAsStateWithLifecycle().value,
-                    shift = vm.shift.collectAsStateWithLifecycle().value,
-                    tasks = vm.tasks.collectAsStateWithLifecycle().value,
-                    nextTask = vm.nextTask.collectAsStateWithLifecycle().value,
-                    message = vm.message.collectAsStateWithLifecycle().value,
-                    unreadNotifications = vm.unreadNotifications.collectAsStateWithLifecycle().value,
-                    isShiftActionInProgress = vm.isBusy.collectAsStateWithLifecycle().value,
-                    isTasksLoading = vm.isTasksLoading.collectAsStateWithLifecycle().value,
-                    onStart = vm::startShift,
-                    onFinish = vm::finishShift,
-                    onOpenNext = openTask,
-                    onOpenNotifications = { navController.navigate(AppRoute.Notifications) },
-                    onLogout = appViewModel::logout,
+                val vm: ShiftHomeViewModel = hiltViewModel()
+                ShiftHomeScreen(
+                    state = vm.state.collectAsStateWithLifecycle().value,
+                    header = vm.header.collectAsStateWithLifecycle().value,
+                    onNotificationsClick = { navController.navigate(AppRoute.Notifications) },
+                    onStartShift = {
+                        vm.startShift()
+                        navController.navigate(AppRoute.PickHangar)
+                    },
+                    onCloseShift = vm::closeShift,
+                    onStartTask = { task -> openTask(task.id) },
                 )
+            }
+            composable<AppRoute.PickHangar> {
+                // Общая ViewModel с вкладкой «Смена»: выбор ангара — часть её состояния.
+                val shiftEntry = remember(it) { navController.getBackStackEntry(AppRoute.Shift) }
+                val vm: ShiftHomeViewModel = hiltViewModel(shiftEntry)
+                val state = vm.state.collectAsStateWithLifecycle().value
+                val header = vm.header.collectAsStateWithLifecycle().value
+                BackHandler(onBack = vm::cancelPick)
+                // После подтверждения или «назад» состояние уходит из PickHangar — закрываем экран.
+                // Пока экран уезжает анимацией, показываем последний выбор, чтобы не мигал пустотой.
+                var lastPick by remember { mutableStateOf<ShiftUiState.PickHangar?>(null) }
+                if (state is ShiftUiState.PickHangar) lastPick = state
+                LaunchedEffect(state) {
+                    if (state !is ShiftUiState.PickHangar && lastPick != null) navController.popBackStack()
+                }
+                lastPick?.let { pick ->
+                    PickHangarScreen(
+                        state = pick,
+                        unreadNotifications = header.unreadNotifications,
+                        onBack = vm::cancelPick,
+                        onNotificationsClick = { navController.navigate(AppRoute.Notifications) },
+                        onSelect = vm::selectHangar,
+                        onConfirm = vm::confirmHangar,
+                    )
+                }
             }
             composable<AppRoute.Tasks> {
                 val vm: TaskListViewModel = hiltViewModel()
@@ -226,6 +252,7 @@ private fun TaskExecutionDestination(
     val task = vm.task.collectAsStateWithLifecycle().value
     val scannedRfid by vm.scannedRfid.collectAsStateWithLifecycle()
     val scannedValues by vm.scannedValues.collectAsStateWithLifecycle()
+    val hasPendingSync by vm.hasPendingSync.collectAsStateWithLifecycle()
 
     DisposableEffect(vm) { onDispose { vm.stopRfidScan() } }
     if (task == null) {
@@ -270,6 +297,7 @@ private fun TaskExecutionDestination(
         onOpenAnimal = { rfid -> onOpenAnimal(rfid, task.id) },
         resolveRabbitId = vm::rabbitIdForRfid,
         canEdit = vm.canEdit(task),
+        hasPendingSync = hasPendingSync,
     )
 }
 

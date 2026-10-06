@@ -1,6 +1,6 @@
 package com.rabbitmes.mobile.data.mapper
 
-import com.rabbitmes.mobile.data.MockRepository
+import com.rabbitmes.mobile.data.reference.OperationDefinitions
 import com.rabbitmes.mobile.domain.*
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
@@ -22,66 +22,13 @@ internal fun ShiftDto?.toShiftState(employeeId: String, previous: ShiftState): S
             employeeId = employeeId,
             startedAt = openedAt,
             finishedAt = closedAt,
+            hangarId = hangarId,
             isOnline = previous.isOnline,
             pendingSyncEvents = previous.pendingSyncEvents,
         )
     }
 
 internal fun ShiftState.isOpen(): Boolean = startedAt != null && finishedAt == null
-
-private val OPERATION_ALIASES = mapOf(
-    "animal placement" to OperationType.ANIMAL_SETTLEMENT,
-    "animal settlement" to OperationType.ANIMAL_SETTLEMENT,
-    "animal transfer" to OperationType.ANIMAL_TRANSFER,
-    "animal relocation" to OperationType.ANIMAL_TRANSFER,
-    "перевод животных" to OperationType.ANIMAL_TRANSFER,
-    "переселение" to OperationType.ANIMAL_TRANSFER,
-    "переселение животных" to OperationType.ANIMAL_TRANSFER,
-    "забой" to OperationType.SLAUGHTER_SHIPMENT,
-    "забой отгрузка" to OperationType.SLAUGHTER_SHIPMENT,
-    "kindling" to OperationType.OKROL,
-    "nest equalization" to OperationType.NEST_SELECTION,
-    "female arrival" to OperationType.FEMALE_DELIVERY,
-    "aisle cleaning" to OperationType.DAILY_CLEANING,
-    "slaughter shipping" to OperationType.SLAUGHTER_SHIPMENT,
-    "weighing cage" to OperationType.WEIGHING,
-    "light biostimulation" to OperationType.LIGHT_STIMULATION,
-    "deworming dosatron" to OperationType.DEWORMING_DOSATRON,
-    "mortality round" to OperationType.MORTALITY_ROUND,
-    "обход ангара" to OperationType.MORTALITY_ROUND,
-    "обход ангара с подсчетом падежа" to OperationType.MORTALITY_ROUND,
-    "обход ангара и подсчет падежа" to OperationType.MORTALITY_ROUND,
-    "обход ангара подсчет падежа" to OperationType.MORTALITY_ROUND,
-    "mortality journal" to OperationType.MORTALITY_JOURNAL,
-    "manual feeding" to OperationType.MANUAL_FEEDING,
-    "nest control" to OperationType.NEST_CONTROL,
-    "nest preparation" to OperationType.NEST_PREPARATION,
-    "kindling preparation" to OperationType.OKROL_PREPARATION,
-    "hangar acceptance" to OperationType.HANGAR_ACCEPTANCE,
-    "water check" to OperationType.WATER_CHECK,
-    "feed check" to OperationType.FEED_CHECK,
-    "final round" to OperationType.FINAL_ROUND,
-    "second round" to OperationType.SECOND_ROUND,
-    "females delivery" to OperationType.FEMALE_DELIVERY,
-    "culling" to OperationType.ANIMAL_DEPARTURE,
-    "light check" to OperationType.LIGHTING_CHECK,
-    "управление световым днем" to OperationType.LIGHT_STIMULATION,
-    "управление световым днем в определенный ангар" to OperationType.LIGHT_STIMULATION,
-    "управление светодвым днем" to OperationType.LIGHT_STIMULATION,
-    "управление подачей кормов" to OperationType.MANUAL_FEEDING,
-    "управление подачей кормов в определенный ангар" to OperationType.MANUAL_FEEDING,
-    "подача кормов" to OperationType.MANUAL_FEEDING,
-    "дегельминтизация" to OperationType.DEWORMING_DOSATRON,
-    "first weighing" to OperationType.FIRST_WEIGHING,
-    "first weigh" to OperationType.FIRST_WEIGHING,
-    "первое взвешивание" to OperationType.FIRST_WEIGHING,
-)
-
-private fun String.operationLookupKey(): String = trim()
-    .lowercase()
-    .replace('ё', 'е')
-    .replace(Regex("[^a-zа-я0-9]+"), " ")
-    .trim()
 
 internal fun mortalityRoundTargetLabel(
     targetKind: String,
@@ -151,8 +98,8 @@ internal fun String.productionIdValue(): String {
 }
 
 internal fun MobileTask.productionResultJson(comment: String = result.comment): String = buildJsonObject {
-    val fields = MockRepository.operation(operationType).fields.associateBy { it.id }
-    if (operationType == OperationType.SLAUGHTER_SHIPMENT) {
+    val fields = OperationDefinitions.of(operationType).fields.associateBy { it.id }
+    if (operationType == OperationType.SLAUGHTER_SHIPPING) {
         val rawCount = result.values["animalCount"] ?: result.values["count"]
         rawCount?.toDoubleOrNull()?.toInt()?.let { put("animalCount", it) }
     } else {
@@ -174,21 +121,7 @@ internal fun MobileTask.productionResultJson(comment: String = result.comment): 
 }.toString()
 
 internal fun ProductionTaskDetailsDto.toMobileTask(employeeId: String): MobileTask {
-    val operationCandidates = listOfNotNull(task.operationCode, task.title, task.description)
-    val operationKeys = operationCandidates.map { it.operationLookupKey() }
-    // Переселение определяется по заголовку раньше кода операции: у него бывает общий код.
-    val operationType = if (
-        OPERATION_ALIASES[task.title.orEmpty().operationLookupKey()] == OperationType.ANIMAL_TRANSFER
-    ) {
-        OperationType.ANIMAL_TRANSFER
-    } else operationKeys.firstNotNullOfOrNull(OPERATION_ALIASES::get)
-        ?: operationKeys.firstNotNullOfOrNull { operationKey ->
-            OperationType.entries.firstOrNull { type ->
-                type.name.operationLookupKey() == operationKey ||
-                    type.title.operationLookupKey() == operationKey
-            }
-        }
-        ?: OperationType.CUSTOM_TASK
+    val operationType = OperationType.fromCode(task.operationCode)
     return MobileTask(
         id = task.id,
         title = task.title.orEmpty().ifBlank { operationType.title },
@@ -200,7 +133,11 @@ internal fun ProductionTaskDetailsDto.toMobileTask(employeeId: String): MobileTa
         plannedStart = "—",
         plannedDurationMinutes = task.durationMinutes ?: 0,
         priority = Priority.NORMAL,
-        status = task.executionStatus.orEmpty().toTaskStatus(),
+        // Задачу в работе без исполнителя отпустили при закрытии смены: её нужно снова взять
+        // через «Приступить», тогда сервер сделает сотрудника исполнителем.
+        status = task.executionStatus.orEmpty().toTaskStatus().let { status ->
+            if (status == TaskStatus.IN_PROGRESS && task.assignedEmployeeId.isNullOrBlank()) TaskStatus.NEW else status
+        },
         checklist = allExecutionItems().sortedBy { it.value.sortOrder }.map { executionItem ->
             val target = executionItem.value
             val targetType = when (target.targetType?.lowercase()) {
@@ -208,7 +145,7 @@ internal fun ProductionTaskDetailsDto.toMobileTask(employeeId: String): MobileTa
                 "hangar" -> TargetType.HANGAR
                 "row" -> TargetType.ROW
                 "rabbit" -> TargetType.RABBIT
-                else -> MockRepository.operation(operationType).targetType
+                else -> OperationDefinitions.of(operationType).targetType
             }
             ChecklistItem(
                 id = target.id,
@@ -231,7 +168,7 @@ internal fun ProductionTaskDetailsDto.toMobileTask(employeeId: String): MobileTa
         },
         requiresAcceptance = task.requiresAcceptance,
         description = task.description.orEmpty(),
-        operationTypeTitle = task.title.orEmpty().ifBlank { operationType.title },
+        operationTypeTitle = operationType.title,
         sortOrder = task.sortOrder,
     )
 }

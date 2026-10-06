@@ -1,0 +1,55 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Экран «Смена» -->
+    <string name="shift_subtitle">Профикроль · %1$s</string>
+    <string name="shift_notifications">Уведомления</string>
+    <plurals name="shift_notifications_unread">
+        <item quantity="one">Уведомления, %d новое</item>
+        <item quantity="few">Уведомления, %d новых</item>
+        <item quantity="many">Уведомления, %d новых</item>
+        <item quantity="other">Уведомления, %d новых</item>
+    </plurals>
+    <string name="shift_synced">Синхронизировано</string>
+    <string name="shift_offline">Нет сети</string>
+    <plurals name="shift_sync_pending">
+        <item quantity="one">Не отправлено %d изменение</item>
+        <item quantity="few">Не отправлено %d изменения</item>
+        <item quantity="many">Не отправлено %d изменений</item>
+        <item quantity="other">Не отправлено %d изменения</item>
+    </plurals>
+    <string name="shift_back">Назад</string>
+
+    <string name="shift_greeting_morning">Доброе утро</string>
+    <string name="shift_greeting_day">Добрый день</string>
+    <string name="shift_greeting_evening">Добрый вечер</string>
+    <string name="shift_greeting_night">Доброй ночи</string>
+    <string name="shift_greeting">%1$s, %2$s</string>
+
+    <string name="shift_status_not_started">Смена не начата</string>
+    <string name="shift_status_live">Смена идёт · %1$s</string>
+    <string name="shift_idle_hint">После начала смены выберите ангар — задачи придут сразу после выбора.</string>
+    <string name="shift_start">Начать смену</string>
+    <string name="shift_close">Закрыть смену</string>
+    <string name="shift_close_confirm_title">Закрыть смену?</string>
+    <string name="shift_close_confirm_text">Задачу, которая сейчас в работе, продолжит следующий оператор этого ангара.</string>
+    <string name="shift_close_cancel">Отмена</string>
+
+    <string name="shift_steps_title">Как проходит смена</string>
+    <string name="shift_step_start">Нажмите «Начать смену»</string>
+    <string name="shift_step_pick">Выберите цех и ангар, где работаете сегодня</string>
+    <string name="shift_step_task">Получите назначенную задачу</string>
+
+    <string name="shift_pick_title">Выбор ангара</string>
+    <string name="shift_pick_hint">Задача придёт сразу после выбора ангара.</string>
+    <string name="shift_pick_confirm">Подтвердить</string>
+
+    <string name="shift_task_section">Ваша задача</string>
+    <string name="shift_task_waiting_title">Ждём назначения задачи</string>
+    <string name="shift_task_waiting_subtitle">Задача придёт автоматически, экран можно не обновлять</string>
+    <string name="shift_task_label">Новая задача</string>
+    <string name="shift_task_meta">%1$s · до %2$s</string>
+    <string name="shift_task_begin">Приступить</string>
+
+    <!-- Просроченная задача: карточки на «Смене» и в «Моих задачах» -->
+    <string name="task_overdue">Просрочена · %1$s</string>
+</resources>

@@ -24,13 +24,11 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Delete
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -109,152 +107,35 @@ private fun ProductionButton(label: String, onClick: () -> Unit, enabled: Boolea
     ) { Text(label, fontWeight = FontWeight.Bold) }
 }
 
+/**
+ * Задачу начали, а целей у неё нет: например, в ангаре нет животных. Выполнять нечего,
+ * поэтому задачу закрывают замечанием.
+ */
 @Composable
-fun ProductionAnimalTransferTaskScreen(
-    task: MobileTask,
-    scannedRfid: String?,
-    onBack: () -> Unit,
-    onBegin: () -> Unit,
-    onOpenScanner: (Map<String, String>) -> Unit,
-    onValue: (String, String) -> Unit,
-    onComplete: () -> Unit,
-    canEdit: Boolean,
-) {
-    var rfid by remember(task.id) { mutableStateOf(task.result.values["rfid"].orEmpty()) }
-    var destinationCell by remember(task.id) { mutableStateOf(task.result.values["cellId"].orEmpty()) }
-    var comment by remember(task.id) { mutableStateOf(task.result.comment) }
-    LaunchedEffect(scannedRfid) {
-        scannedRfid?.takeIf(String::isNotBlank)?.let {
-            rfid = it
-            onValue("rfid", it)
-        }
-    }
-    ProductionPage(task, "Перевод животных", onBack, onBegin, canEdit) {
-        ProductionCard {
-            Text("Данные перемещения", color = ProductionText, fontSize = 20.sp, fontWeight = FontWeight.Bold)
-            OutlinedTextField(rfid, { rfid = it }, Modifier.fillMaxWidth(), label = { Text("RFID животного") }, singleLine = true)
-            OutlinedButton(
-                onClick = { onOpenScanner(mapOf("rfid" to rfid, "cellId" to destinationCell)) },
-                modifier = Modifier.fillMaxWidth(),
-            ) { Text("Сканировать RFID") }
-            OutlinedTextField(destinationCell, { destinationCell = it }, Modifier.fillMaxWidth(), label = { Text("Клетка назначения") }, singleLine = true)
-            OutlinedTextField(comment, { comment = it }, Modifier.fillMaxWidth().forceSoftwareKeyboardOnFocus(), label = { Text("Комментарий") }, minLines = 2)
-            ProductionButton(
-                "Завершить перевод",
-                {
-                    val submittedRfid = rfid.trim()
-                    onValue("rfid", submittedRfid)
-                    onValue("cellId", destinationCell.trim())
-                    onValue("comment", comment.trim())
-                    rfid = ""
-                    onComplete()
-                },
-                rfid.isNotBlank() && destinationCell.isNotBlank(),
-            )
-        }
-    }
-}
-
-@Composable
-fun ProductionCleaningScreen(
+fun ProductionNoTargetsScreen(
     task: MobileTask,
     onBack: () -> Unit,
     onBegin: () -> Unit,
-    onChecklistDone: (String) -> Unit,
-    onChecklistProblem: (String, String, String) -> Unit,
-    onChecklistSkip: (String, String) -> Unit,
-    onComment: (String) -> Unit,
-    onComplete: () -> Unit,
+    onReportProblem: (String) -> Unit,
     canEdit: Boolean,
 ) {
-    var comment by remember(task.id) { mutableStateOf(task.result.comment) }
-    val allItemsProcessed = task.checklist.isNotEmpty() &&
-        task.checklist.none { it.status == ChecklistStatus.PENDING }
-    ProductionPage(task, "Уборка", onBack, onBegin, canEdit) {
-        if (task.checklist.isEmpty()) {
-            ProductionCard {
-                Text("Сервер не передал пункты уборки", color = ProductionMuted)
-            }
-        } else {
-            ChecklistExecutionBlock(
-                items = task.checklist,
-                onDone = onChecklistDone,
-                onProblem = onChecklistProblem,
-                onSkip = onChecklistSkip,
-                description = "Отметьте результат по каждому полученному пункту.",
-                canEdit = canEdit,
-                allowIssues = false,
-            )
-        }
+    var comment by remember(task.id) { mutableStateOf("") }
+    ProductionPage(task, task.operationTypeTitle, onBack, onBegin, canEdit) {
         ProductionCard {
-            OutlinedTextField(comment, { comment = it; onComment(it) }, Modifier.fillMaxWidth().forceSoftwareKeyboardOnFocus(), label = { Text("Комментарий") }, minLines = 2)
-            ProductionButton(
-                "Завершить уборку",
-                {
-                    onComment(comment.trim())
-                    onComplete()
-                },
-                allItemsProcessed,
-            )
-        }
-    }
-}
-
-@Composable
-fun ProductionLightCheckScreen(
-    task: MobileTask,
-    onBack: () -> Unit,
-    onBegin: () -> Unit,
-    onValue: (String, String) -> Unit,
-    onComment: (String) -> Unit,
-    onComplete: () -> Unit,
-    canEdit: Boolean,
-) {
-    var allLamps by remember(task.id) { mutableStateOf(task.result.values["allLamps"] == "true") }
-    var lightHours by remember(task.id) { mutableStateOf(task.result.values["lightHours"].orEmpty()) }
-    var broken by remember(task.id) { mutableStateOf(task.result.values["broken"].orEmpty()) }
-    var comment by remember(task.id) { mutableStateOf(task.result.comment) }
-    ProductionPage(task, "Проверка светового режима", onBack, onBegin, canEdit) {
-        ProductionCard {
-            Text("Результат проверки", color = ProductionText, fontSize = 20.sp, fontWeight = FontWeight.Bold)
-            CheckRow("Все лампы горят", allLamps) { allLamps = it; onValue("allLamps", it.toString()) }
-            OutlinedTextField(
-                lightHours,
-                { lightHours = it; onValue("lightHours", it) },
-                Modifier.fillMaxWidth(),
-                label = { Text("Световой день, часов") },
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-                singleLine = true,
+            Text("Выполнять нечего", color = ProductionText, fontSize = 20.sp, fontWeight = FontWeight.Bold)
+            Text(
+                "Сервер не передал ни одной цели. Опишите, почему задачу нельзя выполнить, и она закроется с замечанием.",
+                color = ProductionMuted,
             )
             OutlinedTextField(
-                broken,
-                { broken = normalizeWholeNumberInput(it); onValue("broken", broken) },
-                Modifier.fillMaxWidth(),
-                label = { Text("Перегоревшие лампы") },
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                singleLine = true,
+                comment,
+                { comment = it },
+                Modifier.fillMaxWidth().forceSoftwareKeyboardOnFocus(),
+                label = { Text("Замечание") },
+                minLines = 2,
             )
-            OutlinedTextField(comment, { comment = it; onComment(it) }, Modifier.fillMaxWidth().forceSoftwareKeyboardOnFocus(), label = { Text("Комментарий") }, minLines = 2)
-            ProductionButton(
-                "Сохранить проверку",
-                {
-                    onValue("allLamps", allLamps.toString())
-                    onValue("lightHours", lightHours.trim())
-                    onValue("broken", broken.ifBlank { "0" })
-                    onComment(comment.trim())
-                    onComplete()
-                },
-                lightHours.toDoubleOrNull()?.let { it > 0 } == true,
-            )
+            ProductionButton("Оставить замечание", { onReportProblem(comment.trim()) }, comment.isNotBlank())
         }
-    }
-}
-
-@Composable
-private fun CheckRow(label: String, checked: Boolean, onChecked: (Boolean) -> Unit) {
-    Row(Modifier.fillMaxWidth(), Arrangement.SpaceBetween, Alignment.CenterVertically) {
-        Text(label, color = ProductionText, modifier = Modifier.weight(1f), fontWeight = FontWeight.Medium)
-        Switch(checked, onChecked)
     }
 }
 

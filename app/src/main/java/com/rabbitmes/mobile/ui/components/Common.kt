@@ -18,13 +18,18 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.rabbitmes.mobile.domain.*
+import ru.profikrol.operator.R
 import ru.profikrol.operator.uikit.theme.mobileSuccessGreen
+import java.time.LocalDate
+import java.time.format.DateTimeFormatter
+import java.util.Locale
 
 private val MesWarning = Color(0xFFE98500)
 
@@ -55,7 +60,7 @@ fun MesCard(
     Card(
         clickable.padding(horizontal = MesSpacing.screenHorizontal, vertical = MesSpacing.cardVertical).fillMaxWidth(),
         shape = RoundedCornerShape(24.dp),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLowest),
         border = if (showBorder) BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant) else null,
         elevation = CardDefaults.cardElevation(defaultElevation = 4.dp),
     ) {
@@ -205,7 +210,7 @@ private fun SearchableSelectionDropdown(
                                     color = if (selected) {
                                         mobileSuccessGreen.copy(alpha = 0.12f)
                                     } else {
-                                        MaterialTheme.colorScheme.surface
+                                        MaterialTheme.colorScheme.surfaceContainerLowest
                                     },
                                     border = BorderStroke(
                                         1.dp,
@@ -385,6 +390,11 @@ fun StatusBadge(text: String, color: Color) {
         )
     }
 }
+
+/** Подпись просроченной задачи: «Просрочена · 3 октября». */
+@Composable
+fun overdueLabel(date: LocalDate): String =
+    stringResource(R.string.task_overdue, date.format(DateTimeFormatter.ofPattern("d MMMM", Locale("ru"))))
 
 @Composable fun TaskStatusBadge(status: TaskStatus) {
     val c = when(status) {

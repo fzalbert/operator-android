@@ -1,6 +1,5 @@
 package com.rabbitmes.mobile.data.reference
 
-import com.rabbitmes.mobile.data.MockRepository
 import com.rabbitmes.mobile.domain.FieldType
 import com.rabbitmes.mobile.domain.OperationDefinition
 import com.rabbitmes.mobile.domain.OperationField
@@ -17,10 +16,10 @@ import javax.inject.Singleton
 class OperationCatalog @Inject constructor(
     private val references: FarmReferenceRepository,
 ) {
-    val all: List<OperationDefinition> get() = MockRepository.operationDefinitions
+    val all: List<OperationDefinition> get() = OperationDefinitions.all
 
     fun definition(type: OperationType): OperationDefinition {
-        val definition = MockRepository.operation(type)
+        val definition = OperationDefinitions.of(type)
         val cells = references.cells
         if (cells.isEmpty()) return definition
         val cellOptions = cells.map(CellDto::displayName)
@@ -47,7 +46,7 @@ class OperationCatalog @Inject constructor(
         }
         return definition.copy(
             fields = definition.fields.map { field ->
-                if (field.id == "sourceCage" || field.id == "destinationCage" || field.id == "cellId") {
+                if (field.id == "cellId") {
                     field.copy(options = listOfNotNull(field.options.firstOrNull()) + cellOptions)
                 } else {
                     field

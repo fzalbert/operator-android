@@ -21,6 +21,8 @@ fun Iterable<MobileTask>.orderedOpenTasks(): List<MobileTask> =
             it.status != TaskStatus.SKIPPED
     }.sortedWith(
         compareBy<MobileTask> { it.status.executionOrder() }
+            // Дата раньше порядка внутри дня: просроченные задачи идут до сегодняшних.
+            .thenBy { it.dueDate }
             .thenBy { it.sortOrder }
             .then(mobileTaskExecutionComparator),
     )

@@ -188,6 +188,22 @@ fun UnifiedReadOnlyNotice() {
 }
 
 @Composable
+fun UnifiedStartRequiredNotice() {
+    Surface(
+        color = Color.White,
+        shape = RoundedCornerShape(26.dp),
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Text(
+            "Нажмите «Приступить», чтобы загрузить объекты задачи и начать выполнение",
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            style = MaterialTheme.typography.bodyLarge,
+            modifier = Modifier.padding(horizontal = 22.dp, vertical = 24.dp),
+        )
+    }
+}
+
+@Composable
 fun TaskExecutionScaffold(
     task: MobileTask,
     onBack: () -> Unit,
@@ -206,6 +222,7 @@ fun TaskExecutionScaffold(
 ) {
     var skipReason by remember { mutableStateOf(taskSkipReasons.first()) }
     var hasTaskIssue by remember(task.id) { mutableStateOf(false) }
+    val canExecute = canEdit && task.status != TaskStatus.NEW
 
     val checklist: @Composable () -> Unit = {
         if (task.checklist.isNotEmpty()) {
@@ -215,7 +232,7 @@ fun TaskExecutionScaffold(
                 onProblem = onChecklistProblem,
                 onSkip = onChecklistSkip,
                 description = checklistDescription,
-                canEdit = canEdit,
+                canEdit = canExecute,
             )
         }
     }
@@ -232,7 +249,7 @@ fun TaskExecutionScaffold(
                     when {
                         pendingItems > 0 -> "Осталось обработать: $pendingItems"
                         task.checklist.isEmpty() -> "Отправить результат"
-                        else -> "Отправить обработанный чек-лист"
+                        else -> "Отправить"
                     }
                 )
             }
@@ -265,27 +282,27 @@ fun TaskExecutionScaffold(
         verticalArrangement = Arrangement.spacedBy(10.dp),
     ) {
         item { UnifiedTaskHeader(task, onBack, onBegin, canEdit) }
-        if (!canEdit) {
+        if (task.status == TaskStatus.NEW && canEdit) {
+            item { UnifiedStartRequiredNotice() }
+        } else if (!canEdit) {
             item { UnifiedReadOnlyNotice() }
         }
-        if (!checklistAfterContent && task.checklist.isNotEmpty()) {
+        if (canExecute && !checklistAfterContent && task.checklist.isNotEmpty()) {
             item { checklist() }
         }
-        if (canEdit) {
+        if (canExecute) {
             item { Column { bottom() } }
             if (!checklistAfterContent) {
                 item { Column { afterChecklist() } }
                 item { MesCard { completionControls() } }
             }
         }
-        if (checklistAfterContent) {
+        if (canExecute && checklistAfterContent) {
             if (task.checklist.isNotEmpty()) {
                 item { checklist() }
             }
-            if (canEdit) {
-                item { Column { afterChecklist() } }
-                item { MesCard { completionControls() } }
-            }
+            item { Column { afterChecklist() } }
+            item { MesCard { completionControls() } }
         }
     }
 }

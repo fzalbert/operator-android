@@ -18,6 +18,7 @@ import ru.profikrol.operator.data.remote.auth.AccessTokenAuthenticator
 import ru.profikrol.operator.data.remote.auth.AuthApi
 import ru.profikrol.operator.data.remote.auth.AuthTokenInterceptor
 import ru.profikrol.operator.data.remote.profile.ProfileApi
+import ru.profikrol.operator.data.remote.profile.ShiftApi
 import ru.profikrol.operator.data.remote.rabbit.RabbitApi
 import ru.profikrol.operator.data.remote.cell.CellApi
 import ru.profikrol.operator.data.remote.production.ProductionTaskApi
@@ -106,6 +107,12 @@ object NetworkModule {
     fun provideProfileApi(
         retrofit: Retrofit,
     ): ProfileApi = retrofit.create(ProfileApi::class.java)
+
+    @Provides
+    @Singleton
+    fun provideShiftApi(
+        retrofit: Retrofit,
+    ): ShiftApi = retrofit.create(ShiftApi::class.java)
 
     @Provides
     @Singleton

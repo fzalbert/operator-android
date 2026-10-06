@@ -65,27 +65,6 @@ fun SimpleOperationScreen(
     onOpenAnimal: (String) -> Unit,
     canEdit: Boolean,
 ) {
-    if (definition.type == OperationType.ANIMAL_TRANSFER) {
-        ProductionAnimalTransferScreen(
-            task = task,
-            definition = definition,
-            scannedRfid = scannedRfid,
-            onBack = onBack,
-            onBegin = onBegin,
-            onOpenScanner = onOpenRfidScanner,
-            onChecklistDoneWithValues = onChecklistDoneWithValues,
-            onChecklistProblem = onChecklistProblem,
-            onComplete = onComplete,
-            onPhoto = onPhoto,
-            onVideo = onVideo,
-            onFile = onFile,
-            onComment = onComment,
-            onOpenAnimal = onOpenAnimal,
-            canEdit = canEdit,
-        )
-        return
-    }
-
     var activeItemId by remember(task.id) { mutableStateOf<String?>(null) }
     val activeItem = task.checklist.firstOrNull { it.id == activeItemId }
     val pending = task.checklist.filter { it.status == ChecklistStatus.PENDING }
@@ -113,14 +92,8 @@ fun SimpleOperationScreen(
             onCancel = { activeItemId = null },
             onSubmit = { values, problem, reason, comment ->
                 values.forEach(onValue)
-                val hasNoWater = task.operationType == OperationType.WATER_CHECK &&
-                    values["waterStatus"] == "Нет воды"
-                if (problem || hasNoWater) {
-                    onChecklistProblem(
-                        activeItem.id,
-                        if (hasNoWater) "Нет воды" else reason,
-                        comment,
-                    )
+                if (problem) {
+                    onChecklistProblem(activeItem.id, reason, comment)
                     if (comment.isNotBlank()) onComment(comment)
                 }
                 else onChecklistDoneWithValues(activeItem.id, values)
@@ -263,7 +236,7 @@ fun SimpleOperationScreen(
     }
 }
 
-private val animalSettlementProblemReasons = listOf(
+private val femaleArrivalProblemReasons = listOf(
     "Самка отсутствует",
     "Клетка занята",
     "Клетка не готова",
@@ -272,7 +245,7 @@ private val animalSettlementProblemReasons = listOf(
 )
 
 @Composable
-fun ProductionAnimalSettlementScreen(
+fun FemaleArrivalScreen(
     task: MobileTask,
     scannedRfid: String?,
     onBack: () -> Unit,
@@ -405,7 +378,7 @@ fun ProductionAnimalSettlementScreen(
                             onReason = { problemReason = it },
                             comment = problemComment,
                             onComment = { problemComment = it },
-                            reasons = animalSettlementProblemReasons,
+                            reasons = femaleArrivalProblemReasons,
                             onPhoto = onPhoto,
                             onVideo = onVideo,
                             onFile = onFile,
@@ -432,7 +405,7 @@ fun ProductionAnimalSettlementScreen(
 }
 
 @Composable
-fun ProductionNestAlignmentScreen(
+fun NestEqualizationScreen(
     task: MobileTask,
     onBack: () -> Unit,
     onBegin: () -> Unit,
@@ -710,7 +683,7 @@ private fun AlignmentCountRow(
 }
 
 @Composable
-fun ProductionAnimalTransferScreen(
+fun AnimalSettlementScreen(
     task: MobileTask,
     definition: OperationDefinition,
     scannedRfid: String?,
@@ -775,6 +748,7 @@ fun ProductionAnimalTransferScreen(
             }
         }
     }
+
     LaunchedEffect(Unit) { rfidFocusRequester.requestFocus() }
 
     val selectedItem = task.checklist.firstOrNull { it.id == selectedItemId }
@@ -883,7 +857,7 @@ fun ProductionAnimalTransferScreen(
                                     problemReason = it
                                     error = ""
                                 },
-                                options = problemReasons(OperationType.ANIMAL_TRANSFER),
+                                options = problemReasons(OperationType.ANIMAL_SETTLEMENT),
                                 label = "Причина",
                                 modifier = Modifier.fillMaxWidth(),
                             )
@@ -1466,7 +1440,7 @@ private fun SimpleItemForm(
     val values = remember(item.id) {
         mutableStateMapOf<String, String>().apply {
             definition.fields.forEach { field ->
-                put(field.id, item.defaultValueForField(definition, field))
+                put(field.id, defaultValue(field))
             }
         }
     }
@@ -1487,7 +1461,6 @@ private fun SimpleItemForm(
                 SimpleField(
                     field = field,
                     value = values[field.id].orEmpty(),
-                    readOnly = definition.type == OperationType.NEST_SELECTION && field.id == "sourceCage",
                     onValue = { values[field.id] = it },
                 )
             }
@@ -1525,17 +1498,7 @@ private fun SimpleItemForm(
                     else if (!problem && missing.isNotEmpty()) error = "Заполните обязательные поля"
                     else if (
                         !problem &&
-                        definition.type == OperationType.NEST_SELECTION &&
-                        values["sourceCage"] == values["destinationCage"]
-                    ) error = "Клетки «откуда» и «куда» должны отличаться"
-                    else if (
-                        !problem &&
-                        definition.type == OperationType.NEST_SELECTION &&
-                        (values["movedCount"]?.toIntOrNull() ?: 0) < 0
-                    ) error = "Количество крольчат не может быть отрицательным"
-                    else if (
-                        !problem &&
-                        definition.type == OperationType.SLAUGHTER_SHIPMENT &&
+                        definition.type == OperationType.SLAUGHTER_SHIPPING &&
                         ((values["animalCount"] ?: values["count"])?.toIntOrNull() ?: 0) <= 0
                     ) error = "Укажите количество больше нуля"
                     else if (
@@ -1578,7 +1541,7 @@ private fun SimpleStandaloneForm(
                     value = values[field.id].orEmpty(),
                     onValue = { value ->
                         val normalizedValue = if (
-                            definition.type == OperationType.SLAUGHTER_SHIPMENT && field.id == "animalCount"
+                            definition.type == OperationType.SLAUGHTER_SHIPPING && field.id == "animalCount"
                         ) {
                             normalizeWholeNumberInput(value)
                         } else {
@@ -1909,12 +1872,6 @@ private fun SimpleBadge(text: String, color: Color) {
 }
 @Composable private fun SimpleButton(text: String, onClick: () -> Unit, modifier: Modifier = Modifier, secondary: Boolean = false, enabled: Boolean = true) { Button(onClick, modifier.heightIn(min = 50.dp), enabled = enabled, shape = RoundedCornerShape(16.dp), colors = ButtonDefaults.buttonColors(containerColor = if (secondary) Color(0xFFE4ECE8) else SimpleGreen, contentColor = if (secondary) SimpleDarkGreen else Color.White)) { Text(text, fontWeight = FontWeight.ExtraBold, fontSize = 16.sp) } }
 private fun isRfidField(field: OperationField) = field.id.contains("rfid", true)
-private fun ChecklistItem.defaultValueForField(definition: OperationDefinition, field: OperationField): String {
-    if (definition.type == OperationType.NEST_SELECTION && field.id == "sourceCage") {
-        return MockRepository.cage(targetId)?.code ?: targetId.ifBlank { defaultValue(field) }
-    }
-    return defaultValue(field)
-}
 private fun OperationDefinition.shouldAutoCompleteField(field: OperationField): Boolean =
     type == OperationType.NEST_PREPARATION && field.id == "nestReady"
 
@@ -1922,8 +1879,7 @@ private fun Map<String, String>.withAutoCompleteValues(definition: OperationDefi
     if (definition.type == OperationType.NEST_PREPARATION) this + ("nestReady" to "true") else this
 
 private fun defaultValue(field: OperationField) = when (field.type) { FieldType.BOOLEAN -> "false"; FieldType.NUMBER, FieldType.TEMPERATURE, FieldType.HOURS -> ""; FieldType.SELECT, FieldType.FEED_TYPE -> field.options.firstOrNull().orEmpty(); else -> "" }
-private fun OperationType.isCageWeighing(): Boolean =
-    this == OperationType.WEIGHING || this == OperationType.WEIGHING_CAGE
+private fun OperationType.isCageWeighing(): Boolean = this == OperationType.WEIGHING_CAGE
 
 private fun String?.isMissingRequiredValue(): Boolean =
     isNullOrBlank() || startsWith("Выберите", ignoreCase = true)
@@ -1943,16 +1899,10 @@ private fun problemReasons(type: OperationType): List<String> = when (type) {
         "Животное отсутствует",
         "Другая причина",
     )
-    OperationType.WEIGHING -> listOf(
+    OperationType.WEIGHING_CAGE -> listOf(
         "Весы недоступны или неисправны",
         "Некорректные показания",
         "Объект отсутствует",
-        "Другая причина",
-    )
-    OperationType.WATER_CHECK -> listOf(
-        "Нет воды",
-        "Слабый напор",
-        "Неисправность линии водопоения",
         "Другая причина",
     )
     else -> listOf(

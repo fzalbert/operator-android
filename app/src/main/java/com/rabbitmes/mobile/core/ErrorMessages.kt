@@ -44,6 +44,12 @@ internal fun String.localizeServerFieldNames(): String = this
     .replace(Regex("\\bremoved\\b", RegexOption.IGNORE_CASE), "«забрали»")
     .replace(Regex("\\banimalCount\\b", RegexOption.IGNORE_CASE), "«количество животных»")
 
+/** Машинный код ошибки из тела problem+json (поле `code`), например `hangar_occupied`. */
+internal fun HttpException.problemCode(): String? {
+    val body = runCatchingCancellable { Json.parseToJsonElement(peekErrorBody()) }.getOrNull() as? JsonObject
+    return (body?.get("code") as? JsonPrimitive)?.contentOrNull
+}
+
 private fun HttpException.peekErrorBody(): String = runCatchingCancellable {
     response()?.errorBody()?.source()?.let { source ->
         source.request(Long.MAX_VALUE)

@@ -136,7 +136,7 @@ fun ProfileScreen(employee: Employee, tasks: List<MobileTask>, operations: List<
 private fun AllowedOperationsList(operations: List<String>) {
     Surface(
         modifier = Modifier.fillMaxWidth(),
-        color = MaterialTheme.colorScheme.surface,
+        color = MaterialTheme.colorScheme.surfaceContainerLowest,
         contentColor = MaterialTheme.colorScheme.onSurface,
         shape = RoundedCornerShape(18.dp),
         border = BorderStroke(

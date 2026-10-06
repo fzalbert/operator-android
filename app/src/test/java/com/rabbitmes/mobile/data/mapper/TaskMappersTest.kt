@@ -1,5 +1,6 @@
 package com.rabbitmes.mobile.data.mapper
 
+import com.rabbitmes.mobile.data.reference.OperationDefinitions
 import com.rabbitmes.mobile.domain.ChecklistStatus
 import com.rabbitmes.mobile.domain.OperationType
 import com.rabbitmes.mobile.domain.TargetType
@@ -15,6 +16,7 @@ class TaskMappersTest {
         operationCode: String? = null,
         title: String? = null,
         executionStatus: String? = null,
+        assignedEmployeeId: String? = "emp",
         targets: List<ProductionTargetDto> = emptyList(),
         checklist: List<ProductionTargetDto> = emptyList(),
     ) = ProductionTaskDetailsDto(
@@ -23,15 +25,30 @@ class TaskMappersTest {
             operationCode = operationCode,
             title = title,
             executionStatus = executionStatus,
+            assignedEmployeeId = assignedEmployeeId,
         ),
         targets = targets,
         checklist = checklist,
     )
 
     @Test
-    fun `resolves operation type by alias`() {
-        assertEquals(OperationType.ANIMAL_TRANSFER, details(title = "Переселение").toMobileTask("emp").operationType)
-        assertEquals(OperationType.FEMALE_DELIVERY, details(operationCode = "female-arrival").toMobileTask("emp").operationType)
+    fun `resolves operation type only by backend code`() {
+        assertEquals(OperationType.FEMALE_ARRIVAL, details(operationCode = "female_arrival").toMobileTask("emp").operationType)
+        assertEquals(OperationType.NEST_EQUALIZATION, details(operationCode = "nest_equalization").toMobileTask("emp").operationType)
+        // Заголовок на тип не влияет: «Переселение» с кодом осеменения остаётся осеменением.
+        assertEquals(OperationType.INSEMINATION, details(operationCode = "insemination", title = "Переселение").toMobileTask("emp").operationType)
+    }
+
+    @Test
+    fun `unknown, missing or misspelled code is a general task`() {
+        assertEquals(OperationType.GENERAL, details(operationCode = "cleaning").toMobileTask("emp").operationType)
+        assertEquals(OperationType.GENERAL, details(operationCode = "female-arrival").toMobileTask("emp").operationType)
+        assertEquals(OperationType.GENERAL, details(title = "Переселение").toMobileTask("emp").operationType)
+    }
+
+    @Test
+    fun `every app operation type has a form definition`() {
+        OperationType.entries.forEach { type -> OperationDefinitions.of(type) }
     }
 
     @Test
@@ -40,6 +57,12 @@ class TaskMappersTest {
         assertEquals(TaskStatus.DONE, details(executionStatus = "COMPLETED").toMobileTask("emp").status)
         assertEquals(TaskStatus.SKIPPED, details(executionStatus = "canceled").toMobileTask("emp").status)
         assertEquals(TaskStatus.NEW, details(executionStatus = "something else").toMobileTask("emp").status)
+    }
+
+    @Test
+    fun `task in progress without executor is shown as new to be taken again`() {
+        assertEquals(TaskStatus.NEW, details(executionStatus = "in_progress", assignedEmployeeId = null).toMobileTask("emp").status)
+        assertEquals(TaskStatus.IN_PROGRESS, details(executionStatus = "in_progress", assignedEmployeeId = "emp").toMobileTask("emp").status)
     }
 
     @Test

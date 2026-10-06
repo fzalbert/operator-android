@@ -31,12 +31,12 @@ class TargetResultsTest {
     }
 
     @Test
-    fun `female delivery requires positive age and sends cell, rfid and age`() {
+    fun `female arrival requires positive age and sends cell, rfid and age`() {
         assertEquals(
             TargetResult.Invalid("Укажите возраст кролика в днях"),
-            TargetResults.build(OperationType.FEMALE_DELIVERY, cage, mapOf("rfid" to "E1", "age" to "0")),
+            TargetResults.build(OperationType.FEMALE_ARRIVAL, cage, mapOf("rfid" to "E1", "age" to "0")),
         )
-        val json = ready(OperationType.FEMALE_DELIVERY, mapOf("rfid" to "E1", "age" to "90", "note" to "x")).json
+        val json = ready(OperationType.FEMALE_ARRIVAL, mapOf("rfid" to "E1", "age" to "90", "note" to "x")).json
         assertEquals(12, json["cellId"]!!.jsonPrimitive.int)
         assertEquals("E1", json["femaleRfid"]!!.jsonPrimitive.content)
         assertEquals(90, json["age"]!!.jsonPrimitive.int)
@@ -51,16 +51,16 @@ class TargetResultsTest {
     }
 
     @Test
-    fun `nest selection sends only one of removed and added`() {
-        val json = ready(OperationType.NEST_SELECTION, mapOf("alive" to "8", "added" to "2")).json
+    fun `nest equalization sends only one of removed and added`() {
+        val json = ready(OperationType.NEST_EQUALIZATION, mapOf("alive" to "8", "added" to "2")).json
         assertTrue(json.containsKey("added"))
         assertFalse(json.containsKey("removed"))
     }
 
     @Test
-    fun `animal transfer resolves selected cell`() {
+    fun `animal settlement resolves selected cell`() {
         val result = TargetResults.build(
-            OperationType.ANIMAL_TRANSFER,
+            OperationType.ANIMAL_SETTLEMENT,
             cage,
             mapOf("cellId" to "Ряд 1 · Клетка 5"),
             TargetResultContext { selected -> if (selected == "Ряд 1 · Клетка 5") 55L else null },
@@ -70,7 +70,7 @@ class TargetResultsTest {
 
     @Test
     fun `generic operation sends values without rfid and problem keys`() {
-        val json = ready(OperationType.CLEANING, mapOf("rfid" to "E1", PROBLEM_REASON_KEY to "x", "done" to "true")).json
+        val json = ready(OperationType.GENERAL, mapOf("rfid" to "E1", PROBLEM_REASON_KEY to "x", "done" to "true")).json
         assertEquals(setOf("done"), json.keys)
     }
 }

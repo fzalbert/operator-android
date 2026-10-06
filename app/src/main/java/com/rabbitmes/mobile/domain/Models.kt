@@ -1,6 +1,7 @@
 package com.rabbitmes.mobile.domain
 
 import kotlinx.serialization.Serializable
+import java.time.LocalDate
 
 @Serializable
 enum class RoleId(val title: String) {
@@ -20,42 +21,31 @@ enum class TargetType { RABBIT, CAGE, ROW, HANGAR }
 @Serializable
 enum class Priority(val title: String, val weight: Int) { URGENT("Срочно", 0), HIGH("Важно", 1), NORMAL("Планово", 2) }
 
+/**
+ * Операции, которые приложение умеет выполнять. [code] — код операции на бэке, тип задачи
+ * определяется только по нему. Всё, чего здесь нет, выполняется общим обработчиком [GENERAL].
+ */
 @Serializable
-enum class OperationType(val title: String) {
-    INSEMINATION("Осеменение"),
-    PALPATION("Пальпация"),
-    ANIMAL_SETTLEMENT("Заселение животных"),
-    NEST_PREPARATION("Подготовка гнезд"),
-    OKROL("Окрол"),
-    NEST_SELECTION("Селекция / выравнивание гнезд"),
-    LACTATION_CONTROL("Контроль лактации"),
-    WEIGHING("Взвешивание"),
-    WEIGHING_CAGE("Взвешивание клетки"),
-    WEIGHING_RABBIT("Взвешивание мясного кролика"),
-    ANIMAL_TRANSFER("Переводы животных"),
-    ANIMAL_DEPARTURE("Выбытие"),
-    WEANING("Отъем"),
-    SLAUGHTER_SHIPMENT("Забой"),
-    CLEANING("Уборка"),
-    WASHING("Мойка"),
-    DISINFECTION("Дезинфекция"),
-    HANGAR_ACCEPTANCE("Приемка ангара"),
-    FEMALE_DELIVERY("Завоз самок"),
-    LIGHT_STIMULATION("Биостимуляция светом"),
-    DEWORMING_DOSATRON("Дегельминтизация через Дозатрон"),
-    LIGHTING_CHECK("Проверка светового режима"),
-    MORTALITY_ROUND("Обход ангара и подсчет падежа"),
-    MORTALITY_JOURNAL("Запись падежа в журнал"),
-    FEED_CHECK("Проверка корма"),
-    WATER_CHECK("Проверка воды"),
-    NEST_CONTROL("Контроль лактации"),
-    DAILY_CLEANING("Ежедневная уборка проходов"),
-    SECOND_ROUND("Второй обход ангара"),
-    OKROL_PREPARATION("Подготовка к окролу"),
-    FIRST_WEIGHING("Первое взвешивание"),
-    MANUAL_FEEDING("Ручное кормление"),
-    FINAL_ROUND("Финальный обход"),
-    CUSTOM_TASK("Поручение")
+enum class OperationType(val code: String?, val title: String) {
+    MORTALITY_ROUND("mortality_round", "Обход ангара"),
+    FEMALE_ARRIVAL("female_arrival", "Завоз самок"),
+    INSEMINATION("insemination", "Осеменение"),
+    PALPATION("palpation", "Пальпация"),
+    NEST_PREPARATION("nest_preparation", "Подготовка гнезд"),
+    NEST_EQUALIZATION("nest_equalization", "Выравнивание гнезд"),
+    ANIMAL_SETTLEMENT("animal_settlement", "Переселение животных"),
+    SLAUGHTER_SHIPPING("slaughter_shipping", "Забой"),
+    WEIGHING_RABBIT("weighing_rabbit", "Взвешивание кролика"),
+    WEIGHING_CAGE("weighing_cage", "Взвешивание клетки целиком"),
+    GENERAL(null, "Задача");
+
+    /** Цели задачи строит сервер на старте. У обхода их добавляет оператор, у общей задачи их может не быть. */
+    val expectsTargets: Boolean get() = this != MORTALITY_ROUND && this != GENERAL
+
+    companion object {
+        fun fromCode(code: String?): OperationType =
+            entries.firstOrNull { it.code != null && it.code == code?.trim() } ?: GENERAL
+    }
 }
 
 @Serializable
@@ -84,7 +74,7 @@ data class MediaAttachment(val id: String, val type: AttachmentType, val name: S
 @Serializable
 data class OperationField(val id: String, val title: String, val type: FieldType, val required: Boolean = false, val unit: String? = null, val options: List<String> = emptyList(), val placeholder: String = "")
 @Serializable
-data class OperationDefinition(val type: OperationType, val targetType: TargetType, val requiresScan: Boolean, val completionLabel: String, val fields: List<OperationField>, val allowedRoles: List<RoleId>, val requiresAcceptanceDefault: Boolean = false)
+data class OperationDefinition(val type: OperationType, val targetType: TargetType, val requiresScan: Boolean, val completionLabel: String, val fields: List<OperationField>)
 
 @Serializable
 data class ExecutionResult(
@@ -160,10 +150,18 @@ data class MobileTask(
             targets.count { it.status != ChecklistStatus.PENDING }
         return processed * 100 / executionItems
     }
+
+    /** Плановая дата ([dueDate], yyyy-MM-dd), если она раньше сегодняшней; иначе null. */
+    val overdueDate: LocalDate? get() =
+        runCatching { LocalDate.parse(dueDate) }.getOrNull()?.takeIf { it.isBefore(LocalDate.now()) }
+
+    /** Задача с прошлых дней: в очереди она идёт раньше сегодняшних. */
+    val isOverdue: Boolean get() = overdueDate != null
+
     fun markOffline() = copy(offlineEvents = offlineEvents + 1)
 }
 
 @Serializable
-data class ShiftState(val employeeId: String, val startedAt: String? = null, val finishedAt: String? = null, val isOnline: Boolean = true, val pendingSyncEvents: Int = 0)
+data class ShiftState(val employeeId: String, val startedAt: String? = null, val finishedAt: String? = null, val isOnline: Boolean = true, val pendingSyncEvents: Int = 0, val hangarId: Long? = null)
 @Serializable
 data class AcceptanceRemark(val id: String, val taskId: String, val itemId: String?, val reason: String, val comment: String, val attachments: List<MediaAttachment> = emptyList(), val createdAt: String)

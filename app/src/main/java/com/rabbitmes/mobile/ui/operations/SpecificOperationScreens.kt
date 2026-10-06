@@ -314,41 +314,62 @@ fun PalpationScreen(
     }
 }
 
+/** Причина, с которой закрывается задача без целей; комментарий оператора идёт следом. */
+private const val NO_TARGETS_REASON = "Нет целей для выполнения"
+
+/**
+ * Экран задачи по её операции. Тип операции определяется только по коду операции с бэка,
+ * всё незнакомое открывается общим экраном.
+ *
+ * [hasPendingSync]: в очереди есть неотправленные действия, например старт задачи. Пока они не ушли,
+ * сервер не построил цели, и пустой список целей ещё ничего не значит.
+ */
 @Composable
-fun OperationScreenFactory(task: MobileTask, definition: OperationDefinition, onBack: () -> Unit, onBegin: () -> Unit, scannedRfid: String? = null, scannedValues: Map<String, String> = emptyMap(), onScan: (String, Map<String,String>) -> Unit, onOpenRfidScanner: (Map<String, String>) -> Unit, onValue: (String,String) -> Unit, onPhoto: (String,String)->Unit, onVideo: (String,String)->Unit, onFile: (String,String)->Unit, onComment: (String)->Unit, onChecklistDone: (String)->Unit, onChecklistDoneWithValues: (String, Map<String, String>)->Unit, onChecklistProblem: (String,String,String)->Unit, onChecklistSkip: (String,String)->Unit, onMortalityRoundProblem: (String, String, String, String, String, Int?, Int?, Int?) -> Unit, onComplete: () -> Unit, onSkip: (String)->Unit, onGeneralComplete: (String)->Unit, onGeneralReject: (String, String)->Unit, onOpenAnimal: (String)->Unit, resolveRabbitId: (String) -> String?, canEdit: Boolean = true) {
-    if (task.operationType == OperationType.NEST_SELECTION) {
-        ProductionNestAlignmentScreen(task, onBack, onBegin, onChecklistDoneWithValues, onComplete, canEdit)
-    } else if (task.operationType == OperationType.FEMALE_DELIVERY) {
-        ProductionAnimalSettlementScreen(task, scannedRfid, onBack, onBegin, onScan, onOpenRfidScanner, onPhoto, onVideo, onFile, canEdit)
-    } else if (task.operationType == OperationType.MORTALITY_ROUND) {
-        ProductionMortalityRoundScreen(task, definition, onBack, onBegin, onMortalityRoundProblem, onComplete, resolveRabbitId, canEdit)
-    } else if (task.operationType == OperationType.INSEMINATION) {
-        InseminationScreen(task, scannedRfid, scannedValues, onBack, onBegin, onScan, onOpenRfidScanner, onValue, onPhoto, onVideo, onFile, onComment, onChecklistDone, onChecklistProblem, onChecklistSkip, onComplete, onSkip, onOpenAnimal, resolveRabbitId, canEdit)
-    } else if (task.operationType == OperationType.PALPATION) {
-        PalpationScreen(task, scannedRfid, onBack, onBegin, onScan, onOpenRfidScanner, onChecklistDone, onChecklistProblem, onChecklistSkip, onComplete, onSkip, resolveRabbitId, canEdit)
-    } else if (
-        task.operationType == OperationType.ANIMAL_TRANSFER &&
-        task.id.toLongOrNull() == null &&
-        task.checklist.isEmpty()
-    ) {
-        ProductionAnimalTransferTaskScreen(task, scannedRfid, onBack, onBegin, onOpenRfidScanner, onValue, onComplete, canEdit)
-    } else if (task.operationType == OperationType.CLEANING) {
-        ProductionCleaningScreen(
-            task,
-            onBack,
-            onBegin,
-            onChecklistDone,
-            onChecklistProblem,
-            onChecklistSkip,
-            onComment,
-            onComplete,
-            canEdit,
-        )
-    } else if (task.operationType == OperationType.LIGHTING_CHECK) {
-        ProductionLightCheckScreen(task, onBack, onBegin, onValue, onComment, onComplete, canEdit)
-    } else if (task.operationType == OperationType.WEIGHING_RABBIT) {
-        ProductionRabbitWeighingScreen(task, onBack, onBegin, onChecklistDoneWithValues, onChecklistProblem, onComplete, canEdit)
-    } else {
-        SimpleOperationScreen(task, definition, scannedRfid, onBack, onBegin, onScan, onOpenRfidScanner, onValue, onChecklistDone, onChecklistDoneWithValues, onChecklistProblem, onComplete, onSkip, onGeneralComplete, onGeneralReject, onPhoto, onVideo, onFile, onComment, onOpenAnimal, canEdit)
+fun OperationScreenFactory(task: MobileTask, definition: OperationDefinition, onBack: () -> Unit, onBegin: () -> Unit, scannedRfid: String? = null, scannedValues: Map<String, String> = emptyMap(), onScan: (String, Map<String,String>) -> Unit, onOpenRfidScanner: (Map<String, String>) -> Unit, onValue: (String,String) -> Unit, onPhoto: (String,String)->Unit, onVideo: (String,String)->Unit, onFile: (String,String)->Unit, onComment: (String)->Unit, onChecklistDone: (String)->Unit, onChecklistDoneWithValues: (String, Map<String, String>)->Unit, onChecklistProblem: (String,String,String)->Unit, onChecklistSkip: (String,String)->Unit, onMortalityRoundProblem: (String, String, String, String, String, Int?, Int?, Int?) -> Unit, onComplete: () -> Unit, onSkip: (String)->Unit, onGeneralComplete: (String)->Unit, onGeneralReject: (String, String)->Unit, onOpenAnimal: (String)->Unit, resolveRabbitId: (String) -> String?, canEdit: Boolean = true, hasPendingSync: Boolean = false) {
+    val startedWithoutTargets = task.operationType.expectsTargets &&
+        task.status == TaskStatus.IN_PROGRESS &&
+        task.checklist.isEmpty() &&
+        !hasPendingSync
+    if (startedWithoutTargets) {
+        ProductionNoTargetsScreen(task, onBack, onBegin, { comment -> onGeneralReject(NO_TARGETS_REASON, comment) }, canEdit)
+        return
+    }
+
+    when (task.operationType) {
+        OperationType.MORTALITY_ROUND ->
+            ProductionMortalityRoundScreen(task, definition, onBack, onBegin, onMortalityRoundProblem, onComplete, resolveRabbitId, canEdit)
+        OperationType.FEMALE_ARRIVAL ->
+            FemaleArrivalScreen(task, scannedRfid, onBack, onBegin, onScan, onOpenRfidScanner, onPhoto, onVideo, onFile, canEdit)
+        OperationType.INSEMINATION ->
+            InseminationScreen(task, scannedRfid, scannedValues, onBack, onBegin, onScan, onOpenRfidScanner, onValue, onPhoto, onVideo, onFile, onComment, onChecklistDone, onChecklistProblem, onChecklistSkip, onComplete, onSkip, onOpenAnimal, resolveRabbitId, canEdit)
+        OperationType.PALPATION ->
+            PalpationScreen(task, scannedRfid, onBack, onBegin, onScan, onOpenRfidScanner, onChecklistDone, onChecklistProblem, onChecklistSkip, onComplete, onSkip, resolveRabbitId, canEdit)
+        OperationType.NEST_EQUALIZATION ->
+            NestEqualizationScreen(task, onBack, onBegin, onChecklistDoneWithValues, onComplete, canEdit)
+        OperationType.ANIMAL_SETTLEMENT ->
+            AnimalSettlementScreen(
+                task = task,
+                definition = definition,
+                scannedRfid = scannedRfid,
+                onBack = onBack,
+                onBegin = onBegin,
+                onOpenScanner = onOpenRfidScanner,
+                onChecklistDoneWithValues = onChecklistDoneWithValues,
+                onChecklistProblem = onChecklistProblem,
+                onComplete = onComplete,
+                onPhoto = onPhoto,
+                onVideo = onVideo,
+                onFile = onFile,
+                onComment = onComment,
+                onOpenAnimal = onOpenAnimal,
+                canEdit = canEdit,
+            )
+        OperationType.WEIGHING_RABBIT ->
+            ProductionRabbitWeighingScreen(task, onBack, onBegin, onChecklistDoneWithValues, onChecklistProblem, onComplete, canEdit)
+        OperationType.NEST_PREPARATION,
+        OperationType.SLAUGHTER_SHIPPING,
+        OperationType.WEIGHING_CAGE,
+        OperationType.GENERAL ->
+            SimpleOperationScreen(task, definition, scannedRfid, onBack, onBegin, onScan, onOpenRfidScanner, onValue, onChecklistDone, onChecklistDoneWithValues, onChecklistProblem, onComplete, onSkip, onGeneralComplete, onGeneralReject, onPhoto, onVideo, onFile, onComment, onOpenAnimal, canEdit)
     }
 }

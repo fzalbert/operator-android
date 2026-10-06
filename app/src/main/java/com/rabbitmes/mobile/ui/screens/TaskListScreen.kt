@@ -1,5 +1,6 @@
 package com.rabbitmes.mobile.ui.screens
 
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -60,10 +61,13 @@ fun TaskCard(task: MobileTask, isNext: Boolean = false, onClick: () -> Unit) = P
     val executionItems = task.checklist.map { it.status } + task.targets.map { it.status }
     val problems = executionItems.count { it == ChecklistStatus.PROBLEM }
     val largeFont = LocalDensity.current.fontScale >= 1.3f
+    val overdueDate = task.overdueDate
     Card(
         shape = RoundedCornerShape(22.dp),
         colors = CardDefaults.cardColors(Color.White),
         elevation = CardDefaults.cardElevation(5.dp),
+        // Просроченная задача выделена: пока её не закрыть, остальные не открыть.
+        border = overdueDate?.let { BorderStroke(2.dp, MaterialTheme.colorScheme.error) },
         modifier = Modifier
             .fillMaxWidth()
             .padding(horizontal = 18.dp)
@@ -73,10 +77,13 @@ fun TaskCard(task: MobileTask, isNext: Boolean = false, onClick: () -> Unit) = P
             if (largeFont) {
                 Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     TaskStatusBadge(task.status)
+                    overdueDate?.let { StatusBadge(overdueLabel(it), MaterialTheme.colorScheme.error) }
                     Text("${task.plannedStart} · ${task.plannedDurationMinutes} мин", color = Color(0xFF60726A), style = MaterialTheme.typography.bodySmall)
                 }
             } else {
-                Row(Modifier.fillMaxWidth(), Arrangement.SpaceBetween, Alignment.CenterVertically) { TaskStatusBadge(task.status); Text("${task.plannedStart} · ${task.plannedDurationMinutes} мин", color = Color(0xFF60726A), fontSize = 12.sp) }
+                Row(Modifier.fillMaxWidth(), Arrangement.SpaceBetween, Alignment.CenterVertically) {
+                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) { TaskStatusBadge(task.status); overdueDate?.let { StatusBadge(overdueLabel(it), MaterialTheme.colorScheme.error) } }
+                    Text("${task.plannedStart} · ${task.plannedDurationMinutes} мин", color = Color(0xFF60726A), fontSize = 12.sp) }
             }
             Spacer(Modifier.height(12.dp)); Text(task.title, color = Color(0xFF10231B), fontSize = 18.sp, lineHeight = 22.sp, fontWeight = FontWeight.Black); Spacer(Modifier.height(6.dp)); Text(task.operationTypeTitle, color = Color(0xFF60726A), fontSize = 13.sp)
             Spacer(Modifier.height(12.dp))

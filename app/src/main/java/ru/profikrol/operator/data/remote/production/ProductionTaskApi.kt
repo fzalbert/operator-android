@@ -9,11 +9,14 @@ import retrofit2.http.GET
 import retrofit2.http.Header
 import retrofit2.http.POST
 import retrofit2.http.Path
-import retrofit2.http.Query
 
 interface ProductionTaskApi {
-    @GET("api/v1/production/tasks/employee/{employeeId}")
-    suspend fun getEmployeeTasks(@Header("X-Employee-Id") requesterEmployeeId: String, @Path("employeeId") employeeId: String, @Query("completed") completed: Boolean = false): List<ProductionTaskDto>
+    /**
+     * Задачи активной смены: сегодняшние задачи ангара и незакрытые с прошлых дней,
+     * свободные или назначенные на сотрудника, плюс его разовые поручения. 404 — открытой смены нет.
+     */
+    @GET("api/v1/production/shifts/current/tasks")
+    suspend fun getShiftTasks(@Header("X-Employee-Id") employeeId: String): Response<List<ProductionTaskDto>>
 
     @GET("api/v1/production/tasks/{id}")
     suspend fun getTask(@Header("X-Employee-Id") employeeId: String, @Path("id") id: String): ProductionTaskDetailsDto
@@ -42,6 +45,10 @@ interface ProductionTaskApi {
     @POST("api/v1/production/tasks/{id}/complete")
     suspend fun completeTask(@Header("X-Employee-Id") employeeId: String, @Path("id") taskId: String)
 
+    /** Задачу выполнить не смогли (например, целей нет): замечание к задаче, и она закрывается. */
+    @POST("api/v1/production/tasks/{id}/problem")
+    suspend fun reportTaskProblem(@Header("X-Employee-Id") employeeId: String, @Path("id") taskId: String, @Body request: ProductionTaskProblemRequest)
+
 }
 
 @Serializable
@@ -59,6 +66,9 @@ data class SubmitProductionTaskResultRequest(val resultJson: String? = null)
 
 @Serializable
 data class ProductionTargetCommentProblemRequest(val comment: String)
+
+@Serializable
+data class ProductionTaskProblemRequest(val comment: String)
 
 @Serializable
 data class ProductionMortalityCountProblemRequest(val result: MortalityCountResult)

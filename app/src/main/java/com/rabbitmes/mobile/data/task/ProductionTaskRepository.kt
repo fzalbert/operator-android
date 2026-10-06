@@ -4,11 +4,10 @@ import android.util.Log
 import com.rabbitmes.mobile.core.UserMessages
 import com.rabbitmes.mobile.core.runCatchingCancellable
 import com.rabbitmes.mobile.core.toHttpDebugMessage
+import com.rabbitmes.mobile.data.mapper.isOpen
 import com.rabbitmes.mobile.data.reference.FarmReferenceRepository
-import com.rabbitmes.mobile.data.reference.OperationCatalog
 import com.rabbitmes.mobile.domain.ChecklistItem
 import com.rabbitmes.mobile.domain.ChecklistStatus
-import com.rabbitmes.mobile.domain.Employee
 import com.rabbitmes.mobile.domain.MobileTask
 import com.rabbitmes.mobile.domain.OperationType
 import com.rabbitmes.mobile.domain.TargetType
@@ -30,12 +29,13 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.supervisorScope
+import ru.profikrol.operator.data.local.offline.OfflineActionType
 import ru.profikrol.operator.data.local.offline.OfflineRepository
 import javax.inject.Inject
 import javax.inject.Singleton
 
 /**
- * Единственный источник production-задач (задач цикла) текущего сотрудника.
+ * Единственный источник production-задач (задач цикла) текущей смены сотрудника.
  *
  * Держит список в памяти, кэширует его офлайн и периодически обновляет с сервера.
  * Локальные изменения, которые сервер ещё не вернул (выполненные цели,
@@ -45,7 +45,6 @@ import javax.inject.Singleton
 class ProductionTaskRepository @Inject constructor(
     private val remote: ProductionTaskRemote,
     private val references: FarmReferenceRepository,
-    private val catalog: OperationCatalog,
     private val offlineRepository: OfflineRepository,
     private val employeeSession: EmployeeSession,
     private val shiftRepository: ShiftRepository,
@@ -57,7 +56,6 @@ class ProductionTaskRepository @Inject constructor(
     private val _isLoading = MutableStateFlow(false)
     val isLoading: StateFlow<Boolean> = _isLoading.asStateFlow()
 
-    private var hasLoadedRemote = false
     private var isRequestInProgress = false
     private var isReloadRequested = false
     private var autoRefreshJob: Job? = null
@@ -66,24 +64,16 @@ class ProductionTaskRepository @Inject constructor(
 
     fun task(id: String): MobileTask? = _tasks.value.firstOrNull { it.id == id }
 
-    /** До первой загрузки с сервера показываем только подходящие сотруднику задачи из кэша. */
-    fun visibleTasks(tasks: List<MobileTask>, employee: Employee): List<MobileTask> =
-        if (hasLoadedRemote) {
-            tasks
-        } else {
-            tasks.filter { task ->
-                task.assignedEmployeeId == employee.id &&
-                    catalog.definition(task.operationType).allowedRoles.contains(employee.role)
-            }
-        }
+    fun nextTask(tasks: List<MobileTask>): MobileTask? = tasks.orderedOpenTasks().firstOrNull()
 
-    fun nextTask(tasks: List<MobileTask>, employee: Employee): MobileTask? =
-        visibleTasks(tasks, employee).orderedOpenTasks().firstOrNull()
+    /** Задача, с которой сотрудник должен работать сейчас: первая в очереди. */
+    fun nextTask(): MobileTask? = nextTask(_tasks.value)
 
-    fun canWorkOn(taskId: String): Boolean =
-        nextTask(_tasks.value, employeeSession.current)?.id == taskId
+    fun canWorkOn(taskId: String): Boolean = nextTask()?.id == taskId
 
     suspend fun load(showLoading: Boolean = true) {
+        // Задачи сервер отдаёт по активной смене; без неё запрашивать нечего.
+        if (!shiftRepository.current.isOpen()) return
         if (isRequestInProgress) {
             isReloadRequested = true
             return
@@ -93,7 +83,7 @@ class ProductionTaskRepository @Inject constructor(
         try {
             val employeeId = employeeSession.id
             Log.d(TAG, "Loading tasks. employeeId=$employeeId showLoading=$showLoading")
-            val productionTasks = runCatchingCancellable { fetchEmployeeTasks(employeeId) }
+            val productionTasks = runCatchingCancellable { fetchShiftTasks() }
                 .getOrElse { error ->
                     messages.handle(
                         error = error,
@@ -112,15 +102,16 @@ class ProductionTaskRepository @Inject constructor(
                     },
                 )
             }
-            val previous = _tasks.value
-            // Флаг ставится до публикации списка: от него зависит фильтр visibleTasks.
-            hasLoadedRemote = true
+            // Старт, который ещё лежит в очереди, сервер не видит: такая задача остаётся в работе.
+            // Отклонённый сервером старт из очереди уже убран, и задача возвращается в серверное состояние.
+            val pendingStarts = offlineRepository.actions(employeeId)
+                .filter { it.type == OfflineActionType.START_PRODUCTION_TASK.name }
+                .mapTo(mutableSetOf()) { it.taskId }
             _tasks.value = withCells
                 .map { it.withLocalChanges() }
                 .distinctBy(MobileTask::id)
                 .map { remote ->
-                    val local = previous.firstOrNull { it.id == remote.id }
-                    if (local?.status == TaskStatus.IN_PROGRESS && remote.status == TaskStatus.NEW) {
+                    if (remote.id in pendingStarts && remote.status == TaskStatus.NEW) {
                         remote.copy(status = TaskStatus.IN_PROGRESS)
                     } else {
                         remote
@@ -190,7 +181,6 @@ class ProductionTaskRepository @Inject constructor(
     suspend fun restoreCached() {
         val cached = offlineRepository.restoreTasks(employeeSession.id)
         if (cached.isNotEmpty()) {
-            hasLoadedRemote = true
             _tasks.value = cached.withSingleInProgressTask()
         }
     }
@@ -223,21 +213,17 @@ class ProductionTaskRepository @Inject constructor(
     fun reset() {
         stopAutoRefresh()
         _tasks.value = emptyList()
-        hasLoadedRemote = false
         targetOverrides.clear()
         mortalityRoundEvents.clear()
         references.clear()
     }
 
-    private suspend fun fetchEmployeeTasks(employeeId: String): List<MobileTask> {
-        val list = remote.employeeTasks()
-        Log.d(TAG, "Production getEmployeeTasks returned ${list.size} items")
+    private suspend fun fetchShiftTasks(): List<MobileTask> {
+        val list = remote.shiftTasks()
+        Log.d(TAG, "Production getShiftTasks returned ${list.size} items")
         return supervisorScope {
             list
-                .filter { task ->
-                    task.assignedEmployeeId == employeeId &&
-                        task.taskType?.lowercase() !in setOf("automation", "scada")
-                }
+                .filter { task -> task.taskType?.lowercase() !in setOf("automation", "scada") }
                 .map { dto ->
                     async {
                         runCatchingCancellable { remote.task(dto.id) }
@@ -319,9 +305,7 @@ class ProductionTaskRepository @Inject constructor(
         )
         private val CELL_OPERATIONS = setOf(
             OperationType.MORTALITY_ROUND,
-            OperationType.ANIMAL_TRANSFER,
-            OperationType.NEST_CONTROL,
-            OperationType.WEIGHING,
+            OperationType.ANIMAL_SETTLEMENT,
             OperationType.WEIGHING_CAGE,
             OperationType.WEIGHING_RABBIT,
         )

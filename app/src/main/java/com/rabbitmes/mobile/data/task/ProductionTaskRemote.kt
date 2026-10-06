@@ -1,12 +1,11 @@
 package com.rabbitmes.mobile.data.task
 
-import android.content.Context
-import android.provider.Settings
+import com.rabbitmes.mobile.core.DeviceInfo
 import com.rabbitmes.mobile.core.runCatchingCancellable
 import com.rabbitmes.mobile.data.mapper.toMobileTask
 import com.rabbitmes.mobile.domain.MobileTask
+import com.rabbitmes.mobile.domain.TaskStatus
 import com.rabbitmes.mobile.session.EmployeeSession
-import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.serialization.json.JsonObject
 import retrofit2.HttpException
 import ru.profikrol.operator.data.remote.production.AddProductionTargetRequest
@@ -14,6 +13,7 @@ import ru.profikrol.operator.data.remote.production.CompleteTargetRequest
 import ru.profikrol.operator.data.remote.production.MortalityCountResult
 import ru.profikrol.operator.data.remote.production.ProductionMortalityCountProblemRequest
 import ru.profikrol.operator.data.remote.production.ProductionTargetCommentProblemRequest
+import ru.profikrol.operator.data.remote.production.ProductionTaskProblemRequest
 import ru.profikrol.operator.data.remote.production.ProductionTaskApi
 import ru.profikrol.operator.data.remote.production.ProductionTaskDetailsDto
 import ru.profikrol.operator.data.remote.production.ProductionTaskDto
@@ -24,18 +24,20 @@ import javax.inject.Singleton
 /** Production API (через Gateway) от лица текущего сотрудника. */
 @Singleton
 class ProductionTaskRemote @Inject constructor(
-    @ApplicationContext private val context: Context,
     private val api: ProductionTaskApi,
     private val employeeSession: EmployeeSession,
+    private val deviceInfo: DeviceInfo,
 ) {
     private val employeeId: String get() = employeeSession.id
-    private val deviceId: String by lazy {
-        Settings.Secure.getString(context.contentResolver, Settings.Secure.ANDROID_ID)
-            .orEmpty()
-            .ifBlank { android.os.Build.MODEL }
-    }
+    private val deviceId: String get() = deviceInfo.deviceId
 
-    suspend fun employeeTasks(): List<ProductionTaskDto> = call { it.getEmployeeTasks(employeeId, employeeId) }
+    /** Задачи активной смены. 404 — открытой смены нет, значит и задач нет. */
+    suspend fun shiftTasks(): List<ProductionTaskDto> {
+        val response = call { it.getShiftTasks(employeeId) }
+        if (response.code() == 404) return emptyList()
+        if (!response.isSuccessful) throw HttpException(response)
+        return response.body().orEmpty()
+    }
 
     suspend fun details(taskId: String): ProductionTaskDetailsDto = call { it.getTask(employeeId, taskId) }
 
@@ -43,10 +45,17 @@ class ProductionTaskRemote @Inject constructor(
 
     suspend fun taskOrNull(taskId: String): MobileTask? = runCatchingCancellable { task(taskId) }.getOrNull()
 
-    /** Старт задачи. 409 значит, что задача уже открыта. */
+    /**
+     * Старт задачи: сотрудник становится её исполнителем. 409 приходит и когда задача
+     * уже в работе, и когда её нельзя начать (например, у задачи нет ангара), поэтому
+     * успехом он считается, только если сервер показывает задачу начатой.
+     */
     suspend fun start(taskId: String) {
         val response = call { it.startTask(employeeId, taskId) }
-        if (!response.isSuccessful && response.code() != 409) throw HttpException(response)
+        if (response.isSuccessful) return
+        val error = HttpException(response)
+        if (response.code() == 409 && task(taskId).status in STARTED_STATUSES) return
+        throw error
     }
 
     suspend fun completeChecklistItem(taskId: String, itemId: String) =
@@ -84,5 +93,12 @@ class ProductionTaskRemote @Inject constructor(
 
     suspend fun complete(taskId: String) = call { it.completeTask(employeeId, taskId) }
 
+    suspend fun reportTaskProblem(taskId: String, comment: String) =
+        call { it.reportTaskProblem(employeeId, taskId, ProductionTaskProblemRequest(comment)) }
+
     private suspend fun <T> call(action: suspend (ProductionTaskApi) -> T): T = action(api)
+
+    private companion object {
+        val STARTED_STATUSES = setOf(TaskStatus.IN_PROGRESS, TaskStatus.DONE)
+    }
 }

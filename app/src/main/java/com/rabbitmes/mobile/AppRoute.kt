@@ -11,6 +11,7 @@ data class AppErrorMessage(
 @Serializable
 sealed interface AppRoute {
     @Serializable data object Shift : AppRoute
+    @Serializable data object PickHangar : AppRoute
     @Serializable data object Tasks : AppRoute
     @Serializable data object Sync : AppRoute
     @Serializable data object Profile : AppRoute

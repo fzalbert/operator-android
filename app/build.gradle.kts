@@ -1,7 +1,7 @@
+import java.net.URI
 import java.util.Properties
 
-// Локальные переопределения адресов (local.properties не попадает в git), например
-// api.baseUrl=http://10.0.2.2:5216/ для эмулятора с локальным бэком.
+// Локальные настройки (local.properties не попадает в git). Читаются только вариантом debugLocal.
 val localProperties = Properties().apply {
     rootProject.file("local.properties").takeIf { it.exists() }?.inputStream()?.use(::load)
 }
@@ -33,16 +33,30 @@ android {
     }
 
     buildTypes {
-        // Все REST-запросы идут через Gateway. Debug смотрит на stage, release на прод.
-        // В debug адрес можно переопределить в local.properties: api.baseUrl=http://10.0.2.2:5216/
+        // Все REST-запросы идут через Gateway. Debug смотрит на stage, release на прод,
+        // debugLocal на локальный Gateway.
         debug {
-            val apiBaseUrl = localProperties.getProperty("api.baseUrl") ?: "http://195.58.153.25:5216/"
-            buildConfigField("String", "API_BASE_URL", "\"$apiBaseUrl\"")
+            buildConfigField("String", "API_BASE_URL", "\"http://195.58.153.25:5216/\"")
             buildConfigField("String", "API_FALLBACK_HOST", "\"\"")
             buildConfigField("String", "API_FALLBACK_IP", "\"\"")
             buildConfigField("String", "NOTIFICATIONS_GRPC_HOST", "\"195.58.153.25\"")
             buildConfigField("int", "NOTIFICATIONS_GRPC_PORT", "5216")
             buildConfigField("boolean", "NOTIFICATIONS_GRPC_TLS", "true")
+        }
+        // Локальный Gateway (docker-compose в back, http://0.0.0.0:5216). По умолчанию адрес
+        // хоста для эмулятора; для телефона в local.properties: api.baseUrl=http://<IP Mac в LAN>:5216/
+        create("debugLocal") {
+            initWith(getByName("debug"))
+            matchingFallbacks += "debug"
+            applicationIdSuffix = ".local"
+            versionNameSuffix = "-local"
+            resValue("string", "app_name", "Профикроль local")
+            val apiBaseUrl = localProperties.getProperty("api.baseUrl") ?: "http://10.0.2.2:5216/"
+            val apiUri = URI(apiBaseUrl)
+            buildConfigField("String", "API_BASE_URL", "\"$apiBaseUrl\"")
+            buildConfigField("String", "NOTIFICATIONS_GRPC_HOST", "\"${apiUri.host}\"")
+            buildConfigField("int", "NOTIFICATIONS_GRPC_PORT", "${if (apiUri.port > 0) apiUri.port else 80}")
+            buildConfigField("boolean", "NOTIFICATIONS_GRPC_TLS", "false")
         }
         release {
             buildConfigField("String", "API_BASE_URL", "\"https://profikrol.org/\"")
