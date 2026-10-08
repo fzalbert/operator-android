@@ -41,7 +41,7 @@ fun SyncQueueScreen(shift: ShiftState, tasks: List<MobileTask>, onSync: () -> Un
                 )
             }
             item {
-                MesCard {
+                MesCard(Modifier.padding(horizontal = MesSpacing.screenHorizontal, vertical = MesSpacing.cardVertical)) {
                     Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                         Column(Modifier.weight(1f)) {
                             Text("Состояние", fontWeight = FontWeight.Bold)
@@ -84,13 +84,13 @@ fun SyncQueueScreen(shift: ShiftState, tasks: List<MobileTask>, onSync: () -> Un
             }
             if (pendingTasks.isEmpty()) {
                 item {
-                    MesCard {
+                    MesCard(Modifier.padding(horizontal = MesSpacing.screenHorizontal, vertical = MesSpacing.cardVertical)) {
                         Text("Нет задач, ожидающих синхронизации", color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                 }
             } else {
                 items(pendingTasks, key = { it.id }) { task ->
-                    MesCard {
+                    MesCard(Modifier.padding(horizontal = MesSpacing.screenHorizontal, vertical = MesSpacing.cardVertical)) {
                         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                             Column(Modifier.weight(1f)) {
                                 Text(task.title, fontWeight = FontWeight.Bold)
@@ -116,9 +116,9 @@ fun ProfileScreen(employee: Employee, tasks: List<MobileTask>, operations: List<
     ) { padding ->
         LazyColumn(Modifier.fillMaxSize().padding(padding)) {
             item { AppHeader("Профиль", employee.fullName, trailing = { TextButton(onClick = onLogout) { Text("Выйти") } }) }
-            item { MesCard { Text(employee.fullName, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold); StatusBadge(employee.role.title, MaterialTheme.colorScheme.primary); Spacer(Modifier.height(MesSpacing.contentGap)); Text("Выполнено: ${tasks.count { it.status == TaskStatus.SENT || it.status == TaskStatus.DONE }}"); Text("Проблемы: ${tasks.sumOf { it.checklist.count { item -> item.status == ChecklistStatus.PROBLEM } }}") } }
+            item { MesCard(Modifier.padding(horizontal = MesSpacing.screenHorizontal, vertical = MesSpacing.cardVertical)) { Text(employee.fullName, style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold); StatusBadge(employee.role.title, MaterialTheme.colorScheme.primary); Spacer(Modifier.height(MesSpacing.contentGap)); Text("Выполнено: ${tasks.count { it.status == TaskStatus.SENT || it.status == TaskStatus.DONE }}"); Text("Проблемы: ${tasks.sumOf { it.checklist.count { item -> item.status == ChecklistStatus.PROBLEM } }}") } }
             item {
-                MesCard {
+                MesCard(Modifier.padding(horizontal = MesSpacing.screenHorizontal, vertical = MesSpacing.cardVertical)) {
                     Text(
                         "Допустимые операции",
                         style = MaterialTheme.typography.titleMedium,

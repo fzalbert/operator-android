@@ -316,6 +316,7 @@ fun PalpationScreen(
 
 /** Причина, с которой закрывается задача без целей; комментарий оператора идёт следом. */
 private const val NO_TARGETS_REASON = "Нет целей для выполнения"
+private const val EARLY_COMPLETION_REASON = "Досрочное завершение"
 
 /**
  * Экран задачи по её операции. Тип операции определяется только по коду операции с бэка,
@@ -339,7 +340,11 @@ fun OperationScreenFactory(task: MobileTask, definition: OperationDefinition, on
         OperationType.MORTALITY_ROUND ->
             ProductionMortalityRoundScreen(task, definition, onBack, onBegin, onMortalityRoundProblem, onComplete, resolveRabbitId, canEdit)
         OperationType.FEMALE_ARRIVAL ->
-            FemaleArrivalScreen(task, scannedRfid, onBack, onBegin, onScan, onOpenRfidScanner, onPhoto, onVideo, onFile, canEdit)
+            FemaleArrivalScreen(
+                task, scannedRfid, onBack, onBegin, onScan, onOpenRfidScanner, onPhoto, onVideo, onFile,
+                onCompleteEarly = { comment -> onGeneralReject(EARLY_COMPLETION_REASON, comment) },
+                canEdit = canEdit,
+            )
         OperationType.INSEMINATION ->
             InseminationScreen(task, scannedRfid, scannedValues, onBack, onBegin, onScan, onOpenRfidScanner, onValue, onPhoto, onVideo, onFile, onComment, onChecklistDone, onChecklistProblem, onChecklistSkip, onComplete, onSkip, onOpenAnimal, resolveRabbitId, canEdit)
         OperationType.PALPATION ->

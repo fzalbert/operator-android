@@ -255,8 +255,11 @@ fun FemaleArrivalScreen(
     onPhoto: (String, String) -> Unit,
     onVideo: (String, String) -> Unit,
     onFile: (String, String) -> Unit,
+    onCompleteEarly: (String) -> Unit,
     canEdit: Boolean,
 ) {
+    var showEarlyCompletionDialog by remember(task.id) { mutableStateOf(false) }
+    var earlyCompletionComment by remember(task.id) { mutableStateOf("") }
     var ageDays by remember(task.id) { mutableStateOf(task.result.values["age"].orEmpty()) }
     var hasProblem by remember(task.id) { mutableStateOf(false) }
     var problemReason by remember(task.id) { mutableStateOf("") }
@@ -386,6 +389,16 @@ fun FemaleArrivalScreen(
                         )
                     }
                 }
+                item {
+                    OutlinedButton(
+                        onClick = { showEarlyCompletionDialog = true },
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = ButtonDefaults.outlinedButtonColors(contentColor = SimpleGreen),
+                        border = BorderStroke(1.dp, SimpleGreen),
+                    ) {
+                        Text("Завершить досрочно", fontWeight = FontWeight.Bold)
+                    }
+                }
             }
             if (successful || finished) {
                 item {
@@ -401,6 +414,34 @@ fun FemaleArrivalScreen(
             }
         }
         item { Spacer(Modifier.height(24.dp)) }
+    }
+
+    if (showEarlyCompletionDialog) {
+        AlertDialog(
+            onDismissRequest = { showEarlyCompletionDialog = false },
+            title = { Text("Завершить заселение досрочно?") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("Заселено $newCompletedCount из ${task.checklist.size}. Оставшиеся клетки закроются с пометкой.")
+                    OutlinedTextField(
+                        value = earlyCompletionComment,
+                        onValueChange = { earlyCompletionComment = it },
+                        modifier = Modifier.fillMaxWidth().forceSoftwareKeyboardOnFocus(),
+                        label = { Text("Комментарий") },
+                        minLines = 2,
+                    )
+                }
+            },
+            confirmButton = {
+                Button(onClick = {
+                    showEarlyCompletionDialog = false
+                    onCompleteEarly(earlyCompletionComment.trim())
+                }) { Text("Завершить") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showEarlyCompletionDialog = false }) { Text("Отмена") }
+            },
+        )
     }
 }
 

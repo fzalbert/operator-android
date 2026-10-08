@@ -44,6 +44,7 @@ object MesSpacing {
     val smallGap = 8.dp
     val tinyGap = 4.dp
 }
+
 val LocalMesCardBorderEnabled = compositionLocalOf { true }
 
 @Composable
@@ -58,7 +59,7 @@ fun MesCard(
 ) {
     val clickable = if (onClick != null) modifier.clickable { onClick() } else modifier
     Card(
-        clickable.padding(horizontal = MesSpacing.screenHorizontal, vertical = MesSpacing.cardVertical).fillMaxWidth(),
+        clickable.fillMaxWidth(),
         shape = RoundedCornerShape(24.dp),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerLowest),
         border = if (showBorder) BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant) else null,

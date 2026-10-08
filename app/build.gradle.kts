@@ -43,8 +43,7 @@ android {
             buildConfigField("int", "NOTIFICATIONS_GRPC_PORT", "5216")
             buildConfigField("boolean", "NOTIFICATIONS_GRPC_TLS", "true")
         }
-        // Локальный Gateway (docker-compose в back, http://0.0.0.0:5216). По умолчанию адрес
-        // хоста для эмулятора; для телефона в local.properties: api.baseUrl=http://<IP Mac в LAN>:5216/
+
         create("debugLocal") {
             initWith(getByName("debug"))
             matchingFallbacks += "debug"

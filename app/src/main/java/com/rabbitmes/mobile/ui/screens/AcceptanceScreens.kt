@@ -35,7 +35,7 @@ fun AcceptanceQueueScreen(onBack: () -> Unit) {
         LazyColumn(Modifier.fillMaxSize().padding(padding), contentPadding = PaddingValues(bottom = MesSpacing.screenBottom)) {
             item { AppHeader("Приемка", "Проверка выполненных задач", onBack) }
             item {
-                MesCard {
+                MesCard(Modifier.padding(horizontal = MesSpacing.screenHorizontal, vertical = MesSpacing.cardVertical)) {
                     Text("Раздел в разработке", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium)
                     Text("Приёмка выполненных задач появится в одной из следующих версий.")
                 }
@@ -60,7 +60,7 @@ fun AcceptanceScreen(
     LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = MesSpacing.screenBottom)) {
         item { AppHeader("Приемка", task.title, onBack) }
         item {
-            MesCard {
+            MesCard(Modifier.padding(horizontal = MesSpacing.screenHorizontal, vertical = MesSpacing.cardVertical)) {
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                     Column(Modifier.weight(1f)) {
                         Text(task.title, fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleLarge)
@@ -76,13 +76,14 @@ fun AcceptanceScreen(
         items(task.checklist) { item ->
             AcceptanceItemCard(
                 item = item,
+                modifier = Modifier.padding(horizontal = MesSpacing.screenHorizontal, vertical = MesSpacing.cardVertical),
                 problemEnabled = localProblemItems[item.id] == true,
                 onProblemToggle = { enabled -> localProblemItems[item.id] = enabled },
                 onRemark = { reason, itemComment, attachments -> onRemark(item.id, reason, itemComment, attachments) }
             )
         }
         item {
-            MesCard {
+            MesCard(Modifier.padding(horizontal = MesSpacing.screenHorizontal, vertical = MesSpacing.cardVertical)) {
                 Text("Итог приемки", fontWeight = FontWeight.Bold)
                 OutlinedTextField(finalComment, { finalComment = it }, Modifier.fillMaxWidth().forceSoftwareKeyboardOnFocus(), label = { Text("Комментарий проверяющего") })
                 Spacer(Modifier.height(MesSpacing.smallGap))
@@ -96,7 +97,7 @@ fun AcceptanceScreen(
             }
         }
         item {
-            MesCard {
+            MesCard(Modifier.padding(horizontal = MesSpacing.screenHorizontal, vertical = MesSpacing.cardVertical)) {
                 Text("Журнал замечаний", fontWeight = FontWeight.Bold)
                 val taskRemarks = remarks.filter { it.taskId == task.id }
                 if (taskRemarks.isEmpty()) Text("Замечаний пока нет", color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -117,12 +118,13 @@ private fun AcceptanceItemCard(
     item: ChecklistItem,
     problemEnabled: Boolean,
     onProblemToggle: (Boolean) -> Unit,
-    onRemark: (String, String, List<MediaAttachment>) -> Unit
+    onRemark: (String, String, List<MediaAttachment>) -> Unit,
+    modifier: Modifier = Modifier,
 ) {
     var reason by remember { mutableStateOf(acceptanceProblemReasons.first()) }
     var comment by remember { mutableStateOf("") }
     var attachments by remember { mutableStateOf<List<MediaAttachment>>(emptyList()) }
-    MesCard {
+    MesCard(modifier) {
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
             Column(Modifier.weight(1f)) {
                 Text(item.label, fontWeight = FontWeight.Bold)
